@@ -78,6 +78,55 @@ async function dispatch(
       return { refreshed: true };
     }
 
+    case "import.commit": {
+      const payload = (job.payload ?? {}) as {
+        clients?: Array<{
+          name: string;
+          phone: string | null;
+          email: string | null;
+          birthday: string | null;
+          notes: string | null;
+        }>;
+      };
+      const clients = payload.clients ?? [];
+      if (!job.company_id) throw new Error("import.commit: missing company_id");
+      if (clients.length === 0) return { inserted: 0 };
+      const rows = clients.map((c) => ({
+        company_id: job.company_id,
+        name: c.name,
+        phone: c.phone ?? null,
+        email: c.email ?? null,
+        birthday: c.birthday ?? null,
+        notes: c.notes ?? null,
+        status: "ACTIVE" as const,
+      }));
+      const { data, error } = await admin.from("clients").insert(rows).select("id");
+      if (error) throw new Error(error.message);
+      return { inserted: data?.length ?? 0 };
+    }
+
+    case "campaign.record": {
+      const p = (job.payload ?? {}) as {
+        name: string;
+        segment: string;
+        template_id: string | null;
+        message_body: string;
+        sent_count: number;
+      };
+      if (!job.company_id) throw new Error("campaign.record: missing company_id");
+      const { error } = await admin.from("campaigns").insert({
+        company_id: job.company_id,
+        name: p.name,
+        segment: p.segment,
+        template_id: p.template_id ?? null,
+        message_body: p.message_body,
+        sent_count: p.sent_count ?? 0,
+        last_sent_at: new Date().toISOString(),
+      });
+      if (error) throw new Error(error.message);
+      return { ok: true };
+    }
+
     default:
       throw new Error(`Unknown job type: ${job.type}`);
   }
