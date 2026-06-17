@@ -334,7 +334,7 @@ function CampaignsPanel() {
       let rows = (data ?? []) as { id: string; name: string; phone: string | null }[];
 
       if (segment === "AT_RISK" || segment === "RETURN_DUE") {
-        const classes =
+        const classes: ("ATTENTION" | "AT_RISK" | "LATE" | "LOST" | "ON_TIME")[] =
           segment === "AT_RISK" ? ["AT_RISK", "LATE"] : ["ON_TIME", "ATTENTION", "LATE"];
         const { data: ops } = await supabase
           .from("recovery_opportunities")
