@@ -48,14 +48,15 @@ export const exportMyCompanyData = createServerFn({ method: "POST" })
       "client_contacts",
     ] as const;
 
-    const out: Record<string, unknown[]> = {};
+    const out: { [table: string]: JsonRecord[] } = {};
     for (const t of tables) {
       const { data } = await supabase
         .from(t as never)
         .select("*")
         .eq("company_id", companyId);
-      out[t] = (data as unknown[]) ?? [];
+      out[t] = ((data ?? []) as unknown as JsonRecord[]);
     }
+
     return {
       ok: true,
       data: { exported_at: new Date().toISOString(), tables: out },
