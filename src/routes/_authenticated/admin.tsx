@@ -390,7 +390,6 @@ function JobsPanel() {
 
   async function enqueueTest() {
     const { error } = await supabase.rpc("enqueue_job", {
-      _company_id: null,
       _type: "noop",
       _payload: { ts: Date.now() } as never,
     });
