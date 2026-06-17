@@ -27,6 +27,7 @@ export type Database = {
           price: number
           professional_id: string | null
           service_id: string
+          source: Database["public"]["Enums"]["appointment_source"]
           start_datetime: string
           status: Database["public"]["Enums"]["appointment_status"]
           updated_at: string
@@ -43,6 +44,7 @@ export type Database = {
           price?: number
           professional_id?: string | null
           service_id: string
+          source?: Database["public"]["Enums"]["appointment_source"]
           start_datetime: string
           status?: Database["public"]["Enums"]["appointment_status"]
           updated_at?: string
@@ -59,6 +61,7 @@ export type Database = {
           price?: number
           professional_id?: string | null
           service_id?: string
+          source?: Database["public"]["Enums"]["appointment_source"]
           start_datetime?: string
           status?: Database["public"]["Enums"]["appointment_status"]
           updated_at?: string
@@ -376,6 +379,7 @@ export type Database = {
           phone: string | null
           plan: Database["public"]["Enums"]["company_plan"]
           preferences: Json
+          slug: string | null
           state: string | null
           trial_ends_at: string | null
           updated_at: string
@@ -399,6 +403,7 @@ export type Database = {
           phone?: string | null
           plan?: Database["public"]["Enums"]["company_plan"]
           preferences?: Json
+          slug?: string | null
           state?: string | null
           trial_ends_at?: string | null
           updated_at?: string
@@ -422,6 +427,7 @@ export type Database = {
           phone?: string | null
           plan?: Database["public"]["Enums"]["company_plan"]
           preferences?: Json
+          slug?: string | null
           state?: string | null
           trial_ends_at?: string | null
           updated_at?: string
@@ -1664,6 +1670,56 @@ export type Database = {
           },
         ]
       }
+      v_public_busy_slots: {
+        Row: {
+          company_id: string | null
+          end_datetime: string | null
+          professional_id: string | null
+          start_datetime: string | null
+        }
+        Insert: {
+          company_id?: string | null
+          end_datetime?: string | null
+          professional_id?: string | null
+          start_datetime?: string | null
+        }
+        Update: {
+          company_id?: string | null
+          end_datetime?: string | null
+          professional_id?: string | null
+          start_datetime?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appointments_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "appointments_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "appointments_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vip_clients: {
         Row: {
           company_id: string | null
@@ -1724,9 +1780,11 @@ export type Database = {
         Returns: undefined
       }
       refresh_return_opportunities: { Args: never; Returns: undefined }
+      slugify: { Args: { _input: string }; Returns: string }
     }
     Enums: {
       app_role: "owner" | "admin" | "employee"
+      appointment_source: "ADMIN" | "ONLINE"
       appointment_status:
         | "SCHEDULED"
         | "CONFIRMED"
@@ -1885,6 +1943,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["owner", "admin", "employee"],
+      appointment_source: ["ADMIN", "ONLINE"],
       appointment_status: [
         "SCHEDULED",
         "CONFIRMED",
