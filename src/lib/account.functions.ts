@@ -18,9 +18,6 @@ type ActionResult =
   | { ok: false; error: string };
 
 
-type ActionResult =
-  | { ok: true; message: string }
-  | { ok: false; error: string };
 
 // LGPD — Export all data the current user's company owns.
 export const exportMyCompanyData = createServerFn({ method: "POST" })
