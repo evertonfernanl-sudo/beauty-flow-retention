@@ -296,7 +296,7 @@ function TemplateDialog({
 
 function CampaignsPanel() {
   const profile = useCurrentProfile().data;
-  const companyId = profile?.company_id;
+  const companyId = profile?.company?.id;
   const qc = useQueryClient();
 
   const [name, setName] = useState("");
