@@ -25,6 +25,7 @@ export type Database = {
           id: string
           notes: string | null
           price: number
+          professional_id: string | null
           service_id: string
           start_datetime: string
           status: Database["public"]["Enums"]["appointment_status"]
@@ -40,6 +41,7 @@ export type Database = {
           id?: string
           notes?: string | null
           price?: number
+          professional_id?: string | null
           service_id: string
           start_datetime: string
           status?: Database["public"]["Enums"]["appointment_status"]
@@ -55,6 +57,7 @@ export type Database = {
           id?: string
           notes?: string | null
           price?: number
+          professional_id?: string | null
           service_id?: string
           start_datetime?: string
           status?: Database["public"]["Enums"]["appointment_status"]
@@ -109,6 +112,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "retention_report"
             referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "appointments_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "appointments_service_id_fkey"
@@ -369,6 +379,7 @@ export type Database = {
           state: string | null
           trial_ends_at: string | null
           updated_at: string
+          vertical: Database["public"]["Enums"]["business_vertical"]
           whatsapp: string | null
           whatsapp_template: string | null
         }
@@ -391,6 +402,7 @@ export type Database = {
           state?: string | null
           trial_ends_at?: string | null
           updated_at?: string
+          vertical?: Database["public"]["Enums"]["business_vertical"]
           whatsapp?: string | null
           whatsapp_template?: string | null
         }
@@ -413,6 +425,7 @@ export type Database = {
           state?: string | null
           trial_ends_at?: string | null
           updated_at?: string
+          vertical?: Database["public"]["Enums"]["business_vertical"]
           whatsapp?: string | null
           whatsapp_template?: string | null
         }
@@ -784,6 +797,70 @@ export type Database = {
           yearly_price?: number
         }
         Relationships: []
+      }
+      professionals: {
+        Row: {
+          active: boolean
+          color: string
+          company_id: string
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+          phone: string | null
+          specialty: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          active?: boolean
+          color?: string
+          company_id: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          name: string
+          phone?: string | null
+          specialty?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          active?: boolean
+          color?: string
+          company_id?: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string
+          phone?: string | null
+          specialty?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "professionals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "professionals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "professionals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -1194,6 +1271,7 @@ export type Database = {
       services: {
         Row: {
           active: boolean
+          billing_cycle_days: number | null
           category: string | null
           color: string | null
           company_id: string
@@ -1201,6 +1279,7 @@ export type Database = {
           description: string | null
           duration_minutes: number
           id: string
+          kind: Database["public"]["Enums"]["offering_kind"]
           name: string
           price: number
           return_days: number
@@ -1208,6 +1287,7 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          billing_cycle_days?: number | null
           category?: string | null
           color?: string | null
           company_id: string
@@ -1215,6 +1295,7 @@ export type Database = {
           description?: string | null
           duration_minutes?: number
           id?: string
+          kind?: Database["public"]["Enums"]["offering_kind"]
           name: string
           price?: number
           return_days?: number
@@ -1222,6 +1303,7 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          billing_cycle_days?: number | null
           category?: string | null
           color?: string | null
           company_id?: string
@@ -1229,6 +1311,7 @@ export type Database = {
           description?: string | null
           duration_minutes?: number
           id?: string
+          kind?: Database["public"]["Enums"]["offering_kind"]
           name?: string
           price?: number
           return_days?: number
@@ -1650,6 +1733,7 @@ export type Database = {
         | "COMPLETED"
         | "CANCELLED"
         | "NO_SHOW"
+      business_vertical: "BEAUTY" | "SALES" | "GYM"
       client_status: "ACTIVE" | "INACTIVE" | "LOST"
       company_plan: "starter" | "professional" | "premium"
       contact_channel:
@@ -1661,6 +1745,7 @@ export type Database = {
       contact_result: "ANSWERED" | "NO_ANSWER" | "SCHEDULED" | "REFUSED"
       invitation_status: "PENDING" | "ACCEPTED" | "EXPIRED" | "CANCELED"
       invoice_status: "OPEN" | "PAID" | "PAST_DUE" | "CANCELED" | "REFUNDED"
+      offering_kind: "SERVICE" | "PRODUCT" | "PLAN"
       recovery_status: "OPEN" | "IN_CONTACT" | "CONVERTED" | "LOST"
       return_class: "ON_TIME" | "ATTENTION" | "LATE" | "AT_RISK" | "LOST"
       return_status: "ON_TIME" | "DUE" | "LATE" | "LOST"
@@ -1807,12 +1892,14 @@ export const Constants = {
         "CANCELLED",
         "NO_SHOW",
       ],
+      business_vertical: ["BEAUTY", "SALES", "GYM"],
       client_status: ["ACTIVE", "INACTIVE", "LOST"],
       company_plan: ["starter", "professional", "premium"],
       contact_channel: ["WHATSAPP", "PHONE", "INSTAGRAM", "IN_PERSON", "EMAIL"],
       contact_result: ["ANSWERED", "NO_ANSWER", "SCHEDULED", "REFUSED"],
       invitation_status: ["PENDING", "ACCEPTED", "EXPIRED", "CANCELED"],
       invoice_status: ["OPEN", "PAID", "PAST_DUE", "CANCELED", "REFUNDED"],
+      offering_kind: ["SERVICE", "PRODUCT", "PLAN"],
       recovery_status: ["OPEN", "IN_CONTACT", "CONVERTED", "LOST"],
       return_class: ["ON_TIME", "ATTENTION", "LATE", "AT_RISK", "LOST"],
       return_status: ["ON_TIME", "DUE", "LATE", "LOST"],
