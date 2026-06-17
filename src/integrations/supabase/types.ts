@@ -65,7 +65,21 @@ export type Database = {
             foreignKeyName: "appointments_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "birthday_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "vip_clients"
             referencedColumns: ["id"]
           },
           {
@@ -195,7 +209,21 @@ export type Database = {
             foreignKeyName: "client_contacts_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "birthday_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "vip_clients"
             referencedColumns: ["id"]
           },
           {
@@ -312,6 +340,7 @@ export type Database = {
           phone: string | null
           plan: Database["public"]["Enums"]["company_plan"]
           updated_at: string
+          whatsapp_template: string | null
         }
         Insert: {
           active?: boolean
@@ -324,6 +353,7 @@ export type Database = {
           phone?: string | null
           plan?: Database["public"]["Enums"]["company_plan"]
           updated_at?: string
+          whatsapp_template?: string | null
         }
         Update: {
           active?: boolean
@@ -336,6 +366,7 @@ export type Database = {
           phone?: string | null
           plan?: Database["public"]["Enums"]["company_plan"]
           updated_at?: string
+          whatsapp_template?: string | null
         }
         Relationships: []
       }
@@ -526,6 +557,218 @@ export type Database = {
           },
         ]
       }
+      recovery_opportunities: {
+        Row: {
+          appointment_id: string | null
+          assigned_to: string | null
+          classification: Database["public"]["Enums"]["return_class"]
+          client_id: string
+          company_id: string
+          converted_at: string | null
+          created_at: string
+          days_late: number
+          expected_return_date: string
+          id: string
+          last_contact_at: string | null
+          potential_value: number
+          recovered_value: number | null
+          score: number
+          service_id: string | null
+          status: Database["public"]["Enums"]["recovery_status"]
+          updated_at: string
+        }
+        Insert: {
+          appointment_id?: string | null
+          assigned_to?: string | null
+          classification?: Database["public"]["Enums"]["return_class"]
+          client_id: string
+          company_id: string
+          converted_at?: string | null
+          created_at?: string
+          days_late?: number
+          expected_return_date: string
+          id?: string
+          last_contact_at?: string | null
+          potential_value?: number
+          recovered_value?: number | null
+          score?: number
+          service_id?: string | null
+          status?: Database["public"]["Enums"]["recovery_status"]
+          updated_at?: string
+        }
+        Update: {
+          appointment_id?: string | null
+          assigned_to?: string | null
+          classification?: Database["public"]["Enums"]["return_class"]
+          client_id?: string
+          company_id?: string
+          converted_at?: string | null
+          created_at?: string
+          days_late?: number
+          expected_return_date?: string
+          id?: string
+          last_contact_at?: string | null
+          potential_value?: number
+          recovered_value?: number | null
+          score?: number
+          service_id?: string | null
+          status?: Database["public"]["Enums"]["recovery_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recovery_opportunities_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recovery_opportunities_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "birthday_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recovery_opportunities_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recovery_opportunities_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "vip_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recovery_opportunities_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recovery_opportunities_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "recovery_opportunities_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "recovery_opportunities_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recovery_tasks: {
+        Row: {
+          assigned_to: string | null
+          client_id: string | null
+          company_id: string
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          description: string
+          due_date: string | null
+          id: string
+          opportunity_id: string | null
+          status: Database["public"]["Enums"]["task_status"]
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          client_id?: string | null
+          company_id: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          description: string
+          due_date?: string | null
+          id?: string
+          opportunity_id?: string | null
+          status?: Database["public"]["Enums"]["task_status"]
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          client_id?: string | null
+          company_id?: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          due_date?: string | null
+          id?: string
+          opportunity_id?: string | null
+          status?: Database["public"]["Enums"]["task_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recovery_tasks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "birthday_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recovery_tasks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recovery_tasks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "vip_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recovery_tasks_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recovery_tasks_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "recovery_tasks_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "recovery_tasks_opportunity_id_fkey"
+            columns: ["opportunity_id"]
+            isOneToOne: false
+            referencedRelation: "recovery_opportunities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       return_opportunities: {
         Row: {
           client_id: string
@@ -580,7 +823,21 @@ export type Database = {
             foreignKeyName: "return_opportunities_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "birthday_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "return_opportunities_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "return_opportunities_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "vip_clients"
             referencedColumns: ["id"]
           },
           {
@@ -722,6 +979,52 @@ export type Database = {
       }
     }
     Views: {
+      birthday_clients: {
+        Row: {
+          birthday: string | null
+          company_id: string | null
+          id: string | null
+          name: string | null
+          phone: string | null
+        }
+        Insert: {
+          birthday?: string | null
+          company_id?: string | null
+          id?: string | null
+          name?: string | null
+          phone?: string | null
+        }
+        Update: {
+          birthday?: string | null
+          company_id?: string | null
+          id?: string | null
+          name?: string | null
+          phone?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clients_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clients_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "clients_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+        ]
+      }
       dashboard_metrics: {
         Row: {
           company_id: string | null
@@ -732,6 +1035,43 @@ export type Database = {
           total_income: number | null
         }
         Relationships: []
+      }
+      recovery_dashboard: {
+        Row: {
+          at_risk_count: number | null
+          avg_days_to_recover: number | null
+          avg_recovered_ticket: number | null
+          company_id: string | null
+          lost_count: number | null
+          pending_count: number | null
+          potential_revenue: number | null
+          recovered_count_month: number | null
+          recovered_value_month: number | null
+          recovery_rate: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recovery_opportunities_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recovery_opportunities_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "recovery_opportunities_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+        ]
       }
       retention_report: {
         Row: {
@@ -744,8 +1084,44 @@ export type Database = {
         }
         Relationships: []
       }
+      vip_clients: {
+        Row: {
+          company_id: string | null
+          id: string | null
+          name: string | null
+          total_spent: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clients_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clients_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "clients_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+        ]
+      }
     }
     Functions: {
+      calc_recovery_score: { Args: { _client_id: string }; Returns: number }
+      classify_return: {
+        Args: { _expected: string; _last_visit: string }
+        Returns: Database["public"]["Enums"]["return_class"]
+      }
       get_user_company: { Args: { _user_id: string }; Returns: string }
       has_any_role: {
         Args: {
@@ -762,6 +1138,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      refresh_recovery_opportunities: {
+        Args: { _company?: string }
+        Returns: undefined
       }
       refresh_return_opportunities: { Args: never; Returns: undefined }
     }
@@ -782,7 +1162,10 @@ export type Database = {
         | "IN_PERSON"
         | "EMAIL"
       contact_result: "ANSWERED" | "NO_ANSWER" | "SCHEDULED" | "REFUSED"
+      recovery_status: "OPEN" | "IN_CONTACT" | "CONVERTED" | "LOST"
+      return_class: "ON_TIME" | "ATTENTION" | "LATE" | "AT_RISK" | "LOST"
       return_status: "ON_TIME" | "DUE" | "LATE" | "LOST"
+      task_status: "OPEN" | "DONE" | "CANCELED"
       transaction_type: "INCOME" | "EXPENSE"
     }
     CompositeTypes: {
@@ -923,7 +1306,10 @@ export const Constants = {
       company_plan: ["starter", "professional", "premium"],
       contact_channel: ["WHATSAPP", "PHONE", "INSTAGRAM", "IN_PERSON", "EMAIL"],
       contact_result: ["ANSWERED", "NO_ANSWER", "SCHEDULED", "REFUSED"],
+      recovery_status: ["OPEN", "IN_CONTACT", "CONVERTED", "LOST"],
+      return_class: ["ON_TIME", "ATTENTION", "LATE", "AT_RISK", "LOST"],
       return_status: ["ON_TIME", "DUE", "LATE", "LOST"],
+      task_status: ["OPEN", "DONE", "CANCELED"],
       transaction_type: ["INCOME", "EXPENSE"],
     },
   },
