@@ -1,9 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentProfile } from "@/lib/hooks/use-current-profile";
+import { useFeature } from "@/lib/hooks/use-feature";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,8 +27,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { MessageSquare, Send, Plus, Trash2, Edit2 } from "lucide-react";
+import { MessageSquare, Send, Plus, Trash2, Edit2, Lock } from "lucide-react";
 import { toStoragePhone } from "@/lib/phone";
+import { enqueueCampaignRecord } from "@/lib/api/campaigns.functions";
 
 export const Route = createFileRoute("/_authenticated/app/comunicacao")({
   head: () => ({ meta: [{ title: "Comunicação — BeautyFlow" }] }),
@@ -297,7 +300,9 @@ function TemplateDialog({
 function CampaignsPanel() {
   const profile = useCurrentProfile().data;
   const companyId = profile?.company?.id;
+  const feature = useFeature(companyId, "campaigns_bulk");
   const qc = useQueryClient();
+  const enqueueCampaign = useServerFn(enqueueCampaignRecord);
 
   const [name, setName] = useState("");
   const [segment, setSegment] = useState<Segment>("AT_RISK");
@@ -351,24 +356,23 @@ function CampaignsPanel() {
 
   const clients = clientsQ.data ?? [];
 
-  const save = useMutation({
-    mutationFn: async () => {
-      if (!companyId) throw new Error("Sem empresa");
-      const { error } = await supabase.from("campaigns").insert({
-        company_id: companyId,
-        name: name.trim() || `Campanha ${new Date().toLocaleDateString("pt-BR")}`,
-        segment,
-        template_id: templateId || null,
-        message_body: body,
-        sent_count: clients.length,
-        last_sent_at: new Date().toISOString(),
+  const record = useMutation({
+    mutationFn: async (sent: number) => {
+      await enqueueCampaign({
+        data: {
+          name: name.trim() || `Campanha ${new Date().toLocaleDateString("pt-BR")}`,
+          segment,
+          template_id: templateId || null,
+          message_body: body,
+          sent_count: sent,
+        },
       });
-      if (error) throw error;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["campaigns-list"] });
-      toast.success("Campanha registrada");
+      toast.success("Campanha enfileirada — registro processado em segundo plano.");
     },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   function applyTemplate(id: string) {
@@ -391,9 +395,22 @@ function CampaignsPanel() {
       window.open(url, "_blank", "noopener");
       opened++;
     }
-    if (opened > 0) save.mutate();
+    if (opened > 0) record.mutate(opened);
     toast.success(`${opened} conversas abertas`);
   }
+
+  if (!feature.loading && !feature.enabled) {
+    return (
+      <Card className="p-8 text-center space-y-2">
+        <Lock className="h-8 w-8 mx-auto text-muted-foreground" />
+        <p className="font-medium">Campanhas em massa desativadas</p>
+        <p className="text-sm text-muted-foreground">
+          Ative em Admin → Feature Flags (campaigns_bulk).
+        </p>
+      </Card>
+    );
+  }
+
 
   const preview = useMemo(() => {
     if (!clients[0]) return body;

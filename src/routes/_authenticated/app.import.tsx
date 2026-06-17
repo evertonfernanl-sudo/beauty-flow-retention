@@ -5,10 +5,16 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Upload, Check, Loader2, Trash2 } from "lucide-react";
+import { Sparkles, Upload, Check, Loader2, Trash2, Lock } from "lucide-react";
 import { toast } from "sonner";
-import { parseImportText, commitImportClients, type ParsedClient } from "@/lib/api/import.functions";
+import {
+  parseImportText,
+  enqueueImportClients,
+  type ParsedClient,
+} from "@/lib/api/import.functions";
 import { formatPhoneBR } from "@/lib/phone";
+import { useFeature } from "@/lib/hooks/use-feature";
+import { useCurrentProfile } from "@/lib/hooks/use-current-profile";
 
 export const Route = createFileRoute("/_authenticated/app/import")({
   head: () => ({ meta: [{ title: "Smart Import · BeautyFlow" }] }),
@@ -21,8 +27,12 @@ Ana Costa | 11977776666 | aniversário 12/05
 Pedro Lima - 11966665555`;
 
 function ImportPage() {
+  const profile = useCurrentProfile().data;
+  const companyId = profile?.company?.id;
+  const feature = useFeature(companyId, "smart_import");
+
   const parse = useServerFn(parseImportText);
-  const commit = useServerFn(commitImportClients);
+  const enqueue = useServerFn(enqueueImportClients);
   const [text, setText] = useState("");
   const [rows, setRows] = useState<ParsedClient[]>([]);
   const [parsing, setParsing] = useState(false);
@@ -47,8 +57,10 @@ function ImportPage() {
     if (rows.length === 0) return;
     setSaving(true);
     try {
-      const res = await commit({ data: { clients: rows } });
-      toast.success(`${res.inserted} clientes importados!`);
+      const res = await enqueue({ data: { clients: rows } });
+      toast.success(
+        `${res.count} clientes enfileirados — importação roda em segundo plano.`,
+      );
       setRows([]);
       setText("");
     } catch (e) {
@@ -60,6 +72,20 @@ function ImportPage() {
 
   function removeRow(i: number) {
     setRows((r) => r.filter((_, idx) => idx !== i));
+  }
+
+  if (!feature.loading && !feature.enabled) {
+    return (
+      <div className="max-w-2xl">
+        <Card className="p-8 text-center space-y-3">
+          <Lock className="h-10 w-10 mx-auto text-muted-foreground" />
+          <h1 className="text-xl font-semibold">Smart Import desativado</h1>
+          <p className="text-sm text-muted-foreground">
+            Este módulo está desligado para sua empresa. Ative em Admin → Feature Flags.
+          </p>
+        </Card>
+      </div>
+    );
   }
 
   return (
@@ -102,7 +128,7 @@ function ImportPage() {
               <Badge variant="secondary">{rows.length}</Badge>
             </div>
             <Button onClick={runCommit} disabled={saving}>
-              {saving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Importando…</> : <><Upload className="h-4 w-4 mr-2" /> Importar {rows.length} clientes</>}
+              {saving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Enfileirando…</> : <><Upload className="h-4 w-4 mr-2" /> Importar {rows.length} clientes</>}
             </Button>
           </div>
           <div className="overflow-x-auto -mx-4">
@@ -134,7 +160,7 @@ function ImportPage() {
             </table>
           </div>
           <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1">
-            <Check className="h-3 w-3" /> Revise antes de importar. Linhas removidas não serão salvas.
+            <Check className="h-3 w-3" /> Importação roda em fila — o worker processa em segundo plano (1 min).
           </p>
         </Card>
       )}

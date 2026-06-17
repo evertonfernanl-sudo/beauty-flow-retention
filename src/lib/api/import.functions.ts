@@ -104,3 +104,31 @@ export const commitImportClients = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { inserted: inserted?.length ?? 0 };
   });
+
+// Async path: enqueue import as a job and return job id.
+// Worker (jobs-tick) processes it with service_role.
+export const enqueueImportClients = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) =>
+    z.object({ clients: z.array(ClientRow).min(1).max(2000) }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { data: profile } = await supabase
+      .from("profiles").select("company_id").eq("id", userId).maybeSingle();
+    if (!profile?.company_id) throw new Error("Empresa não encontrada");
+
+    const normalized = data.clients.map((c) => ({
+      ...c,
+      phone: c.phone ? toStoragePhone(c.phone) ?? c.phone : null,
+    }));
+
+    const { data: jobId, error } = await supabase.rpc("enqueue_job", {
+      _company_id: profile.company_id,
+      _type: "import.commit",
+      _payload: { clients: normalized } as never,
+      _priority: 3,
+    });
+    if (error) throw new Error(error.message);
+    return { jobId: jobId as string, count: normalized.length };
+  });
