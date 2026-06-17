@@ -363,8 +363,11 @@ export type Database = {
           last_visit: string | null
           name: string
           next_return: string | null
+          normalized_name: string | null
           notes: string | null
           phone: string | null
+          phone_api: string | null
+          phone_original: string | null
           profession: string | null
           status: Database["public"]["Enums"]["client_status"]
           total_spent: number
@@ -381,8 +384,11 @@ export type Database = {
           last_visit?: string | null
           name: string
           next_return?: string | null
+          normalized_name?: string | null
           notes?: string | null
           phone?: string | null
+          phone_api?: string | null
+          phone_original?: string | null
           profession?: string | null
           status?: Database["public"]["Enums"]["client_status"]
           total_spent?: number
@@ -399,8 +405,11 @@ export type Database = {
           last_visit?: string | null
           name?: string
           next_return?: string | null
+          normalized_name?: string | null
           notes?: string | null
           phone?: string | null
+          phone_api?: string | null
+          phone_original?: string | null
           profession?: string | null
           status?: Database["public"]["Enums"]["client_status"]
           total_spent?: number
@@ -2067,6 +2076,21 @@ export type Database = {
         }
         Returns: string
       }
+      find_duplicate_client: {
+        Args: {
+          _company_id: string
+          _name: string
+          _phone: string
+          _threshold?: number
+        }
+        Returns: {
+          confidence: number
+          id: string
+          name: string
+          phone: string
+          reason: string
+        }[]
+      }
       finish_job: {
         Args: { _error?: string; _id: string; _ok: boolean; _result?: Json }
         Returns: undefined
@@ -2093,11 +2117,15 @@ export type Database = {
         Returns: boolean
       }
       is_platform_admin: { Args: { _user_id: string }; Returns: boolean }
+      normalize_name: { Args: { _name: string }; Returns: string }
+      normalize_phone: { Args: { _phone: string }; Returns: string }
       refresh_recovery_opportunities: {
         Args: { _company?: string }
         Returns: undefined
       }
       refresh_return_opportunities: { Args: never; Returns: undefined }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
       slugify: { Args: { _input: string }; Returns: string }
     }
     Enums: {
