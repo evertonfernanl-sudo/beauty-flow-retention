@@ -79,6 +79,13 @@ export type Database = {
             foreignKeyName: "appointments_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "top_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "vip_clients"
             referencedColumns: ["id"]
           },
@@ -102,6 +109,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "retention_report"
             referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "appointments_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "service_metrics"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "appointments_service_id_fkey"
@@ -223,6 +237,13 @@ export type Database = {
             foreignKeyName: "client_contacts_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "top_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "vip_clients"
             referencedColumns: ["id"]
           },
@@ -335,6 +356,7 @@ export type Database = {
           email: string | null
           id: string
           logo_url: string | null
+          monthly_revenue_goal: number
           name: string
           onboarding_completed: boolean
           phone: string | null
@@ -348,6 +370,7 @@ export type Database = {
           email?: string | null
           id?: string
           logo_url?: string | null
+          monthly_revenue_goal?: number
           name: string
           onboarding_completed?: boolean
           phone?: string | null
@@ -361,6 +384,7 @@ export type Database = {
           email?: string | null
           id?: string
           logo_url?: string | null
+          monthly_revenue_goal?: number
           name?: string
           onboarding_completed?: boolean
           phone?: string | null
@@ -641,6 +665,13 @@ export type Database = {
             foreignKeyName: "recovery_opportunities_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "top_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recovery_opportunities_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "vip_clients"
             referencedColumns: ["id"]
           },
@@ -664,6 +695,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "retention_report"
             referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "recovery_opportunities_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "service_metrics"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "recovery_opportunities_service_id_fkey"
@@ -730,6 +768,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recovery_tasks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "top_clients"
             referencedColumns: ["id"]
           },
           {
@@ -837,6 +882,13 @@ export type Database = {
             foreignKeyName: "return_opportunities_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "top_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "return_opportunities_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "vip_clients"
             referencedColumns: ["id"]
           },
@@ -865,6 +917,13 @@ export type Database = {
             foreignKeyName: "return_opportunities_service_id_fkey"
             columns: ["service_id"]
             isOneToOne: false
+            referencedRelation: "service_metrics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "return_opportunities_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
             referencedRelation: "services"
             referencedColumns: ["id"]
           },
@@ -873,6 +932,8 @@ export type Database = {
       services: {
         Row: {
           active: boolean
+          category: string | null
+          color: string | null
           company_id: string
           created_at: string
           description: string | null
@@ -885,6 +946,8 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          category?: string | null
+          color?: string | null
           company_id: string
           created_at?: string
           description?: string | null
@@ -897,6 +960,8 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          category?: string | null
+          color?: string | null
           company_id?: string
           created_at?: string
           description?: string | null
@@ -1083,6 +1148,96 @@ export type Database = {
           potential_revenue: number | null
         }
         Relationships: []
+      }
+      service_metrics: {
+        Row: {
+          category: string | null
+          color: string | null
+          company_id: string | null
+          id: string | null
+          name: string | null
+          price: number | null
+          recurrence_ratio: number | null
+          return_days: number | null
+          total_completed: number | null
+          total_revenue: number | null
+          unique_clients: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "services_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "services_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "services_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+        ]
+      }
+      top_clients: {
+        Row: {
+          appointments_count: number | null
+          company_id: string | null
+          id: string | null
+          last_visit: string | null
+          name: string | null
+          phone: string | null
+          total_spent: number | null
+        }
+        Insert: {
+          appointments_count?: number | null
+          company_id?: string | null
+          id?: string | null
+          last_visit?: string | null
+          name?: string | null
+          phone?: string | null
+          total_spent?: number | null
+        }
+        Update: {
+          appointments_count?: number | null
+          company_id?: string | null
+          id?: string | null
+          last_visit?: string | null
+          name?: string | null
+          phone?: string | null
+          total_spent?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clients_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clients_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "clients_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+        ]
       }
       vip_clients: {
         Row: {
