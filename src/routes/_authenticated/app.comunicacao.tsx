@@ -327,19 +327,21 @@ function CampaignsPanel() {
         .not("phone", "is", null);
 
       if (segment === "ACTIVE") query = query.eq("status", "ACTIVE");
-      else if (segment === "AT_RISK") query = query.eq("status", "AT_RISK");
       else if (segment === "LOST") query = query.eq("status", "LOST");
 
       const { data, error } = await query.limit(500);
       if (error) throw error;
       let rows = (data ?? []) as { id: string; name: string; phone: string | null }[];
 
-      if (segment === "RETURN_DUE") {
+      if (segment === "AT_RISK" || segment === "RETURN_DUE") {
+        const classes =
+          segment === "AT_RISK" ? ["AT_RISK", "LATE"] : ["ON_TIME", "ATTENTION", "LATE"];
         const { data: ops } = await supabase
           .from("recovery_opportunities")
           .select("client_id")
           .eq("company_id", companyId!)
-          .in("status", ["OPEN", "IN_CONTACT"]);
+          .in("status", ["OPEN", "IN_CONTACT"])
+          .in("classification", classes);
         const ids = new Set((ops ?? []).map((o) => o.client_id));
         rows = rows.filter((r) => ids.has(r.id));
       }
