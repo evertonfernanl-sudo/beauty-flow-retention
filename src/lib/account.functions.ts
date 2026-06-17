@@ -1,21 +1,34 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
+type ExportPayload = {
+  exported_at: string;
+  tables: Record<string, unknown[]>;
+};
+
+type ExportResult =
+  | { ok: true; data: ExportPayload }
+  | { ok: false; error: string };
+
+type ActionResult =
+  | { ok: true; message: string }
+  | { ok: false; error: string };
+
 // LGPD — Export all data the current user's company owns.
 export const exportMyCompanyData = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .handler(async ({ context }): Promise<ExportResult> => {
     const { supabase, userId } = context;
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("*")
+      .select("company_id")
       .eq("id", userId)
-      .single();
+      .maybeSingle();
 
-    const companyId = profile?.company_id;
+    const companyId = profile?.company_id ?? null;
     if (!companyId) {
-      return { ok: false as const, error: "Sem empresa associada" };
+      return { ok: false, error: "Sem empresa associada" };
     }
 
     const tables = [
@@ -30,38 +43,42 @@ export const exportMyCompanyData = createServerFn({ method: "POST" })
       "client_contacts",
     ] as const;
 
-    const payload: Record<string, unknown> = { exported_at: new Date().toISOString() };
+    const out: Record<string, unknown[]> = {};
     for (const t of tables) {
-      const { data } = await supabase.from(t).select("*").eq("company_id", companyId);
-      payload[t] = data ?? [];
+      const { data } = await supabase
+        .from(t as never)
+        .select("*")
+        .eq("company_id", companyId);
+      out[t] = (data as unknown[]) ?? [];
     }
-    return { ok: true as const, data: payload };
+    return {
+      ok: true,
+      data: { exported_at: new Date().toISOString(), tables: out },
+    };
   });
 
 // LGPD — Request account/company deletion.
-// Marks the company as scheduled for deletion; admin worker performs hard delete after retention window.
 export const requestAccountDeletion = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .handler(async ({ context }): Promise<ActionResult> => {
     const { supabase, userId } = context;
 
     const { data: profile } = await supabase
       .from("profiles")
       .select("company_id")
       .eq("id", userId)
-      .single();
+      .maybeSingle();
 
-    const companyId = profile?.company_id;
-    if (!companyId) return { ok: false as const, error: "Sem empresa associada" };
+    const companyId = profile?.company_id ?? null;
+    if (!companyId) return { ok: false, error: "Sem empresa associada" };
 
-    // Only owners can request company deletion
     const { data: isOwner } = await supabase.rpc("has_role", {
       _user_id: userId,
       _company_id: companyId,
       _role: "owner",
     });
     if (!isOwner) {
-      return { ok: false as const, error: "Apenas o proprietário pode solicitar exclusão" };
+      return { ok: false, error: "Apenas o proprietário pode solicitar exclusão" };
     }
 
     await supabase.from("audit_logs").insert({
@@ -72,5 +89,8 @@ export const requestAccountDeletion = createServerFn({ method: "POST" })
       entity_id: companyId,
     });
 
-    return { ok: true as const, message: "Solicitação registrada. Sua conta será excluída em até 30 dias." };
+    return {
+      ok: true,
+      message: "Solicitação registrada. Sua conta será excluída em até 30 dias.",
+    };
   });
