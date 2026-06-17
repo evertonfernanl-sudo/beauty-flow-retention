@@ -22,6 +22,7 @@ import { Route as AuthenticatedAppReportsRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAppFinancialRouteImport } from './routes/_authenticated/app.financial'
 import { Route as AuthenticatedAppClientsRouteImport } from './routes/_authenticated/app.clients'
 import { Route as AuthenticatedAppAgendaRouteImport } from './routes/_authenticated/app.agenda'
+import { Route as AuthenticatedAppClientsClientIdRouteImport } from './routes/_authenticated/app.clients.$clientId'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -90,6 +91,12 @@ const AuthenticatedAppAgendaRoute = AuthenticatedAppAgendaRouteImport.update({
   path: '/agenda',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
+const AuthenticatedAppClientsClientIdRoute =
+  AuthenticatedAppClientsClientIdRouteImport.update({
+    id: '/$clientId',
+    path: '/$clientId',
+    getParentRoute: () => AuthenticatedAppClientsRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -97,26 +104,28 @@ export interface FileRoutesByFullPath {
   '/app': typeof AuthenticatedAppRouteWithChildren
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/app/agenda': typeof AuthenticatedAppAgendaRoute
-  '/app/clients': typeof AuthenticatedAppClientsRoute
+  '/app/clients': typeof AuthenticatedAppClientsRouteWithChildren
   '/app/financial': typeof AuthenticatedAppFinancialRoute
   '/app/reports': typeof AuthenticatedAppReportsRoute
   '/app/returns': typeof AuthenticatedAppReturnsRoute
   '/app/services': typeof AuthenticatedAppServicesRoute
   '/app/settings': typeof AuthenticatedAppSettingsRoute
   '/app/': typeof AuthenticatedAppIndexRoute
+  '/app/clients/$clientId': typeof AuthenticatedAppClientsClientIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/app/agenda': typeof AuthenticatedAppAgendaRoute
-  '/app/clients': typeof AuthenticatedAppClientsRoute
+  '/app/clients': typeof AuthenticatedAppClientsRouteWithChildren
   '/app/financial': typeof AuthenticatedAppFinancialRoute
   '/app/reports': typeof AuthenticatedAppReportsRoute
   '/app/returns': typeof AuthenticatedAppReturnsRoute
   '/app/services': typeof AuthenticatedAppServicesRoute
   '/app/settings': typeof AuthenticatedAppSettingsRoute
   '/app': typeof AuthenticatedAppIndexRoute
+  '/app/clients/$clientId': typeof AuthenticatedAppClientsClientIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -126,13 +135,14 @@ export interface FileRoutesById {
   '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
   '/_authenticated/app/agenda': typeof AuthenticatedAppAgendaRoute
-  '/_authenticated/app/clients': typeof AuthenticatedAppClientsRoute
+  '/_authenticated/app/clients': typeof AuthenticatedAppClientsRouteWithChildren
   '/_authenticated/app/financial': typeof AuthenticatedAppFinancialRoute
   '/_authenticated/app/reports': typeof AuthenticatedAppReportsRoute
   '/_authenticated/app/returns': typeof AuthenticatedAppReturnsRoute
   '/_authenticated/app/services': typeof AuthenticatedAppServicesRoute
   '/_authenticated/app/settings': typeof AuthenticatedAppSettingsRoute
   '/_authenticated/app/': typeof AuthenticatedAppIndexRoute
+  '/_authenticated/app/clients/$clientId': typeof AuthenticatedAppClientsClientIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -149,6 +159,7 @@ export interface FileRouteTypes {
     | '/app/services'
     | '/app/settings'
     | '/app/'
+    | '/app/clients/$clientId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -162,6 +173,7 @@ export interface FileRouteTypes {
     | '/app/services'
     | '/app/settings'
     | '/app'
+    | '/app/clients/$clientId'
   id:
     | '__root__'
     | '/'
@@ -177,6 +189,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/services'
     | '/_authenticated/app/settings'
     | '/_authenticated/app/'
+    | '/_authenticated/app/clients/$clientId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -278,12 +291,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppAgendaRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/app/clients/$clientId': {
+      id: '/_authenticated/app/clients/$clientId'
+      path: '/$clientId'
+      fullPath: '/app/clients/$clientId'
+      preLoaderRoute: typeof AuthenticatedAppClientsClientIdRouteImport
+      parentRoute: typeof AuthenticatedAppClientsRoute
+    }
   }
 }
 
+interface AuthenticatedAppClientsRouteChildren {
+  AuthenticatedAppClientsClientIdRoute: typeof AuthenticatedAppClientsClientIdRoute
+}
+
+const AuthenticatedAppClientsRouteChildren: AuthenticatedAppClientsRouteChildren =
+  {
+    AuthenticatedAppClientsClientIdRoute: AuthenticatedAppClientsClientIdRoute,
+  }
+
+const AuthenticatedAppClientsRouteWithChildren =
+  AuthenticatedAppClientsRoute._addFileChildren(
+    AuthenticatedAppClientsRouteChildren,
+  )
+
 interface AuthenticatedAppRouteChildren {
   AuthenticatedAppAgendaRoute: typeof AuthenticatedAppAgendaRoute
-  AuthenticatedAppClientsRoute: typeof AuthenticatedAppClientsRoute
+  AuthenticatedAppClientsRoute: typeof AuthenticatedAppClientsRouteWithChildren
   AuthenticatedAppFinancialRoute: typeof AuthenticatedAppFinancialRoute
   AuthenticatedAppReportsRoute: typeof AuthenticatedAppReportsRoute
   AuthenticatedAppReturnsRoute: typeof AuthenticatedAppReturnsRoute
@@ -294,7 +328,7 @@ interface AuthenticatedAppRouteChildren {
 
 const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppAgendaRoute: AuthenticatedAppAgendaRoute,
-  AuthenticatedAppClientsRoute: AuthenticatedAppClientsRoute,
+  AuthenticatedAppClientsRoute: AuthenticatedAppClientsRouteWithChildren,
   AuthenticatedAppFinancialRoute: AuthenticatedAppFinancialRoute,
   AuthenticatedAppReportsRoute: AuthenticatedAppReportsRoute,
   AuthenticatedAppReturnsRoute: AuthenticatedAppReturnsRoute,
