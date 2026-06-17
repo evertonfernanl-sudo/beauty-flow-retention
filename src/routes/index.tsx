@@ -633,5 +633,3 @@ function PlanCard({
   );
 }
 
-// Suppress unused import warnings for Brain/TrendingUp
-export const _unused = { Brain, TrendingUp };
