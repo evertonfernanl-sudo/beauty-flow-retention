@@ -76,8 +76,8 @@ export function MarketingFooter() {
         <div>
           <h4 className="text-sm font-semibold">Legal</h4>
           <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-            <li><a href="#" className="hover:text-foreground">Política de Privacidade</a></li>
-            <li><a href="#" className="hover:text-foreground">Termos de Uso</a></li>
+            <li><Link to="/privacidade" className="hover:text-foreground">Política de Privacidade</Link></li>
+            <li><Link to="/termos" className="hover:text-foreground">Termos de Uso</Link></li>
           </ul>
         </div>
       </div>
@@ -94,6 +94,8 @@ export function MarketingShell({ children }: { children: ReactNode }) {
       <MarketingHeader />
       <main>{children}</main>
       <MarketingFooter />
+      <CookieConsent />
     </div>
   );
 }
+
