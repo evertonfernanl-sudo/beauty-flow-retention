@@ -148,7 +148,7 @@ function BookingPage() {
     }
     setSubmitting(true);
     try {
-      const phoneNorm = normalizePhoneBR(phone);
+      const phoneNorm = toStoragePhone(phone) ?? phone;
       const { data: client, error: cErr } = await supabase
         .from("clients")
         .insert({ company_id: company.id, name: name.trim(), phone: phoneNorm })
