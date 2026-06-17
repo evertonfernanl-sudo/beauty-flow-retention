@@ -16,6 +16,9 @@ export type CurrentProfile = {
     name: string;
     plan: string;
     onboarding_completed: boolean;
+    vertical: "BEAUTY" | "SALES" | "GYM";
+    whatsapp: string | null;
+    whatsapp_template: string | null;
   } | null;
   role: "owner" | "admin" | "employee" | null;
 };
@@ -40,10 +43,10 @@ export function useCurrentProfile() {
       if (profile?.company_id) {
         const { data: companyRow } = await supabase
           .from("companies")
-          .select("id, name, plan, onboarding_completed")
+          .select("id, name, plan, onboarding_completed, vertical, whatsapp, whatsapp_template")
           .eq("id", profile.company_id)
           .maybeSingle();
-        company = companyRow ?? null;
+        company = (companyRow as CurrentProfile["company"]) ?? null;
 
         const { data: roleRow } = await supabase
           .from("user_roles")
