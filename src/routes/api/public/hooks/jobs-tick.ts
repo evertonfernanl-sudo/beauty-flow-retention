@@ -38,8 +38,7 @@ async function handle() {
       await supabaseAdmin.rpc("finish_job", {
         _id: j.id,
         _ok: true,
-        _result: result ?? null,
-        _error: null,
+        _result: (result ?? {}) as never,
       });
       processed.push({ id: j.id, type: j.type, ok: true });
     } catch (err) {
@@ -47,7 +46,6 @@ async function handle() {
       await supabaseAdmin.rpc("finish_job", {
         _id: j.id,
         _ok: false,
-        _result: null,
         _error: msg,
       });
       processed.push({ id: j.id, type: j.type, ok: false, error: msg });
