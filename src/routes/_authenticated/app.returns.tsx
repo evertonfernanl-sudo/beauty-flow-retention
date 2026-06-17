@@ -525,7 +525,7 @@ function ContactDialog({
         <div className="space-y-3">
           <div>
             <Label>Canal</Label>
-            <Select value={channel} onValueChange={setChannel}>
+            <Select value={channel} onValueChange={(v) => setChannel(v as typeof channel)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
@@ -538,14 +538,13 @@ function ContactDialog({
           </div>
           <div>
             <Label>Resultado</Label>
-            <Select value={result} onValueChange={setResult}>
+            <Select value={result} onValueChange={(v) => setResult(v as typeof result)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="NO_RESPONSE">Sem resposta</SelectItem>
-                <SelectItem value="REPLIED">Respondeu</SelectItem>
+                <SelectItem value="NO_ANSWER">Sem resposta</SelectItem>
+                <SelectItem value="ANSWERED">Respondeu</SelectItem>
                 <SelectItem value="SCHEDULED">Agendou</SelectItem>
-                <SelectItem value="NOT_INTERESTED">Não tem interesse</SelectItem>
-                <SelectItem value="INVALID_NUMBER">Número inválido</SelectItem>
+                <SelectItem value="REFUSED">Não tem interesse</SelectItem>
               </SelectContent>
             </Select>
           </div>
