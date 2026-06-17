@@ -149,9 +149,9 @@ function ReportsPage() {
 
   void recoveredClients;
 
-  const sortedBySold = [...(topServices.data ?? [])].sort((a, b) => b.total_completed - a.total_completed).slice(0, 5);
-  const sortedByRev  = [...(topServices.data ?? [])].sort((a, b) => Number(b.total_revenue) - Number(a.total_revenue)).slice(0, 5);
-  const sortedByRec  = [...(topServices.data ?? [])].sort((a, b) => Number(b.recurrence_ratio) - Number(a.recurrence_ratio)).slice(0, 5);
+  const sortedBySold = [...((topServices.data ?? []) as any[])].sort((a, b) => Number(b.total_completed ?? 0) - Number(a.total_completed ?? 0)).slice(0, 5);
+  const sortedByRev  = [...((topServices.data ?? []) as any[])].sort((a, b) => Number(b.total_revenue ?? 0) - Number(a.total_revenue ?? 0)).slice(0, 5);
+  const sortedByRec  = [...((topServices.data ?? []) as any[])].sort((a, b) => Number(b.recurrence_ratio ?? 0) - Number(a.recurrence_ratio ?? 0)).slice(0, 5);
 
   return (
     <div className="space-y-6 pb-24">

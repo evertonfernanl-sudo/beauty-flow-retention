@@ -78,10 +78,10 @@ function ServicesPage() {
   });
 
   const top = useMemo(() => {
-    const m = metrics.data ?? [];
-    const bySold = [...m].sort((a, b) => b.total_completed - a.total_completed)[0];
-    const byRev = [...m].sort((a, b) => Number(b.total_revenue) - Number(a.total_revenue))[0];
-    const byRec = [...m].sort((a, b) => Number(b.recurrence_ratio) - Number(a.recurrence_ratio))[0];
+    const m = (metrics.data ?? []) as any[];
+    const bySold = [...m].sort((a, b) => Number(b.total_completed ?? 0) - Number(a.total_completed ?? 0))[0];
+    const byRev = [...m].sort((a, b) => Number(b.total_revenue ?? 0) - Number(a.total_revenue ?? 0))[0];
+    const byRec = [...m].sort((a, b) => Number(b.recurrence_ratio ?? 0) - Number(a.recurrence_ratio ?? 0))[0];
     return { bySold, byRev, byRec };
   }, [metrics.data]);
 
@@ -89,6 +89,7 @@ function ServicesPage() {
   function openEdit(s: any) { setEditing(s); setOpen(true); }
 
   async function duplicateService(s: any) {
+    if (!companyId) return;
     const { error } = await supabase.from("services").insert({
       company_id: companyId,
       name: `${s.name} (cópia)`,
@@ -126,9 +127,9 @@ function ServicesPage() {
 
       {/* Top metrics */}
       <section className="grid gap-3 sm:grid-cols-3">
-        <MetricCard icon={Trophy}     label="Mais vendido"      title={top.bySold?.name} hint={top.bySold ? `${top.bySold.total_completed} atendimentos` : "—"} />
-        <MetricCard icon={TrendingUp} label="Maior faturamento" title={top.byRev?.name}  hint={top.byRev ? formatBRL(Number(top.byRev.total_revenue)) : "—"} />
-        <MetricCard icon={Repeat}     label="Maior recorrência" title={top.byRec?.name}  hint={top.byRec ? `${Number(top.byRec.recurrence_ratio).toFixed(1)}× por cliente` : "—"} />
+        <MetricCard icon={Trophy}     label="Mais vendido"      title={top.bySold?.name ?? null} hint={top.bySold ? `${Number(top.bySold.total_completed ?? 0)} atendimentos` : "—"} />
+        <MetricCard icon={TrendingUp} label="Maior faturamento" title={top.byRev?.name ?? null}  hint={top.byRev ? formatBRL(Number(top.byRev.total_revenue ?? 0)) : "—"} />
+        <MetricCard icon={Repeat}     label="Maior recorrência" title={top.byRec?.name ?? null}  hint={top.byRec ? `${Number(top.byRec.recurrence_ratio ?? 0).toFixed(1)}× por cliente` : "—"} />
       </section>
 
       <Card className="p-4">
@@ -189,7 +190,7 @@ function ServicesPage() {
   );
 }
 
-function MetricCard({ icon: Icon, label, title, hint }: { icon: any; label: string; title?: string; hint: string }) {
+function MetricCard({ icon: Icon, label, title, hint }: { icon: any; label: string; title?: string | null; hint: string }) {
   return (
     <Card className="p-4 shadow-soft">
       <div className="flex items-start justify-between">
