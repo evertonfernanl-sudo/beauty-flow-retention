@@ -371,19 +371,11 @@ function PlanTab({ companyId, isOwner, qc }: { companyId?: string; isOwner: bool
   const currentPlan = (plans.data ?? []).find((p: any) => p.id === sub.data?.plan_id);
   const usagePct = currentPlan?.max_clients ? Math.min(100, ((clientsCount.data ?? 0) / currentPlan.max_clients) * 100) : 0;
 
-  async function upgrade(planId: string) {
-    if (!companyId) return;
-    const plan = (plans.data ?? []).find((p: any) => p.id === planId);
-    if (!plan) return;
-    const { error } = await supabase.from("subscriptions").update({
-      plan_id: planId, amount: plan.monthly_price, status: "ACTIVE",
-      current_period_end: new Date(Date.now() + 30 * 86400000).toISOString(),
-    } as any).eq("company_id", companyId);
-    if (error) return toast.error(error.message);
-    await supabase.from("companies").update({ plan: planId } as any).eq("id", companyId);
-    toast.success(`Plano atualizado para ${plan.name}`);
-    qc.invalidateQueries({ queryKey: ["subscription", companyId] });
-    qc.invalidateQueries({ queryKey: ["current-profile"] });
+  async function upgrade(_planId: string) {
+    // Plan changes must go through a verified server-side billing flow.
+    // Direct client writes to subscriptions / companies.plan are blocked by RLS
+    // and a database trigger. Wire this button to your checkout / billing webhook.
+    toast.info("Checkout em breve. Entre em contato com o suporte para alterar seu plano.");
   }
 
   return (
