@@ -213,7 +213,7 @@ function RecoveryPage() {
           opportunityId={selected}
           onClose={() => setSelected(null)}
           companyId={companyId!}
-          whatsappTemplate={profile?.company?.whatsapp_template as string | undefined}
+          whatsappTemplate={(profile?.company as any)?.whatsapp_template as string | undefined}
         />
       )}
     </div>
