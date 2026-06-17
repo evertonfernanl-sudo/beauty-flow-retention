@@ -81,7 +81,7 @@ function ComunicacaoPage() {
 
 function TemplatesPanel() {
   const profile = useCurrentProfile().data;
-  const companyId = profile?.company_id;
+  const companyId = profile?.company?.id;
   const qc = useQueryClient();
   const [editing, setEditing] = useState<Template | null>(null);
   const [open, setOpen] = useState(false);
