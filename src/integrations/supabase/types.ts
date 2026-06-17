@@ -352,44 +352,68 @@ export type Database = {
       companies: {
         Row: {
           active: boolean
+          address: string | null
+          business_hours: Json
+          city: string | null
           created_at: string
           email: string | null
           id: string
+          instagram: string | null
           logo_url: string | null
           monthly_revenue_goal: number
           name: string
           onboarding_completed: boolean
           phone: string | null
           plan: Database["public"]["Enums"]["company_plan"]
+          preferences: Json
+          state: string | null
+          trial_ends_at: string | null
           updated_at: string
+          whatsapp: string | null
           whatsapp_template: string | null
         }
         Insert: {
           active?: boolean
+          address?: string | null
+          business_hours?: Json
+          city?: string | null
           created_at?: string
           email?: string | null
           id?: string
+          instagram?: string | null
           logo_url?: string | null
           monthly_revenue_goal?: number
           name: string
           onboarding_completed?: boolean
           phone?: string | null
           plan?: Database["public"]["Enums"]["company_plan"]
+          preferences?: Json
+          state?: string | null
+          trial_ends_at?: string | null
           updated_at?: string
+          whatsapp?: string | null
           whatsapp_template?: string | null
         }
         Update: {
           active?: boolean
+          address?: string | null
+          business_hours?: Json
+          city?: string | null
           created_at?: string
           email?: string | null
           id?: string
+          instagram?: string | null
           logo_url?: string | null
           monthly_revenue_goal?: number
           name?: string
           onboarding_completed?: boolean
           phone?: string | null
           plan?: Database["public"]["Enums"]["company_plan"]
+          preferences?: Json
+          state?: string | null
+          trial_ends_at?: string | null
           updated_at?: string
+          whatsapp?: string | null
           whatsapp_template?: string | null
         }
         Relationships: []
@@ -468,6 +492,199 @@ export type Database = {
           },
         ]
       }
+      integrations: {
+        Row: {
+          company_id: string
+          config: Json
+          connected_at: string | null
+          created_at: string
+          id: string
+          provider: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          config?: Json
+          connected_at?: string | null
+          created_at?: string
+          id?: string
+          provider: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          config?: Json
+          connected_at?: string | null
+          created_at?: string
+          id?: string
+          provider?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integrations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "integrations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "integrations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+        ]
+      }
+      invitations: {
+        Row: {
+          accepted_at: string | null
+          company_id: string
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          invited_by: string | null
+          role: Database["public"]["Enums"]["app_role"]
+          status: Database["public"]["Enums"]["invitation_status"]
+          token: string
+          updated_at: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          company_id: string
+          created_at?: string
+          email: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          role?: Database["public"]["Enums"]["app_role"]
+          status?: Database["public"]["Enums"]["invitation_status"]
+          token?: string
+          updated_at?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          company_id?: string
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          role?: Database["public"]["Enums"]["app_role"]
+          status?: Database["public"]["Enums"]["invitation_status"]
+          token?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invitations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invitations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "invitations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+        ]
+      }
+      invoices: {
+        Row: {
+          amount: number
+          company_id: string
+          created_at: string
+          due_date: string
+          gateway: string | null
+          gateway_invoice_id: string | null
+          id: string
+          number: string
+          paid_at: string | null
+          status: Database["public"]["Enums"]["invoice_status"]
+          subscription_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          company_id: string
+          created_at?: string
+          due_date?: string
+          gateway?: string | null
+          gateway_invoice_id?: string | null
+          id?: string
+          number: string
+          paid_at?: string | null
+          status?: Database["public"]["Enums"]["invoice_status"]
+          subscription_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          company_id?: string
+          created_at?: string
+          due_date?: string
+          gateway?: string | null
+          gateway_invoice_id?: string | null
+          id?: string
+          number?: string
+          paid_at?: string | null
+          status?: Database["public"]["Enums"]["invoice_status"]
+          subscription_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "invoices_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "invoices_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           company_id: string
@@ -522,6 +739,51 @@ export type Database = {
             referencedColumns: ["company_id"]
           },
         ]
+      }
+      plans: {
+        Row: {
+          active: boolean
+          created_at: string
+          description: string | null
+          features: Json
+          id: string
+          max_clients: number | null
+          max_users: number | null
+          monthly_price: number
+          name: string
+          sort_order: number
+          updated_at: string
+          yearly_price: number
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          features?: Json
+          id: string
+          max_clients?: number | null
+          max_users?: number | null
+          monthly_price?: number
+          name: string
+          sort_order?: number
+          updated_at?: string
+          yearly_price?: number
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          features?: Json
+          id?: string
+          max_clients?: number | null
+          max_users?: number | null
+          monthly_price?: number
+          name?: string
+          sort_order?: number
+          updated_at?: string
+          yearly_price?: number
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -996,6 +1258,86 @@ export type Database = {
           },
         ]
       }
+      subscriptions: {
+        Row: {
+          amount: number
+          billing_cycle: string
+          canceled_at: string | null
+          company_id: string
+          created_at: string
+          current_period_end: string
+          current_period_start: string
+          gateway: string | null
+          gateway_subscription_id: string | null
+          id: string
+          plan_id: string
+          status: Database["public"]["Enums"]["subscription_status"]
+          trial_ends_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          billing_cycle?: string
+          canceled_at?: string | null
+          company_id: string
+          created_at?: string
+          current_period_end?: string
+          current_period_start?: string
+          gateway?: string | null
+          gateway_subscription_id?: string | null
+          id?: string
+          plan_id: string
+          status?: Database["public"]["Enums"]["subscription_status"]
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          billing_cycle?: string
+          canceled_at?: string | null
+          company_id?: string
+          created_at?: string
+          current_period_end?: string
+          current_period_start?: string
+          gateway?: string | null
+          gateway_subscription_id?: string | null
+          id?: string
+          plan_id?: string
+          status?: Database["public"]["Enums"]["subscription_status"]
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "subscriptions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           company_id: string
@@ -1317,9 +1659,17 @@ export type Database = {
         | "IN_PERSON"
         | "EMAIL"
       contact_result: "ANSWERED" | "NO_ANSWER" | "SCHEDULED" | "REFUSED"
+      invitation_status: "PENDING" | "ACCEPTED" | "EXPIRED" | "CANCELED"
+      invoice_status: "OPEN" | "PAID" | "PAST_DUE" | "CANCELED" | "REFUNDED"
       recovery_status: "OPEN" | "IN_CONTACT" | "CONVERTED" | "LOST"
       return_class: "ON_TIME" | "ATTENTION" | "LATE" | "AT_RISK" | "LOST"
       return_status: "ON_TIME" | "DUE" | "LATE" | "LOST"
+      subscription_status:
+        | "TRIAL"
+        | "ACTIVE"
+        | "PAST_DUE"
+        | "CANCELED"
+        | "PENDING"
       task_status: "OPEN" | "DONE" | "CANCELED"
       transaction_type: "INCOME" | "EXPENSE"
     }
@@ -1461,9 +1811,18 @@ export const Constants = {
       company_plan: ["starter", "professional", "premium"],
       contact_channel: ["WHATSAPP", "PHONE", "INSTAGRAM", "IN_PERSON", "EMAIL"],
       contact_result: ["ANSWERED", "NO_ANSWER", "SCHEDULED", "REFUSED"],
+      invitation_status: ["PENDING", "ACCEPTED", "EXPIRED", "CANCELED"],
+      invoice_status: ["OPEN", "PAID", "PAST_DUE", "CANCELED", "REFUNDED"],
       recovery_status: ["OPEN", "IN_CONTACT", "CONVERTED", "LOST"],
       return_class: ["ON_TIME", "ATTENTION", "LATE", "AT_RISK", "LOST"],
       return_status: ["ON_TIME", "DUE", "LATE", "LOST"],
+      subscription_status: [
+        "TRIAL",
+        "ACTIVE",
+        "PAST_DUE",
+        "CANCELED",
+        "PENDING",
+      ],
       task_status: ["OPEN", "DONE", "CANCELED"],
       transaction_type: ["INCOME", "EXPENSE"],
     },
