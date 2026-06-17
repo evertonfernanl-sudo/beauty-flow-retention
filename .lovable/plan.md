@@ -1,97 +1,42 @@
-# Clientes para Retorno — CRM de Recuperação
+## BeautyFlow v2 — Roadmap de execução
 
-Transforma o módulo de Retornos atual num CRM completo de recuperação de clientes, com scoring, priorização, oportunidades, tarefas, segmentação VIP e receita recuperada. Também corrige uma falha crítica de segurança descoberta pelo scanner (escalonamento de privilégios via `profiles.company_id`).
+Escopo aprovado é grande demais para uma única entrega com qualidade. Vou dividir em **6 fases independentes**, cada uma entregue como um turno separado. Você aprova esta divisão e eu começo pela Fase 1 imediatamente.
 
-## 1. Correções de segurança (migration — primeiro)
+### Fase 1 — Verticais + Onboarding (esta entrega)
+- Migration: `companies.vertical` enum (`BEAUTY|SALES|GYM`), `companies.onboarding_completed`, campo `kind` em services (SERVICE/PRODUCT/PLAN), tabela `professionals`, normalização de telefone (+55).
+- Wizard de onboarding em 6 passos (rota `/onboarding`): empresa → vertical → ofertas → profissionais → WhatsApp → finalizar. Bloqueia acesso ao app até completar.
+- Helper `formatPhoneBR()` e validação client+server.
 
-Crítico — bloqueia o ataque antes de adicionar novas superfícies:
+### Fase 2 — Motor de Recorrência + Dashboard "ação agora"
+- Migration: view `v_actions_today` consolidando Retorno/Recompra/Renovação/Risco/Perdidos por vertical.
+- Dashboard novo: cards Receita Recuperável / Ações Hoje / Em Risco / Agenda + bloco "Ações Prioritárias" com botões WhatsApp por linha + bloco "Oportunidades".
+- Rota `/app/recorrencia` com abas: Retorno, Recompra, Renovações, Em Risco, Perdidos. Seleção múltipla + envio em massa via wa.me.
 
-- **`profiles.company_id` deixa de ser editável pelo usuário.** Nova policy de UPDATE em `profiles` restringe colunas a `full_name`, `avatar_url`, `phone` (via trigger `BEFORE UPDATE` que reverte mudanças em `company_id`/`role`/`id`). INSERT continua via trigger `handle_new_user` apenas; remove policy permissiva atual de INSERT.
-- **`user_roles`**: adiciona policies explícitas de INSERT/UPDATE/DELETE restritas a OWNER da mesma empresa (`has_role(auth.uid(), company_id, 'OWNER')`). SELECT continua escopo company.
-- **`notifications`**: adiciona policy de DELETE (`user_id = auth.uid()`).
-- Linter "RLS always true" / "SECURITY DEFINER executable": auditar e revogar EXECUTE de funções definer não-chamáveis pelo cliente; manter apenas `has_role`, `has_any_role`, `get_user_company`, `refresh_return_opportunities`.
+### Fase 3 — Agendamento Online público
+- Rota pública `/agendar/$companySlug` (sem auth, SSR-friendly).
+- Migration: `companies.slug`, `appointments.source` (ADMIN/ONLINE), server fn pública para slots disponíveis.
+- Fluxo: serviço → profissional → horário → dados do cliente → confirma. Cria appointment + cliente automaticamente.
 
-## 2. Schema novo
+### Fase 4 — Smart Import com IA (Lovable AI)
+- Migration: tabelas `import_jobs`, `import_rows`.
+- Upload de PDF/CSV/XLSX → server fn extrai texto → `gemini-2.5-flash` identifica cliente/valor/serviço/data com schema Zod → tela de validação linha-a-linha → confirmação cria appointments + clients.
 
-```sql
--- Oportunidades de recuperação (separado de return_opportunities que continua sendo o "próximo retorno automático")
-recovery_opportunities(
-  id, company_id, client_id, service_id,
-  potential_value numeric,
-  score int,            -- 0-100
-  status text,          -- OPEN | IN_CONTACT | CONVERTED | LOST
-  assigned_to uuid,
-  recovered_value numeric,
-  converted_at timestamptz,
-  appointment_id uuid,  -- preenchido na conversão
-  created_at, updated_at
-)
+### Fase 5 — Communication Engine
+- Tabelas `message_templates`, `campaigns`, `automations` (estrutura, sem execução automática).
+- Tela de templates com variáveis `{{nome}}` `{{servico}}`.
+- Campanhas: segmento → template → preview → "Abrir conversas" (gera lista de wa.me links).
 
--- Tarefas
-recovery_tasks(
-  id, company_id, client_id, opportunity_id,
-  description text, due_date date,
-  assigned_to uuid, status text, -- OPEN | DONE | CANCELED
-  created_at, updated_at
-)
-```
+### Fase 6 — Painel SaaS Admin completo
+- Role `super_admin` (separada de owner).
+- Rota `/admin/*` com guard.
+- Telas: Empresas, Assinaturas, MRR/Churn, Health Score (0-100 calculado de uso/pagamento/recência), Logs de auditoria.
 
-Ambas com RLS por `company_id`, GRANT para `authenticated` + `service_role`, triggers de `updated_at`.
+### Detalhes técnicos
+- Stack mantida: TanStack Start + Supabase + RLS por `company_id`.
+- WhatsApp = `wa.me` deep link com `encodeURIComponent` (zero custo).
+- Smart Import usa Lovable AI Gateway (`google/gemini-2.5-flash`) via `createServerFn` + Zod `Output.object`.
+- Todas as migrations seguem padrão GRANT + RLS + has_role.
+- Cada fase incluirá ajuste em `src/integrations/supabase/types.ts` quando necessário.
 
-**Funções/triggers:**
-- `calc_recovery_score(client_id)` → 0-100 baseado em recência (40%), frequência (25%), valor (20%), nº visitas (15%).
-- `classify_return_status(expected_date, last_visit)` → `ON_TIME | ATTENTION | LATE | AT_RISK | LOST`.
-- View `recovery_dashboard` por company: total clientes, em risco, perdidos, receita potencial, receita recuperada no mês, taxa de conversão, ticket médio recuperado, tempo médio para retorno.
-- View `vip_clients` (top 20% por `total_spent` por empresa).
-- View `birthday_clients` (mês corrente).
-- Trigger em `appointments` para conversão: quando `COMPLETED` e existe `recovery_opportunities` OPEN/IN_CONTACT → status=CONVERTED, recovered_value=price, appointment_id=NEW.id.
-- Função `refresh_recovery_opportunities()`: cria/atualiza oportunidades a partir de `return_opportunities` ainda não convertidos. Roda no `pg_cron` diário.
-
-## 3. Frontend
-
-Renomeia item de menu para **"Clientes para Retorno"** (rota mantém `/app/returns` para evitar quebrar links; refatora componente).
-
-### Página principal (`app.returns.tsx`)
-- 5 KPI cards: Clientes para Retorno · Receita Potencial · Em Risco · Perdidos · Taxa de Recuperação.
-- Filtros: Todos · Hoje · Esta Semana · Em Risco · Perdidos · VIP.
-- Busca por nome/telefone/serviço.
-- Lista priorizada (receita × score × dias atraso) com badge de classificação colorido, score visual (anel), selo VIP.
-- Card destacado: **Receita Recuperada no Mês** + microcopy gamificado ("Você recuperou 12 clientes este mês").
-- Mobile: ações fixas WhatsApp · Agendar · Registrar contato.
-
-### Detalhe do cliente (sheet)
-- Informações, KPIs financeiros, linha do tempo (reaproveita componentes de `app.clients.$clientId.tsx`).
-- Histórico de contatos (`client_contacts` já existe).
-- Botão WhatsApp com template configurável.
-- Modal "Registrar contato" (canal + resultado + observação).
-- Modal "Agendar Agora" — atalho para criar appointment sem sair.
-
-### Dashboard de recuperação (`app.recovery.tsx` ou tab dentro de Returns)
-- Clientes recuperados · Receita recuperada · Taxa conversão · Tempo médio para retorno.
-- Lista de aniversariantes do mês.
-- Lista de tarefas abertas.
-
-### Atualização do dashboard principal
-- Substituir card "Returns" por "Receita Recuperada (mês)" com link.
-
-## 4. Detalhes técnicos
-
-- TanStack Query em todas as listas; `staleTime: 30s`; invalidação após mutações.
-- Paginação cursor-based (50 por página) na lista principal.
-- Ordenação server-side via SQL com expressão `(potential_value * score / 100) + (days_late * 10)`.
-- Score recalculado on-demand via RPC ao abrir o detalhe; armazenado denormalizado em `recovery_opportunities.score` (refresh diário).
-- Mensagem WhatsApp template em `companies.whatsapp_template` (nova coluna, fallback hardcoded).
-
-## 5. Fora de escopo (preparar mas não enviar)
-
-- Automações 01-04: estrutura de tabela `recovery_automations` criada e leitura pelo cron, mas sem disparar mensagens (sem provider WhatsApp configurado ainda).
-- Campanhas de aniversariantes.
-
-## Ordem de execução
-
-1. Migration de segurança + novas tabelas/views/triggers (uma migration única).
-2. Tipos Supabase regenerados.
-3. Refactor `app.returns.tsx` → "Clientes para Retorno".
-4. Componentes detalhe + modais.
-5. Página dashboard recuperação.
-6. Ajuste menu lateral + dashboard principal.
+### Confirmação
+Posso seguir com a **Fase 1 (Verticais + Onboarding)** agora? Ou prefere reordenar / cortar alguma fase?
