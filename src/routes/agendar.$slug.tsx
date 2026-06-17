@@ -13,13 +13,17 @@ import { toStoragePhone, formatPhoneBR } from "@/lib/phone";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/agendar/$slug")({
-  head: ({ loaderData }) => ({
-    meta: [
-      { title: `Agendar — ${loaderData?.company?.name ?? "BeautyFlow"}` },
-      { name: "description", content: `Agende online com ${loaderData?.company?.name ?? "nosso atendimento"} em poucos cliques.` },
-      { name: "robots", content: "index, follow" },
-    ],
-  }),
+  head: (ctx) => {
+    const company = (ctx as { loaderData?: { company?: { name?: string } } }).loaderData?.company;
+    const name = company?.name ?? "BeautyFlow";
+    return {
+      meta: [
+        { title: `Agendar — ${name}` },
+        { name: "description", content: `Agende online com ${name} em poucos cliques.` },
+        { name: "robots", content: "index, follow" },
+      ],
+    };
+  },
   loader: async ({ params }) => {
     const { data: company } = await supabase
       .from("companies")
