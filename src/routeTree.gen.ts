@@ -26,6 +26,7 @@ import { Route as AuthenticatedAppSettingsRouteImport } from './routes/_authenti
 import { Route as AuthenticatedAppServicesRouteImport } from './routes/_authenticated/app.services'
 import { Route as AuthenticatedAppReturnsRouteImport } from './routes/_authenticated/app.returns'
 import { Route as AuthenticatedAppReportsRouteImport } from './routes/_authenticated/app.reports'
+import { Route as AuthenticatedAppRecorrenciaRouteImport } from './routes/_authenticated/app.recorrencia'
 import { Route as AuthenticatedAppFinancialRouteImport } from './routes/_authenticated/app.financial'
 import { Route as AuthenticatedAppClientsRouteImport } from './routes/_authenticated/app.clients'
 import { Route as AuthenticatedAppAgendaRouteImport } from './routes/_authenticated/app.agenda'
@@ -117,6 +118,12 @@ const AuthenticatedAppReportsRoute = AuthenticatedAppReportsRouteImport.update({
   path: '/reports',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
+const AuthenticatedAppRecorrenciaRoute =
+  AuthenticatedAppRecorrenciaRouteImport.update({
+    id: '/recorrencia',
+    path: '/recorrencia',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppFinancialRoute =
   AuthenticatedAppFinancialRouteImport.update({
     id: '/financial',
@@ -155,6 +162,7 @@ export interface FileRoutesByFullPath {
   '/app/agenda': typeof AuthenticatedAppAgendaRoute
   '/app/clients': typeof AuthenticatedAppClientsRouteWithChildren
   '/app/financial': typeof AuthenticatedAppFinancialRoute
+  '/app/recorrencia': typeof AuthenticatedAppRecorrenciaRoute
   '/app/reports': typeof AuthenticatedAppReportsRoute
   '/app/returns': typeof AuthenticatedAppReturnsRoute
   '/app/services': typeof AuthenticatedAppServicesRoute
@@ -176,6 +184,7 @@ export interface FileRoutesByTo {
   '/app/agenda': typeof AuthenticatedAppAgendaRoute
   '/app/clients': typeof AuthenticatedAppClientsRouteWithChildren
   '/app/financial': typeof AuthenticatedAppFinancialRoute
+  '/app/recorrencia': typeof AuthenticatedAppRecorrenciaRoute
   '/app/reports': typeof AuthenticatedAppReportsRoute
   '/app/returns': typeof AuthenticatedAppReturnsRoute
   '/app/services': typeof AuthenticatedAppServicesRoute
@@ -200,6 +209,7 @@ export interface FileRoutesById {
   '/_authenticated/app/agenda': typeof AuthenticatedAppAgendaRoute
   '/_authenticated/app/clients': typeof AuthenticatedAppClientsRouteWithChildren
   '/_authenticated/app/financial': typeof AuthenticatedAppFinancialRoute
+  '/_authenticated/app/recorrencia': typeof AuthenticatedAppRecorrenciaRoute
   '/_authenticated/app/reports': typeof AuthenticatedAppReportsRoute
   '/_authenticated/app/returns': typeof AuthenticatedAppReturnsRoute
   '/_authenticated/app/services': typeof AuthenticatedAppServicesRoute
@@ -224,6 +234,7 @@ export interface FileRouteTypes {
     | '/app/agenda'
     | '/app/clients'
     | '/app/financial'
+    | '/app/recorrencia'
     | '/app/reports'
     | '/app/returns'
     | '/app/services'
@@ -245,6 +256,7 @@ export interface FileRouteTypes {
     | '/app/agenda'
     | '/app/clients'
     | '/app/financial'
+    | '/app/recorrencia'
     | '/app/reports'
     | '/app/returns'
     | '/app/services'
@@ -268,6 +280,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/agenda'
     | '/_authenticated/app/clients'
     | '/_authenticated/app/financial'
+    | '/_authenticated/app/recorrencia'
     | '/_authenticated/app/reports'
     | '/_authenticated/app/returns'
     | '/_authenticated/app/services'
@@ -410,6 +423,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppReportsRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/app/recorrencia': {
+      id: '/_authenticated/app/recorrencia'
+      path: '/recorrencia'
+      fullPath: '/app/recorrencia'
+      preLoaderRoute: typeof AuthenticatedAppRecorrenciaRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
     '/_authenticated/app/financial': {
       id: '/_authenticated/app/financial'
       path: '/financial'
@@ -459,6 +479,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppAgendaRoute: typeof AuthenticatedAppAgendaRoute
   AuthenticatedAppClientsRoute: typeof AuthenticatedAppClientsRouteWithChildren
   AuthenticatedAppFinancialRoute: typeof AuthenticatedAppFinancialRoute
+  AuthenticatedAppRecorrenciaRoute: typeof AuthenticatedAppRecorrenciaRoute
   AuthenticatedAppReportsRoute: typeof AuthenticatedAppReportsRoute
   AuthenticatedAppReturnsRoute: typeof AuthenticatedAppReturnsRoute
   AuthenticatedAppServicesRoute: typeof AuthenticatedAppServicesRoute
@@ -470,6 +491,7 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppAgendaRoute: AuthenticatedAppAgendaRoute,
   AuthenticatedAppClientsRoute: AuthenticatedAppClientsRouteWithChildren,
   AuthenticatedAppFinancialRoute: AuthenticatedAppFinancialRoute,
+  AuthenticatedAppRecorrenciaRoute: AuthenticatedAppRecorrenciaRoute,
   AuthenticatedAppReportsRoute: AuthenticatedAppReportsRoute,
   AuthenticatedAppReturnsRoute: AuthenticatedAppReturnsRoute,
   AuthenticatedAppServicesRoute: AuthenticatedAppServicesRoute,

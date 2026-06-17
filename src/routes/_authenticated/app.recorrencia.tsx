@@ -34,7 +34,8 @@ type Row = {
   services: { name: string | null } | null;
 };
 
-const TAB_DEFS: { key: TabKey; label: string; icon: typeof Clock; classes: string[]; verticals: ("BEAUTY"|"SALES"|"GYM")[] }[] = [
+type ReturnClass = "ATTENTION" | "AT_RISK" | "LATE" | "LOST" | "ON_TIME";
+const TAB_DEFS: { key: TabKey; label: string; icon: typeof Clock; classes: ReturnClass[]; verticals: ("BEAUTY"|"SALES"|"GYM")[] }[] = [
   { key: "retorno",   label: "Retorno",    icon: Clock,        classes: ["ATTENTION", "LATE"], verticals: ["BEAUTY"] },
   { key: "recompra",  label: "Recompra",   icon: RefreshCw,    classes: ["ATTENTION", "LATE"], verticals: ["SALES"] },
   { key: "renovacao", label: "Renovações", icon: Sparkles,     classes: ["ATTENTION", "LATE"], verticals: ["GYM"] },
