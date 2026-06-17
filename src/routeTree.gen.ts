@@ -34,6 +34,7 @@ import { Route as AuthenticatedAppFinancialRouteImport } from './routes/_authent
 import { Route as AuthenticatedAppComunicacaoRouteImport } from './routes/_authenticated/app.comunicacao'
 import { Route as AuthenticatedAppClientsRouteImport } from './routes/_authenticated/app.clients'
 import { Route as AuthenticatedAppAgendaRouteImport } from './routes/_authenticated/app.agenda'
+import { Route as ApiPublicHooksJobsTickRouteImport } from './routes/api/public/hooks/jobs-tick'
 import { Route as AuthenticatedAppClientsClientIdRouteImport } from './routes/_authenticated/app.clients.$clientId'
 
 const TermosRoute = TermosRouteImport.update({
@@ -165,6 +166,11 @@ const AuthenticatedAppAgendaRoute = AuthenticatedAppAgendaRouteImport.update({
   path: '/agenda',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
+const ApiPublicHooksJobsTickRoute = ApiPublicHooksJobsTickRouteImport.update({
+  id: '/api/public/hooks/jobs-tick',
+  path: '/api/public/hooks/jobs-tick',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedAppClientsClientIdRoute =
   AuthenticatedAppClientsClientIdRouteImport.update({
     id: '/$clientId',
@@ -198,6 +204,7 @@ export interface FileRoutesByFullPath {
   '/app/settings': typeof AuthenticatedAppSettingsRoute
   '/app/': typeof AuthenticatedAppIndexRoute
   '/app/clients/$clientId': typeof AuthenticatedAppClientsClientIdRoute
+  '/api/public/hooks/jobs-tick': typeof ApiPublicHooksJobsTickRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -224,6 +231,7 @@ export interface FileRoutesByTo {
   '/app/settings': typeof AuthenticatedAppSettingsRoute
   '/app': typeof AuthenticatedAppIndexRoute
   '/app/clients/$clientId': typeof AuthenticatedAppClientsClientIdRoute
+  '/api/public/hooks/jobs-tick': typeof ApiPublicHooksJobsTickRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -253,6 +261,7 @@ export interface FileRoutesById {
   '/_authenticated/app/settings': typeof AuthenticatedAppSettingsRoute
   '/_authenticated/app/': typeof AuthenticatedAppIndexRoute
   '/_authenticated/app/clients/$clientId': typeof AuthenticatedAppClientsClientIdRoute
+  '/api/public/hooks/jobs-tick': typeof ApiPublicHooksJobsTickRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -282,6 +291,7 @@ export interface FileRouteTypes {
     | '/app/settings'
     | '/app/'
     | '/app/clients/$clientId'
+    | '/api/public/hooks/jobs-tick'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -308,6 +318,7 @@ export interface FileRouteTypes {
     | '/app/settings'
     | '/app'
     | '/app/clients/$clientId'
+    | '/api/public/hooks/jobs-tick'
   id:
     | '__root__'
     | '/'
@@ -336,6 +347,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/settings'
     | '/_authenticated/app/'
     | '/_authenticated/app/clients/$clientId'
+    | '/api/public/hooks/jobs-tick'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -350,6 +362,7 @@ export interface RootRouteChildren {
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermosRoute: typeof TermosRoute
   AgendarSlugRoute: typeof AgendarSlugRoute
+  ApiPublicHooksJobsTickRoute: typeof ApiPublicHooksJobsTickRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -529,6 +542,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppAgendaRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/api/public/hooks/jobs-tick': {
+      id: '/api/public/hooks/jobs-tick'
+      path: '/api/public/hooks/jobs-tick'
+      fullPath: '/api/public/hooks/jobs-tick'
+      preLoaderRoute: typeof ApiPublicHooksJobsTickRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/app/clients/$clientId': {
       id: '/_authenticated/app/clients/$clientId'
       path: '/$clientId'
@@ -611,6 +631,7 @@ const rootRouteChildren: RootRouteChildren = {
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TermosRoute: TermosRoute,
   AgendarSlugRoute: AgendarSlugRoute,
+  ApiPublicHooksJobsTickRoute: ApiPublicHooksJobsTickRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
