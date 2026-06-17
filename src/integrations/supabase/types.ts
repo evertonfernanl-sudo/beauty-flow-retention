@@ -197,6 +197,74 @@ export type Database = {
           },
         ]
       }
+      campaigns: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          last_sent_at: string | null
+          message_body: string
+          name: string
+          segment: string
+          sent_count: number
+          template_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          last_sent_at?: string | null
+          message_body: string
+          name: string
+          segment: string
+          sent_count?: number
+          template_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          last_sent_at?: string | null
+          message_body?: string
+          name?: string
+          segment?: string
+          sent_count?: number
+          template_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaigns_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaigns_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "campaigns_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "campaigns_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "message_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_contacts: {
         Row: {
           channel: Database["public"]["Enums"]["contact_channel"]
@@ -701,6 +769,64 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "subscriptions"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      message_templates: {
+        Row: {
+          body: string
+          category: string
+          company_id: string
+          created_at: string
+          id: string
+          is_default: boolean
+          name: string
+          updated_at: string
+          variables: string[]
+        }
+        Insert: {
+          body: string
+          category?: string
+          company_id: string
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          name: string
+          updated_at?: string
+          variables?: string[]
+        }
+        Update: {
+          body?: string
+          category?: string
+          company_id?: string
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          name?: string
+          updated_at?: string
+          variables?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_templates_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_templates_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "message_templates_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
           },
         ]
       }

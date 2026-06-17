@@ -19,6 +19,7 @@ import {
   Sparkles,
   TrendingUp,
   Users,
+  MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +49,7 @@ const NAV: NavItem[] = [
   { to: "/app/financial", label: "Financeiro", icon: DollarSign },
   { to: "/app/reports", label: "Indicadores", icon: BarChart3 },
   { to: "/app/import", label: "Smart Import", icon: Sparkles },
+  { to: "/app/comunicacao", label: "Comunicação", icon: MessageSquare },
   { to: "/app/settings", label: "Configurações", icon: Settings },
 ];
 
