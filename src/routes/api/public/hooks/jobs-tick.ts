@@ -90,19 +90,51 @@ async function dispatch(
       };
       const clients = payload.clients ?? [];
       if (!job.company_id) throw new Error("import.commit: missing company_id");
-      if (clients.length === 0) return { inserted: 0 };
-      const rows = clients.map((c) => ({
-        company_id: job.company_id,
-        name: c.name,
-        phone: c.phone ?? null,
-        email: c.email ?? null,
-        birthday: c.birthday ?? null,
-        notes: c.notes ?? null,
-        status: "ACTIVE" as const,
-      }));
-      const { data, error } = await admin.from("clients").insert(rows).select("id");
-      if (error) throw new Error(error.message);
-      return { inserted: data?.length ?? 0 };
+      if (clients.length === 0) return { inserted: 0, merged: 0 };
+
+      let inserted = 0;
+      let merged = 0;
+      for (const c of clients) {
+        let existingId: string | null = null;
+        if (c.phone) {
+          const { data: dup } = await admin.rpc("find_duplicate_client", {
+            _company_id: job.company_id,
+            _name: c.name,
+            _phone: c.phone,
+            _threshold: 1.0,
+          });
+          const first = Array.isArray(dup) ? dup[0] : null;
+          if (first?.reason === "phone") existingId = first.id as string;
+        }
+
+        if (existingId) {
+          await admin
+            .from("clients")
+            .update({
+              email: c.email ?? undefined,
+              birthday: c.birthday ?? undefined,
+              notes: c.notes ?? undefined,
+            })
+            .eq("id", existingId)
+            .is("email", null);
+          merged++;
+        } else {
+          const { error } = await admin.from("clients").insert({
+            company_id: job.company_id,
+            name: c.name,
+            phone: c.phone ?? null,
+            email: c.email ?? null,
+            birthday: c.birthday ?? null,
+            notes: c.notes ?? null,
+            status: "ACTIVE" as const,
+          });
+          if (error) {
+            if (error.code === "23505") merged++;
+            else throw new Error(error.message);
+          } else inserted++;
+        }
+      }
+      return { inserted, merged, total: clients.length };
     }
 
     case "campaign.record": {
