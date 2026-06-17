@@ -2,6 +2,8 @@ import { Link } from "@tanstack/react-router";
 import { Sparkles, ArrowRight, Instagram, Facebook, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { type ReactNode } from "react";
+import { CookieConsent } from "@/components/CookieConsent";
+
 
 export function MarketingHeader() {
   return (
