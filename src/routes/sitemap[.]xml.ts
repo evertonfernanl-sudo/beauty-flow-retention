@@ -10,7 +10,10 @@ const ENTRIES = [
   { path: "/blog", priority: "0.7", changefreq: "weekly" as const },
   { path: "/contato", priority: "0.6", changefreq: "monthly" as const },
   { path: "/auth", priority: "0.5", changefreq: "monthly" as const },
+  { path: "/privacidade", priority: "0.3", changefreq: "yearly" as const },
+  { path: "/termos", priority: "0.3", changefreq: "yearly" as const },
 ];
+
 
 export const Route = createFileRoute("/sitemap.xml")({
   server: {
