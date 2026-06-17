@@ -505,6 +505,58 @@ export type Database = {
         }
         Relationships: []
       }
+      company_features: {
+        Row: {
+          company_id: string
+          config: Json
+          created_at: string
+          enabled: boolean
+          feature: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          config?: Json
+          created_at?: string
+          enabled?: boolean
+          feature: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          config?: Json
+          created_at?: string
+          enabled?: boolean
+          feature?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_features_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_features_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "company_features_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+        ]
+      }
       financial_transactions: {
         Row: {
           amount: number
@@ -769,6 +821,85 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "subscriptions"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      jobs: {
+        Row: {
+          attempts: number
+          company_id: string | null
+          created_at: string
+          created_by: string | null
+          finished_at: string | null
+          id: string
+          last_error: string | null
+          max_attempts: number
+          payload: Json
+          priority: number
+          result: Json | null
+          scheduled_at: string
+          started_at: string | null
+          status: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          company_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          finished_at?: string | null
+          id?: string
+          last_error?: string | null
+          max_attempts?: number
+          payload?: Json
+          priority?: number
+          result?: Json | null
+          scheduled_at?: string
+          started_at?: string | null
+          status?: string
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          company_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          finished_at?: string | null
+          id?: string
+          last_error?: string | null
+          max_attempts?: number
+          payload?: Json
+          priority?: number
+          result?: Json | null
+          scheduled_at?: string
+          started_at?: string | null
+          status?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jobs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "jobs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
           },
         ]
       }
@@ -1895,9 +2026,50 @@ export type Database = {
     }
     Functions: {
       calc_recovery_score: { Args: { _client_id: string }; Returns: number }
+      claim_next_job: {
+        Args: never
+        Returns: {
+          attempts: number
+          company_id: string | null
+          created_at: string
+          created_by: string | null
+          finished_at: string | null
+          id: string
+          last_error: string | null
+          max_attempts: number
+          payload: Json
+          priority: number
+          result: Json | null
+          scheduled_at: string
+          started_at: string | null
+          status: string
+          type: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "jobs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       classify_return: {
         Args: { _expected: string; _last_visit: string }
         Returns: Database["public"]["Enums"]["return_class"]
+      }
+      enqueue_job: {
+        Args: {
+          _company_id: string
+          _payload?: Json
+          _priority?: number
+          _scheduled_at?: string
+          _type: string
+        }
+        Returns: string
+      }
+      finish_job: {
+        Args: { _error?: string; _id: string; _ok: boolean; _result?: Json }
+        Returns: undefined
       }
       get_user_company: { Args: { _user_id: string }; Returns: string }
       has_any_role: {
@@ -1906,6 +2078,10 @@ export type Database = {
           _roles: Database["public"]["Enums"]["app_role"][]
           _user_id: string
         }
+        Returns: boolean
+      }
+      has_feature: {
+        Args: { _company_id: string; _feature: string }
         Returns: boolean
       }
       has_role: {
