@@ -391,8 +391,8 @@ function JobsPanel() {
   async function enqueueTest() {
     const { error } = await supabase.rpc("enqueue_job", {
       _type: "noop",
-      _payload: { ts: Date.now() } as never,
-    });
+      _payload: { ts: Date.now() },
+    } as never);
     if (error) toast.error(error.message);
     else {
       toast.success("Job de teste enfileirado");
