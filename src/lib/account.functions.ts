@@ -1,14 +1,22 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
+type JsonValue = string | number | boolean | null | JsonValue[] | { [k: string]: JsonValue };
+type JsonRecord = { [k: string]: JsonValue };
+
 type ExportPayload = {
   exported_at: string;
-  tables: Record<string, unknown[]>;
+  tables: { [table: string]: JsonRecord[] };
 };
 
 type ExportResult =
   | { ok: true; data: ExportPayload }
   | { ok: false; error: string };
+
+type ActionResult =
+  | { ok: true; message: string }
+  | { ok: false; error: string };
+
 
 type ActionResult =
   | { ok: true; message: string }
