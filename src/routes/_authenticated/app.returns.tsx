@@ -499,8 +499,8 @@ function Stat({ label, value }: { label: string; value: string }) {
 function ContactDialog({
   companyId, clientId, opportunityId, onClose, onSaved,
 }: { companyId: string; clientId: string; opportunityId: string; onClose: () => void; onSaved: () => void }) {
-  const [channel, setChannel] = useState("WHATSAPP");
-  const [result, setResult] = useState("NO_RESPONSE");
+  const [channel, setChannel] = useState<"WHATSAPP" | "PHONE" | "INSTAGRAM" | "IN_PERSON" | "EMAIL">("WHATSAPP");
+  const [result, setResult] = useState<"ANSWERED" | "NO_ANSWER" | "SCHEDULED" | "REFUSED">("NO_ANSWER");
   const [notes, setNotes] = useState("");
 
   const m = useMutation({
