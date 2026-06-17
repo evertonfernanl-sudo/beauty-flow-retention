@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as PlanosRouteImport } from './routes/planos'
 import { Route as FuncionalidadesRouteImport } from './routes/funcionalidades'
 import { Route as ContatoRouteImport } from './routes/contato'
@@ -28,6 +29,11 @@ import { Route as AuthenticatedAppClientsRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAppAgendaRouteImport } from './routes/_authenticated/app.agenda'
 import { Route as AuthenticatedAppClientsClientIdRouteImport } from './routes/_authenticated/app.clients.$clientId'
 
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PlanosRoute = PlanosRouteImport.update({
   id: '/planos',
   path: '/planos',
@@ -129,6 +135,7 @@ export interface FileRoutesByFullPath {
   '/contato': typeof ContatoRoute
   '/funcionalidades': typeof FuncionalidadesRoute
   '/planos': typeof PlanosRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/app': typeof AuthenticatedAppRouteWithChildren
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/app/agenda': typeof AuthenticatedAppAgendaRoute
@@ -148,6 +155,7 @@ export interface FileRoutesByTo {
   '/contato': typeof ContatoRoute
   '/funcionalidades': typeof FuncionalidadesRoute
   '/planos': typeof PlanosRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/app/agenda': typeof AuthenticatedAppAgendaRoute
   '/app/clients': typeof AuthenticatedAppClientsRouteWithChildren
@@ -168,6 +176,7 @@ export interface FileRoutesById {
   '/contato': typeof ContatoRoute
   '/funcionalidades': typeof FuncionalidadesRoute
   '/planos': typeof PlanosRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
   '/_authenticated/app/agenda': typeof AuthenticatedAppAgendaRoute
@@ -189,6 +198,7 @@ export interface FileRouteTypes {
     | '/contato'
     | '/funcionalidades'
     | '/planos'
+    | '/sitemap.xml'
     | '/app'
     | '/onboarding'
     | '/app/agenda'
@@ -208,6 +218,7 @@ export interface FileRouteTypes {
     | '/contato'
     | '/funcionalidades'
     | '/planos'
+    | '/sitemap.xml'
     | '/onboarding'
     | '/app/agenda'
     | '/app/clients'
@@ -227,6 +238,7 @@ export interface FileRouteTypes {
     | '/contato'
     | '/funcionalidades'
     | '/planos'
+    | '/sitemap.xml'
     | '/_authenticated/app'
     | '/_authenticated/onboarding'
     | '/_authenticated/app/agenda'
@@ -248,10 +260,18 @@ export interface RootRouteChildren {
   ContatoRoute: typeof ContatoRoute
   FuncionalidadesRoute: typeof FuncionalidadesRoute
   PlanosRoute: typeof PlanosRoute
+  SitemapDotxmlRoute: typeof SitemapDotxmlRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/planos': {
       id: '/planos'
       path: '/planos'
@@ -441,6 +461,7 @@ const rootRouteChildren: RootRouteChildren = {
   ContatoRoute: ContatoRoute,
   FuncionalidadesRoute: FuncionalidadesRoute,
   PlanosRoute: PlanosRoute,
+  SitemapDotxmlRoute: SitemapDotxmlRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

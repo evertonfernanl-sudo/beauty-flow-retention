@@ -13,7 +13,6 @@ import {
   BarChart3,
   Wallet,
   Bell,
-  Brain,
   Scissors,
   Eye,
   Hand,
