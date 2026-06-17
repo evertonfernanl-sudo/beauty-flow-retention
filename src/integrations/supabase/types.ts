@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       appointments: {
         Row: {
+          cancellation_reason: string | null
           client_id: string
           company_id: string
           completed_at: string | null
@@ -30,6 +31,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          cancellation_reason?: string | null
           client_id: string
           company_id: string
           completed_at?: string | null
@@ -44,6 +46,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          cancellation_reason?: string | null
           client_id?: string
           company_id?: string
           completed_at?: string | null
@@ -153,6 +156,71 @@ export type Database = {
           },
         ]
       }
+      client_contacts: {
+        Row: {
+          channel: Database["public"]["Enums"]["contact_channel"]
+          client_id: string
+          company_id: string
+          contacted_at: string
+          created_at: string
+          id: string
+          notes: string | null
+          result: Database["public"]["Enums"]["contact_result"] | null
+          user_id: string | null
+        }
+        Insert: {
+          channel: Database["public"]["Enums"]["contact_channel"]
+          client_id: string
+          company_id: string
+          contacted_at?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          result?: Database["public"]["Enums"]["contact_result"] | null
+          user_id?: string | null
+        }
+        Update: {
+          channel?: Database["public"]["Enums"]["contact_channel"]
+          client_id?: string
+          company_id?: string
+          contacted_at?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          result?: Database["public"]["Enums"]["contact_result"] | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_contacts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_contacts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "client_contacts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           appointments_count: number
@@ -161,11 +229,13 @@ export type Database = {
           created_at: string
           email: string | null
           id: string
+          instagram: string | null
           last_visit: string | null
           name: string
           next_return: string | null
           notes: string | null
           phone: string | null
+          profession: string | null
           status: Database["public"]["Enums"]["client_status"]
           total_spent: number
           updated_at: string
@@ -177,11 +247,13 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          instagram?: string | null
           last_visit?: string | null
           name: string
           next_return?: string | null
           notes?: string | null
           phone?: string | null
+          profession?: string | null
           status?: Database["public"]["Enums"]["client_status"]
           total_spent?: number
           updated_at?: string
@@ -193,11 +265,13 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          instagram?: string | null
           last_visit?: string | null
           name?: string
           next_return?: string | null
           notes?: string | null
           phone?: string | null
+          profession?: string | null
           status?: Database["public"]["Enums"]["client_status"]
           total_spent?: number
           updated_at?: string
@@ -701,6 +775,13 @@ export type Database = {
         | "NO_SHOW"
       client_status: "ACTIVE" | "INACTIVE" | "LOST"
       company_plan: "starter" | "professional" | "premium"
+      contact_channel:
+        | "WHATSAPP"
+        | "PHONE"
+        | "INSTAGRAM"
+        | "IN_PERSON"
+        | "EMAIL"
+      contact_result: "ANSWERED" | "NO_ANSWER" | "SCHEDULED" | "REFUSED"
       return_status: "ON_TIME" | "DUE" | "LATE" | "LOST"
       transaction_type: "INCOME" | "EXPENSE"
     }
@@ -840,6 +921,8 @@ export const Constants = {
       ],
       client_status: ["ACTIVE", "INACTIVE", "LOST"],
       company_plan: ["starter", "professional", "premium"],
+      contact_channel: ["WHATSAPP", "PHONE", "INSTAGRAM", "IN_PERSON", "EMAIL"],
+      contact_result: ["ANSWERED", "NO_ANSWER", "SCHEDULED", "REFUSED"],
       return_status: ["ON_TIME", "DUE", "LATE", "LOST"],
       transaction_type: ["INCOME", "EXPENSE"],
     },
