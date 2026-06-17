@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar, Clock, User, Scissors, Check, ChevronLeft, Sparkles, MapPin, Phone } from "lucide-react";
 import { formatBRL } from "@/lib/format";
-import { normalizePhoneBR, formatPhoneBR } from "@/lib/phone";
+import { toStoragePhone, formatPhoneBR } from "@/lib/phone";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/agendar/$slug")({
