@@ -47,6 +47,7 @@ const NAV: NavItem[] = [
   { to: "/app/services", label: "Serviços", icon: Scissors },
   { to: "/app/financial", label: "Financeiro", icon: DollarSign },
   { to: "/app/reports", label: "Indicadores", icon: BarChart3 },
+  { to: "/app/import", label: "Smart Import", icon: Sparkles },
   { to: "/app/settings", label: "Configurações", icon: Settings },
 ];
 

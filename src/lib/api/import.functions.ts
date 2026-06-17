@@ -87,9 +87,10 @@ export const commitImportClients = createServerFn({ method: "POST" })
     const { data: profile } = await supabase
       .from("profiles").select("company_id").eq("id", userId).maybeSingle();
     if (!profile?.company_id) throw new Error("Empresa não encontrada");
+    const companyId = profile.company_id;
 
     const rows = data.clients.map((c) => ({
-      company_id: profile.company_id,
+      company_id: companyId,
       name: c.name,
       phone: c.phone ? toStoragePhone(c.phone) ?? c.phone : null,
       email: c.email || null,
