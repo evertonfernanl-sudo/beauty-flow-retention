@@ -63,7 +63,7 @@ function ReportsPage() {
     queryKey: ["clients-all", companyId],
     queryFn: async () => {
       const { data } = await supabase.from("clients")
-        .select("id, name, status, total_spent, appointments_count, last_visit, next_return, birth_date, created_at")
+        .select("id, name, status, total_spent, appointments_count, last_visit, next_return, birthday, created_at")
         .eq("company_id", companyId!);
       return data ?? [];
     },
@@ -226,8 +226,8 @@ function ReportsPage() {
     .sort((a, b) => b.daysLate - a.daysLate).slice(0, 10);
   const lostList = cAll.filter(c => c.status === "LOST")
     .sort((a, b) => Number(b.total_spent) - Number(a.total_spent)).slice(0, 10);
-  const birthdays = cAll.filter(c => c.birth_date && new Date(c.birth_date + "T00:00:00").getMonth() + 1 === thisMonth)
-    .sort((a, b) => new Date(a.birth_date!).getDate() - new Date(b.birth_date!).getDate());
+  const birthdays = cAll.filter(c => c.birthday && new Date(c.birthday + "T00:00:00").getMonth() + 1 === thisMonth)
+    .sort((a, b) => new Date(a.birthday!).getDate() - new Date(b.birthday!).getDate());
 
   // Forecast (next 30 days based on agenda + avg ticket of recent completed)
   const upcoming = (appts.data ?? []).filter((a: any) => a.status === "SCHEDULED" && new Date(a.start_datetime) >= today);
@@ -463,7 +463,7 @@ function ReportsPage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{c.name}</p>
                       </div>
-                      <Badge variant="secondary">{new Date(c.birth_date + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}</Badge>
+                      <Badge variant="secondary">{new Date(c.birthday + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}</Badge>
                     </li>
                   ))}
                 </ul>
