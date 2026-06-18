@@ -302,7 +302,7 @@ function ClientsPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2">
-            <AlertDialogCancel onClick={() => setDuplicate(null)}>Cancelar</AlertedDialogCancelSafe />
+            <AlertDialogCancel onClick={() => setDuplicate(null)}>Cancelar</AlertDialogCancel>
             <Button
               variant="secondary"
               onClick={() => duplicate && persistClient(duplicate.values)}
