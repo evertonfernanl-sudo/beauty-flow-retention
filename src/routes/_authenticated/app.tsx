@@ -18,7 +18,7 @@ import {
   Sparkles,
   TrendingUp,
   Users,
-  MessageSquare,
+  
   Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
