@@ -30,6 +30,7 @@ import { Route as AuthenticatedAppServicesRouteImport } from './routes/_authenti
 import { Route as AuthenticatedAppReturnsRouteImport } from './routes/_authenticated/app.returns'
 import { Route as AuthenticatedAppReportsRouteImport } from './routes/_authenticated/app.reports'
 import { Route as AuthenticatedAppRecorrenciaRouteImport } from './routes/_authenticated/app.recorrencia'
+import { Route as AuthenticatedAppMensageriaRouteImport } from './routes/_authenticated/app.mensageria'
 import { Route as AuthenticatedAppImportRouteImport } from './routes/_authenticated/app.import'
 import { Route as AuthenticatedAppFinancialRouteImport } from './routes/_authenticated/app.financial'
 import { Route as AuthenticatedAppComunicacaoRouteImport } from './routes/_authenticated/app.comunicacao'
@@ -145,6 +146,12 @@ const AuthenticatedAppRecorrenciaRoute =
     path: '/recorrencia',
     getParentRoute: () => AuthenticatedAppRoute,
   } as any)
+const AuthenticatedAppMensageriaRoute =
+  AuthenticatedAppMensageriaRouteImport.update({
+    id: '/mensageria',
+    path: '/mensageria',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppImportRoute = AuthenticatedAppImportRouteImport.update({
   id: '/import',
   path: '/import',
@@ -203,6 +210,7 @@ export interface FileRoutesByFullPath {
   '/app/comunicacao': typeof AuthenticatedAppComunicacaoRoute
   '/app/financial': typeof AuthenticatedAppFinancialRoute
   '/app/import': typeof AuthenticatedAppImportRoute
+  '/app/mensageria': typeof AuthenticatedAppMensageriaRoute
   '/app/recorrencia': typeof AuthenticatedAppRecorrenciaRoute
   '/app/reports': typeof AuthenticatedAppReportsRoute
   '/app/returns': typeof AuthenticatedAppReturnsRoute
@@ -231,6 +239,7 @@ export interface FileRoutesByTo {
   '/app/comunicacao': typeof AuthenticatedAppComunicacaoRoute
   '/app/financial': typeof AuthenticatedAppFinancialRoute
   '/app/import': typeof AuthenticatedAppImportRoute
+  '/app/mensageria': typeof AuthenticatedAppMensageriaRoute
   '/app/recorrencia': typeof AuthenticatedAppRecorrenciaRoute
   '/app/reports': typeof AuthenticatedAppReportsRoute
   '/app/returns': typeof AuthenticatedAppReturnsRoute
@@ -262,6 +271,7 @@ export interface FileRoutesById {
   '/_authenticated/app/comunicacao': typeof AuthenticatedAppComunicacaoRoute
   '/_authenticated/app/financial': typeof AuthenticatedAppFinancialRoute
   '/_authenticated/app/import': typeof AuthenticatedAppImportRoute
+  '/_authenticated/app/mensageria': typeof AuthenticatedAppMensageriaRoute
   '/_authenticated/app/recorrencia': typeof AuthenticatedAppRecorrenciaRoute
   '/_authenticated/app/reports': typeof AuthenticatedAppReportsRoute
   '/_authenticated/app/returns': typeof AuthenticatedAppReturnsRoute
@@ -293,6 +303,7 @@ export interface FileRouteTypes {
     | '/app/comunicacao'
     | '/app/financial'
     | '/app/import'
+    | '/app/mensageria'
     | '/app/recorrencia'
     | '/app/reports'
     | '/app/returns'
@@ -321,6 +332,7 @@ export interface FileRouteTypes {
     | '/app/comunicacao'
     | '/app/financial'
     | '/app/import'
+    | '/app/mensageria'
     | '/app/recorrencia'
     | '/app/reports'
     | '/app/returns'
@@ -351,6 +363,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/comunicacao'
     | '/_authenticated/app/financial'
     | '/_authenticated/app/import'
+    | '/_authenticated/app/mensageria'
     | '/_authenticated/app/recorrencia'
     | '/_authenticated/app/reports'
     | '/_authenticated/app/returns'
@@ -526,6 +539,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppRecorrenciaRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/app/mensageria': {
+      id: '/_authenticated/app/mensageria'
+      path: '/mensageria'
+      fullPath: '/app/mensageria'
+      preLoaderRoute: typeof AuthenticatedAppMensageriaRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
     '/_authenticated/app/import': {
       id: '/_authenticated/app/import'
       path: '/import'
@@ -598,6 +618,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppComunicacaoRoute: typeof AuthenticatedAppComunicacaoRoute
   AuthenticatedAppFinancialRoute: typeof AuthenticatedAppFinancialRoute
   AuthenticatedAppImportRoute: typeof AuthenticatedAppImportRoute
+  AuthenticatedAppMensageriaRoute: typeof AuthenticatedAppMensageriaRoute
   AuthenticatedAppRecorrenciaRoute: typeof AuthenticatedAppRecorrenciaRoute
   AuthenticatedAppReportsRoute: typeof AuthenticatedAppReportsRoute
   AuthenticatedAppReturnsRoute: typeof AuthenticatedAppReturnsRoute
@@ -613,6 +634,7 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppComunicacaoRoute: AuthenticatedAppComunicacaoRoute,
   AuthenticatedAppFinancialRoute: AuthenticatedAppFinancialRoute,
   AuthenticatedAppImportRoute: AuthenticatedAppImportRoute,
+  AuthenticatedAppMensageriaRoute: AuthenticatedAppMensageriaRoute,
   AuthenticatedAppRecorrenciaRoute: AuthenticatedAppRecorrenciaRoute,
   AuthenticatedAppReportsRoute: AuthenticatedAppReportsRoute,
   AuthenticatedAppReturnsRoute: AuthenticatedAppReturnsRoute,
