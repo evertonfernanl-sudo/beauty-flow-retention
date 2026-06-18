@@ -104,9 +104,9 @@ function ClientsPage() {
         _phone: values.phone || null,
         _threshold: 0.7,
       });
-      const match = Array.isArray(dup) && dup.length ? dup[0] : null;
+      const match = Array.isArray(dup) && dup.length ? (dup[0] as { id: string; name: string; phone: string | null; confidence: number; reason: string }) : null;
       if (match) {
-        setDuplicate({ match: match as DupMatch, values });
+        setDuplicate({ match: { ...match, phone: match.phone ?? null }, values });
         return;
       }
     }
