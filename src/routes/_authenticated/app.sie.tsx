@@ -15,9 +15,10 @@ import { useFeature } from "@/lib/hooks/use-feature";
 import { formatPhoneBR } from "@/lib/phone";
 
 export const Route = createFileRoute("/_authenticated/app/sie")({
-  head: () => ({ meta: [{ title: "Smart Import Engine · BeautyFlow" }] }),
+  head: () => ({ meta: [{ title: "Importar Dados · BeautyFlow" }] }),
   component: SiePage,
 });
+
 
 type ImportRow = {
   id: string;
