@@ -169,7 +169,7 @@ function ClientProfilePage() {
             <Button asChild>
               <Link to="/app/agenda"><Plus className="h-4 w-4 mr-1" /> Novo agendamento</Link>
             </Button>
-            <EditClientButton client={c} onSaved={() => queryClient.invalidateQueries({ queryKey: ["client", clientId] })} />
+            {canEdit && <EditClientButton client={c} onSaved={() => queryClient.invalidateQueries({ queryKey: ["client", clientId] })} />}
           </div>
         </div>
       </Card>
