@@ -357,7 +357,140 @@ function ClientsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <EditClientDialog
+        client={editing}
+        onClose={() => setEditing(null)}
+        onSaved={() => {
+          setEditing(null);
+          queryClient.invalidateQueries({ queryKey: ["clients", companyId] });
+        }}
+      />
+
+      <AlertDialog open={!!deleting} onOpenChange={(o) => { if (!o) setDeleting(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir cliente?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir <strong>{deleting?.name}</strong>? Esta ação não pode ser desfeita
+              e removerá todo o histórico associado.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Não</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async () => {
+                if (!deleting) return;
+                const { error } = await supabase.from("clients").delete().eq("id", deleting.id);
+                if (error) { toast.error(error.message); return; }
+                toast.success("Cliente excluída");
+                setDeleting(null);
+                queryClient.invalidateQueries({ queryKey: ["clients", companyId] });
+              }}
+            >
+              Sim, excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+  );
+}
+
+function EditClientDialog({
+  client,
+  onClose,
+  onSaved,
+}: {
+  client: any | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const form = useForm<z.infer<typeof clientSchema>>({
+    resolver: zodResolver(clientSchema),
+    values: client
+      ? {
+          name: client.name ?? "",
+          phone: client.phone ?? "",
+          email: client.email ?? "",
+          birthday: client.birthday ?? "",
+          instagram: client.instagram ?? "",
+          profession: client.profession ?? "",
+          notes: client.notes ?? "",
+        }
+      : { name: "", phone: "", email: "", birthday: "", instagram: "", profession: "", notes: "" },
+  });
+
+  async function onSave(v: z.infer<typeof clientSchema>) {
+    if (!client) return;
+    const { error } = await supabase
+      .from("clients")
+      .update({
+        name: v.name,
+        phone: v.phone || null,
+        email: v.email || null,
+        birthday: v.birthday || null,
+        instagram: v.instagram || null,
+        profession: v.profession || null,
+        notes: v.notes || null,
+      })
+      .eq("id", client.id);
+    if (error) {
+      if (error.code === "23505") toast.error("Telefone já cadastrado em outra cliente.");
+      else toast.error(error.message);
+      return;
+    }
+    toast.success("Cliente atualizada");
+    onSaved();
+  }
+
+  return (
+    <Dialog open={!!client} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Editar cliente</DialogTitle></DialogHeader>
+        <form onSubmit={form.handleSubmit(onSave)} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="edit-name">Nome *</Label>
+            <Input id="edit-name" {...form.register("name")} autoFocus />
+            {form.formState.errors.name && (
+              <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="edit-phone">WhatsApp</Label>
+              <Input id="edit-phone" placeholder="(11) 99999-9999" {...form.register("phone")} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-birthday">Aniversário</Label>
+              <Input id="edit-birthday" type="date" {...form.register("birthday")} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="edit-instagram">Instagram</Label>
+              <Input id="edit-instagram" placeholder="@usuario" {...form.register("instagram")} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-profession">Profissão</Label>
+              <Input id="edit-profession" {...form.register("profession")} />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-email">E-mail</Label>
+            <Input id="edit-email" type="email" {...form.register("email")} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-notes">Observações</Label>
+            <Textarea id="edit-notes" rows={3} {...form.register("notes")} />
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={form.formState.isSubmitting}>Salvar</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
