@@ -62,23 +62,28 @@ function SiePage() {
   async function onPick(file: File) {
     if (!companyId) return;
     const ext = file.name.split(".").pop()?.toLowerCase();
-    if (!ext || !["csv", "xlsx", "xls"].includes(ext)) {
-      toast.error("Use CSV ou XLSX.");
+    if (!ext || !["csv", "xlsx", "xls", "pdf"].includes(ext)) {
+      toast.error("Use CSV, XLSX ou PDF (texto nativo).");
       return;
     }
     if (file.size > 20 * 1024 * 1024) {
       toast.error("Arquivo > 20 MB.");
       return;
     }
+    const source: "csv" | "xlsx" | "pdf" = ext === "csv" ? "csv" : ext === "pdf" ? "pdf" : "xlsx";
     setUploading(true);
     try {
       const path = `${companyId}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
       const { error: upErr } = await supabase.storage.from("imports").upload(path, file, { upsert: false });
       if (upErr) throw upErr;
       const res = await register({
-        data: { filename: file.name, storagePath: path, size: file.size, source: ext === "csv" ? "csv" : "xlsx" },
+        data: { filename: file.name, storagePath: path, size: file.size, source },
       });
-      toast.success("Arquivo enviado — processamento em segundo plano.");
+      toast.success(
+        source === "pdf"
+          ? "PDF enviado — extraindo texto e detectando estrutura…"
+          : "Arquivo enviado — processamento em segundo plano.",
+      );
       setSelected(res.importId);
       qc.invalidateQueries({ queryKey: ["sie-imports"] });
     } catch (e) {
@@ -88,6 +93,7 @@ function SiePage() {
       if (fileRef.current) fileRef.current.value = "";
     }
   }
+
 
   if (!feature.loading && !feature.enabled) {
     return (
