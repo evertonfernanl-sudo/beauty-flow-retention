@@ -36,6 +36,7 @@ function ClientProfilePage() {
   const navigate = useNavigate();
   const { data: profile } = useCurrentProfile();
   const companyId = profile?.company?.id;
+  const canEdit = profile?.role === "owner" || profile?.role === "admin";
   const queryClient = useQueryClient();
 
   const clientQ = useQuery({
@@ -168,7 +169,7 @@ function ClientProfilePage() {
             <Button asChild>
               <Link to="/app/agenda"><Plus className="h-4 w-4 mr-1" /> Novo agendamento</Link>
             </Button>
-            <EditClientButton client={c} onSaved={() => queryClient.invalidateQueries({ queryKey: ["client", clientId] })} />
+            {canEdit && <EditClientButton client={c} onSaved={() => queryClient.invalidateQueries({ queryKey: ["client", clientId] })} />}
           </div>
         </div>
       </Card>
@@ -308,7 +309,7 @@ function ClientProfilePage() {
         <Button asChild className="flex-1">
           <Link to="/app/agenda"><Plus className="h-4 w-4 mr-1" />Agendar</Link>
         </Button>
-        <EditClientButton client={c} onSaved={() => queryClient.invalidateQueries({ queryKey: ["client", clientId] })} compact />
+        {canEdit && <EditClientButton client={c} onSaved={() => queryClient.invalidateQueries({ queryKey: ["client", clientId] })} compact />}
       </div>
     </div>
   );
