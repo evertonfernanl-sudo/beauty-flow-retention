@@ -249,11 +249,11 @@ function ClientsPage() {
             {list.data.map((c: any) => {
               const isBirthdayMonth = c.birthday && new Date(c.birthday).getMonth() === new Date().getMonth();
               return (
-                <li key={c.id}>
+                <li key={c.id} className="flex items-center hover:bg-muted/40 transition">
                   <Link
                     to="/app/clients/$clientId"
                     params={{ clientId: c.id }}
-                    className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-muted/40 transition"
+                    className="flex items-center justify-between gap-4 px-4 py-3 flex-1 min-w-0"
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
@@ -278,6 +278,34 @@ function ClientsPage() {
                     </div>
                     <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                   </Link>
+                  {canManage && (
+                    <div className="pr-2">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={(e) => e.stopPropagation()}
+                            aria-label="Ações"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onSelect={() => setEditing(c)}>
+                            <Pencil className="h-4 w-4 mr-2" /> Editar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() => setDeleting(c)}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" /> Excluir
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  )}
                 </li>
               );
             })}
