@@ -1456,37 +1456,273 @@ export type Database = {
           },
         ]
       }
+      message_logs: {
+        Row: {
+          channel: Database["public"]["Enums"]["message_channel"]
+          client_id: string
+          company_id: string
+          created_at: string
+          event: Database["public"]["Enums"]["message_event_type"]
+          id: string
+          metadata: Json
+          queue_id: string | null
+          template_id: string | null
+        }
+        Insert: {
+          channel?: Database["public"]["Enums"]["message_channel"]
+          client_id: string
+          company_id: string
+          created_at?: string
+          event: Database["public"]["Enums"]["message_event_type"]
+          id?: string
+          metadata?: Json
+          queue_id?: string | null
+          template_id?: string | null
+        }
+        Update: {
+          channel?: Database["public"]["Enums"]["message_channel"]
+          client_id?: string
+          company_id?: string
+          created_at?: string
+          event?: Database["public"]["Enums"]["message_event_type"]
+          id?: string
+          metadata?: Json
+          queue_id?: string | null
+          template_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_logs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "birthday_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_logs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_logs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "top_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_logs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "vip_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_logs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_logs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "message_logs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "message_logs_queue_id_fkey"
+            columns: ["queue_id"]
+            isOneToOne: false
+            referencedRelation: "message_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_logs_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "message_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      message_queue: {
+        Row: {
+          channel: Database["public"]["Enums"]["message_channel"]
+          client_id: string
+          company_id: string
+          converted_at: string | null
+          created_at: string
+          id: string
+          offset_days: number
+          opportunity_id: string | null
+          priority: number
+          recovered_value: number | null
+          rendered_body: string
+          scheduled_at: string
+          sent_at: string | null
+          status: Database["public"]["Enums"]["message_queue_status"]
+          template_id: string | null
+          type: Database["public"]["Enums"]["message_type"]
+          updated_at: string
+        }
+        Insert: {
+          channel?: Database["public"]["Enums"]["message_channel"]
+          client_id: string
+          company_id: string
+          converted_at?: string | null
+          created_at?: string
+          id?: string
+          offset_days?: number
+          opportunity_id?: string | null
+          priority?: number
+          recovered_value?: number | null
+          rendered_body: string
+          scheduled_at?: string
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["message_queue_status"]
+          template_id?: string | null
+          type: Database["public"]["Enums"]["message_type"]
+          updated_at?: string
+        }
+        Update: {
+          channel?: Database["public"]["Enums"]["message_channel"]
+          client_id?: string
+          company_id?: string
+          converted_at?: string | null
+          created_at?: string
+          id?: string
+          offset_days?: number
+          opportunity_id?: string | null
+          priority?: number
+          recovered_value?: number | null
+          rendered_body?: string
+          scheduled_at?: string
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["message_queue_status"]
+          template_id?: string | null
+          type?: Database["public"]["Enums"]["message_type"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_queue_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "birthday_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_queue_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_queue_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "top_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_queue_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "vip_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_queue_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_queue_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "message_queue_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "message_queue_opportunity_id_fkey"
+            columns: ["opportunity_id"]
+            isOneToOne: false
+            referencedRelation: "recovery_opportunities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_queue_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "message_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       message_templates: {
         Row: {
+          active: boolean
           body: string
+          cadence_offsets: number[]
           category: string
+          channel: Database["public"]["Enums"]["message_channel"]
           company_id: string
           created_at: string
           id: string
           is_default: boolean
           name: string
+          type: Database["public"]["Enums"]["message_type"]
           updated_at: string
           variables: string[]
         }
         Insert: {
+          active?: boolean
           body: string
+          cadence_offsets?: number[]
           category?: string
+          channel?: Database["public"]["Enums"]["message_channel"]
           company_id: string
           created_at?: string
           id?: string
           is_default?: boolean
           name: string
+          type?: Database["public"]["Enums"]["message_type"]
           updated_at?: string
           variables?: string[]
         }
         Update: {
+          active?: boolean
           body?: string
+          cadence_offsets?: number[]
           category?: string
+          channel?: Database["public"]["Enums"]["message_channel"]
           company_id?: string
           created_at?: string
           id?: string
           is_default?: boolean
           name?: string
+          type?: Database["public"]["Enums"]["message_type"]
           updated_at?: string
           variables?: string[]
         }
@@ -2790,6 +3026,14 @@ export type Database = {
         }
         Returns: string
       }
+      mie_enqueue_from_opportunities: {
+        Args: { _company_id: string }
+        Returns: number
+      }
+      mie_render_template: {
+        Args: { _body: string; _client_id: string }
+        Returns: string
+      }
       normalize_name: { Args: { _name: string }; Returns: string }
       normalize_phone: { Args: { _phone: string }; Returns: string }
       predict_offering_from_amount: {
@@ -2853,6 +3097,30 @@ export type Database = {
       import_status: "uploaded" | "processing" | "completed" | "failed"
       invitation_status: "PENDING" | "ACCEPTED" | "EXPIRED" | "CANCELED"
       invoice_status: "OPEN" | "PAID" | "PAST_DUE" | "CANCELED" | "REFUNDED"
+      message_channel: "WHATSAPP" | "EMAIL" | "SMS"
+      message_event_type:
+        | "SENT"
+        | "DELIVERED"
+        | "READ"
+        | "REPLIED"
+        | "CONVERTED"
+        | "FAILED"
+      message_queue_status:
+        | "PENDING"
+        | "READY"
+        | "SENT"
+        | "SKIPPED"
+        | "CONVERTED"
+        | "FAILED"
+      message_type:
+        | "RETURN"
+        | "REPURCHASE"
+        | "RENEWAL"
+        | "REACTIVATION"
+        | "COLLECTION"
+        | "BIRTHDAY"
+        | "FOLLOW_UP"
+        | "CUSTOM"
       offering_kind: "SERVICE" | "PRODUCT" | "PLAN"
       recovery_status: "OPEN" | "IN_CONTACT" | "CONVERTED" | "LOST"
       return_class: "ON_TIME" | "ATTENTION" | "LATE" | "AT_RISK" | "LOST"
@@ -3029,6 +3297,33 @@ export const Constants = {
       import_status: ["uploaded", "processing", "completed", "failed"],
       invitation_status: ["PENDING", "ACCEPTED", "EXPIRED", "CANCELED"],
       invoice_status: ["OPEN", "PAID", "PAST_DUE", "CANCELED", "REFUNDED"],
+      message_channel: ["WHATSAPP", "EMAIL", "SMS"],
+      message_event_type: [
+        "SENT",
+        "DELIVERED",
+        "READ",
+        "REPLIED",
+        "CONVERTED",
+        "FAILED",
+      ],
+      message_queue_status: [
+        "PENDING",
+        "READY",
+        "SENT",
+        "SKIPPED",
+        "CONVERTED",
+        "FAILED",
+      ],
+      message_type: [
+        "RETURN",
+        "REPURCHASE",
+        "RENEWAL",
+        "REACTIVATION",
+        "COLLECTION",
+        "BIRTHDAY",
+        "FOLLOW_UP",
+        "CUSTOM",
+      ],
       offering_kind: ["SERVICE", "PRODUCT", "PLAN"],
       recovery_status: ["OPEN", "IN_CONTACT", "CONVERTED", "LOST"],
       return_class: ["ON_TIME", "ATTENTION", "LATE", "AT_RISK", "LOST"],
