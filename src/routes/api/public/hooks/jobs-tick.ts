@@ -219,9 +219,21 @@ async function runImportParse(admin: Admin, job: { payload: Record<string, unkno
       headers.forEach((h, i) => (o[h] = (r as unknown[])[i]));
       return o;
     });
+  } else if (imp.source === "pdf") {
+    const { extractText, getDocumentProxy } = await import("unpdf");
+    const buf = new Uint8Array(await file.arrayBuffer());
+    const pdf = await getDocumentProxy(buf);
+    const { text } = await extractText(pdf, { mergePages: true });
+    const fullText = Array.isArray(text) ? text.join("\n") : String(text ?? "");
+    if (!fullText.trim()) throw new Error("PDF sem texto extraível (pode ser escaneado).");
+    const parsed = parsePdfTextToRows(fullText);
+    headers = parsed.headers;
+    rows = parsed.rows;
+    if (rows.length === 0) throw new Error("Nenhuma linha reconhecida no PDF.");
   } else {
     throw new Error(`Fonte não suportada nesta fase: ${imp.source}`);
   }
+
 
   const cols = detectColumns(headers);
   const idx = (k: string) => (cols[k] !== undefined ? headers[cols[k]] : null);
