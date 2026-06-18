@@ -55,10 +55,13 @@ const FILTERS: { id: Filter; label: string }[] = [
 function ClientsPage() {
   const { data: profile } = useCurrentProfile();
   const companyId = profile?.company?.id;
+  const canManage = profile?.role === "owner" || profile?.role === "admin";
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("ALL");
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<any | null>(null);
+  const [deleting, setDeleting] = useState<any | null>(null);
   const navigate = useNavigate();
   type DupMatch = { id: string; name: string; phone: string | null; confidence: number; reason: string };
   const [duplicate, setDuplicate] = useState<{ match: DupMatch; values: z.infer<typeof clientSchema> } | null>(null);
