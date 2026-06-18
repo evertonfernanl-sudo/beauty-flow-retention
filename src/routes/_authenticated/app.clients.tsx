@@ -278,6 +278,51 @@ function ClientsPage() {
           </ul>
         )}
       </Card>
+
+      <AlertDialog open={!!duplicate} onOpenChange={(o) => { if (!o) setDuplicate(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cliente já existe?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  Encontramos um cadastro parecido por <strong>{duplicate?.match.reason === "phone" ? "telefone" : "nome"}</strong>
+                  {duplicate ? ` (${duplicate.match.confidence}% de confiança)` : ""}:
+                </p>
+                <div className="rounded-md border bg-muted/40 p-3 text-sm">
+                  <div className="font-medium text-foreground">{duplicate?.match.name}</div>
+                  {duplicate?.match.phone && (
+                    <div className="text-muted-foreground">{duplicate.match.phone}</div>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Use o cadastro existente para evitar histórico duplicado.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel onClick={() => setDuplicate(null)}>Cancelar</AlertedDialogCancelSafe />
+            <Button
+              variant="secondary"
+              onClick={() => duplicate && persistClient(duplicate.values)}
+            >
+              Criar mesmo assim
+            </Button>
+            <AlertDialogAction
+              onClick={() => {
+                if (!duplicate) return;
+                const id = duplicate.match.id;
+                setDuplicate(null);
+                setOpen(false);
+                navigate({ to: "/app/clients/$clientId", params: { clientId: id } });
+              }}
+            >
+              Usar cadastro existente
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
