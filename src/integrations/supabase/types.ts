@@ -2811,8 +2811,6 @@ export type Database = {
         Returns: undefined
       }
       refresh_return_opportunities: { Args: never; Returns: undefined }
-      show_limit: { Args: never; Returns: number }
-      show_trgm: { Args: { "": string }; Returns: string[] }
       slugify: { Args: { _input: string }; Returns: string }
     }
     Enums: {
