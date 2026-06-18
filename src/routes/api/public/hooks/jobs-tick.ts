@@ -223,8 +223,9 @@ function parsePdfTextToRows(text: string): { headers: string[]; rows: Record<str
   return { headers, rows };
 }
 
-
+async function runImportParse(admin: Admin, job: { payload: Record<string, unknown> | null; company_id: string | null }) {
   const { import_id } = (job.payload ?? {}) as { import_id?: string };
+
   if (!import_id || !job.company_id) throw new Error("import.parse: missing import_id/company_id");
 
   await admin.from("imports").update({ status: "processing", started_at: new Date().toISOString() }).eq("id", import_id);
