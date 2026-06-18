@@ -265,6 +265,98 @@ export type Database = {
           },
         ]
       }
+      client_behavior_profiles: {
+        Row: {
+          average_recurrence_days: number | null
+          average_ticket: number
+          client_id: string
+          company_id: string
+          last_transaction_at: string | null
+          lifetime_value: number
+          preferred_offering_id: string | null
+          preferred_offering_label: string | null
+          preferred_payment_method: string | null
+          transactions_count: number
+          updated_at: string
+        }
+        Insert: {
+          average_recurrence_days?: number | null
+          average_ticket?: number
+          client_id: string
+          company_id: string
+          last_transaction_at?: string | null
+          lifetime_value?: number
+          preferred_offering_id?: string | null
+          preferred_offering_label?: string | null
+          preferred_payment_method?: string | null
+          transactions_count?: number
+          updated_at?: string
+        }
+        Update: {
+          average_recurrence_days?: number | null
+          average_ticket?: number
+          client_id?: string
+          company_id?: string
+          last_transaction_at?: string | null
+          lifetime_value?: number
+          preferred_offering_id?: string | null
+          preferred_offering_label?: string | null
+          preferred_payment_method?: string | null
+          transactions_count?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_behavior_profiles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "birthday_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_behavior_profiles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_behavior_profiles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "top_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_behavior_profiles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "vip_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_behavior_profiles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_behavior_profiles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "client_behavior_profiles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+        ]
+      }
       client_contacts: {
         Row: {
           channel: Database["public"]["Enums"]["contact_channel"]
@@ -633,6 +725,458 @@ export type Database = {
           },
           {
             foreignKeyName: "financial_transactions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+        ]
+      }
+      import_errors: {
+        Row: {
+          code: string
+          company_id: string
+          created_at: string
+          id: string
+          import_id: string
+          message: string
+          row_id: string | null
+          suggestion: string | null
+        }
+        Insert: {
+          code: string
+          company_id: string
+          created_at?: string
+          id?: string
+          import_id: string
+          message: string
+          row_id?: string | null
+          suggestion?: string | null
+        }
+        Update: {
+          code?: string
+          company_id?: string
+          created_at?: string
+          id?: string
+          import_id?: string
+          message?: string
+          row_id?: string | null
+          suggestion?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_errors_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_errors_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "import_errors_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "import_errors_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "imports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_errors_row_id_fkey"
+            columns: ["row_id"]
+            isOneToOne: false
+            referencedRelation: "import_rows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      import_knowledge_base: {
+        Row: {
+          auto_approved: boolean
+          company_id: string
+          confidence: number
+          corrections: number
+          created_at: string
+          hits: number
+          id: string
+          last_used_at: string
+          mapped_entity_id: string | null
+          mapped_entity_type: string | null
+          mapped_label: string | null
+          pattern_type: Database["public"]["Enums"]["import_pattern_type"]
+          pattern_value: string
+          updated_at: string
+        }
+        Insert: {
+          auto_approved?: boolean
+          company_id: string
+          confidence?: number
+          corrections?: number
+          created_at?: string
+          hits?: number
+          id?: string
+          last_used_at?: string
+          mapped_entity_id?: string | null
+          mapped_entity_type?: string | null
+          mapped_label?: string | null
+          pattern_type: Database["public"]["Enums"]["import_pattern_type"]
+          pattern_value: string
+          updated_at?: string
+        }
+        Update: {
+          auto_approved?: boolean
+          company_id?: string
+          confidence?: number
+          corrections?: number
+          created_at?: string
+          hits?: number
+          id?: string
+          last_used_at?: string
+          mapped_entity_id?: string | null
+          mapped_entity_type?: string | null
+          mapped_label?: string | null
+          pattern_type?: Database["public"]["Enums"]["import_pattern_type"]
+          pattern_value?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_knowledge_base_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_knowledge_base_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "import_knowledge_base_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+        ]
+      }
+      import_matches: {
+        Row: {
+          action: string | null
+          company_id: string
+          confidence: number
+          created_at: string
+          entity_id: string | null
+          entity_type: string
+          id: string
+          import_id: string
+          reason: string | null
+          row_id: string
+        }
+        Insert: {
+          action?: string | null
+          company_id: string
+          confidence?: number
+          created_at?: string
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          import_id: string
+          reason?: string | null
+          row_id: string
+        }
+        Update: {
+          action?: string | null
+          company_id?: string
+          confidence?: number
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          import_id?: string
+          reason?: string | null
+          row_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_matches_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_matches_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "import_matches_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "import_matches_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "imports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_matches_row_id_fkey"
+            columns: ["row_id"]
+            isOneToOne: false
+            referencedRelation: "import_rows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      import_rows: {
+        Row: {
+          action_taken: string | null
+          amount: number | null
+          appointment_id: string | null
+          client_name: string | null
+          client_phone: string | null
+          company_id: string
+          confidence: number
+          created_at: string
+          description: string | null
+          id: string
+          import_id: string
+          notes: string | null
+          occurred_at: string | null
+          parsed: Json
+          payment_method: string | null
+          raw: Json
+          resolved_client_id: string | null
+          resolved_offering_id: string | null
+          resolved_offering_kind: string | null
+          row_index: number
+          status: Database["public"]["Enums"]["import_row_status"]
+          transaction_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          action_taken?: string | null
+          amount?: number | null
+          appointment_id?: string | null
+          client_name?: string | null
+          client_phone?: string | null
+          company_id: string
+          confidence?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          import_id: string
+          notes?: string | null
+          occurred_at?: string | null
+          parsed?: Json
+          payment_method?: string | null
+          raw?: Json
+          resolved_client_id?: string | null
+          resolved_offering_id?: string | null
+          resolved_offering_kind?: string | null
+          row_index: number
+          status?: Database["public"]["Enums"]["import_row_status"]
+          transaction_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          action_taken?: string | null
+          amount?: number | null
+          appointment_id?: string | null
+          client_name?: string | null
+          client_phone?: string | null
+          company_id?: string
+          confidence?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          import_id?: string
+          notes?: string | null
+          occurred_at?: string | null
+          parsed?: Json
+          payment_method?: string | null
+          raw?: Json
+          resolved_client_id?: string | null
+          resolved_offering_id?: string | null
+          resolved_offering_kind?: string | null
+          row_index?: number
+          status?: Database["public"]["Enums"]["import_row_status"]
+          transaction_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_rows_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_rows_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "import_rows_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "import_rows_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "imports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_rows_resolved_client_id_fkey"
+            columns: ["resolved_client_id"]
+            isOneToOne: false
+            referencedRelation: "birthday_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_rows_resolved_client_id_fkey"
+            columns: ["resolved_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_rows_resolved_client_id_fkey"
+            columns: ["resolved_client_id"]
+            isOneToOne: false
+            referencedRelation: "top_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_rows_resolved_client_id_fkey"
+            columns: ["resolved_client_id"]
+            isOneToOne: false
+            referencedRelation: "vip_clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      imports: {
+        Row: {
+          appointments_created: number
+          clients_created: number
+          clients_matched: number
+          company_id: string
+          created_at: string
+          created_by: string | null
+          filename: string
+          finished_at: string | null
+          id: string
+          last_error: string | null
+          options: Json
+          revenue_identified: number
+          rows_failed: number
+          rows_matched: number
+          rows_review: number
+          rows_total: number
+          size_bytes: number | null
+          source: Database["public"]["Enums"]["import_source"]
+          started_at: string | null
+          status: Database["public"]["Enums"]["import_status"]
+          storage_path: string | null
+          transactions_created: number
+          updated_at: string
+        }
+        Insert: {
+          appointments_created?: number
+          clients_created?: number
+          clients_matched?: number
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          filename: string
+          finished_at?: string | null
+          id?: string
+          last_error?: string | null
+          options?: Json
+          revenue_identified?: number
+          rows_failed?: number
+          rows_matched?: number
+          rows_review?: number
+          rows_total?: number
+          size_bytes?: number | null
+          source: Database["public"]["Enums"]["import_source"]
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["import_status"]
+          storage_path?: string | null
+          transactions_created?: number
+          updated_at?: string
+        }
+        Update: {
+          appointments_created?: number
+          clients_created?: number
+          clients_matched?: number
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          filename?: string
+          finished_at?: string | null
+          id?: string
+          last_error?: string | null
+          options?: Json
+          revenue_identified?: number
+          rows_failed?: number
+          rows_matched?: number
+          rows_review?: number
+          rows_total?: number
+          size_bytes?: number | null
+          source?: Database["public"]["Enums"]["import_source"]
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["import_status"]
+          storage_path?: string | null
+          transactions_created?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "imports_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "imports_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "imports_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "retention_report"
@@ -1018,6 +1562,113 @@ export type Database = {
           },
           {
             foreignKeyName: "notifications_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+        ]
+      }
+      offering_behavior_profiles: {
+        Row: {
+          average_price: number
+          average_recurrence_days: number | null
+          company_id: string
+          conversion_rate: number | null
+          frequency: number
+          id: string
+          offering_id: string
+          offering_kind: string
+          updated_at: string
+        }
+        Insert: {
+          average_price?: number
+          average_recurrence_days?: number | null
+          company_id: string
+          conversion_rate?: number | null
+          frequency?: number
+          id?: string
+          offering_id: string
+          offering_kind: string
+          updated_at?: string
+        }
+        Update: {
+          average_price?: number
+          average_recurrence_days?: number | null
+          company_id?: string
+          conversion_rate?: number | null
+          frequency?: number
+          id?: string
+          offering_id?: string
+          offering_kind?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "offering_behavior_profiles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "offering_behavior_profiles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "offering_behavior_profiles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+        ]
+      }
+      payment_behavior_profiles: {
+        Row: {
+          company_id: string
+          hits: number
+          id: string
+          payment_method: string
+          share: number | null
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          hits?: number
+          id?: string
+          payment_method: string
+          share?: number | null
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          hits?: number
+          id?: string
+          payment_method?: string
+          share?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_behavior_profiles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_behavior_profiles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "payment_behavior_profiles_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "retention_report"
@@ -2066,6 +2717,16 @@ export type Database = {
         Args: { _expected: string; _last_visit: string }
         Returns: Database["public"]["Enums"]["return_class"]
       }
+      compute_import_confidence: {
+        Args: {
+          _amount_match: boolean
+          _client_found: boolean
+          _desc_match: boolean
+          _has_history: boolean
+          _tenant_pattern: boolean
+        }
+        Returns: number
+      }
       enqueue_job: {
         Args: {
           _company_id: string
@@ -2117,8 +2778,34 @@ export type Database = {
         Returns: boolean
       }
       is_platform_admin: { Args: { _user_id: string }; Returns: boolean }
+      learn_pattern: {
+        Args: {
+          _company_id: string
+          _delta?: number
+          _entity_id?: string
+          _entity_type?: string
+          _label?: string
+          _type: Database["public"]["Enums"]["import_pattern_type"]
+          _value: string
+        }
+        Returns: string
+      }
       normalize_name: { Args: { _name: string }; Returns: string }
       normalize_phone: { Args: { _phone: string }; Returns: string }
+      predict_offering_from_amount: {
+        Args: { _amount: number; _company_id: string }
+        Returns: {
+          confidence: number
+          entity_id: string
+          entity_type: string
+          label: string
+          reason: string
+        }[]
+      }
+      refresh_client_behavior_profile: {
+        Args: { _client_id: string }
+        Returns: undefined
+      }
       refresh_recovery_opportunities: {
         Args: { _company?: string }
         Returns: undefined
@@ -2147,6 +2834,25 @@ export type Database = {
         | "IN_PERSON"
         | "EMAIL"
       contact_result: "ANSWERED" | "NO_ANSWER" | "SCHEDULED" | "REFUSED"
+      import_pattern_type:
+        | "amount"
+        | "description"
+        | "client_name"
+        | "pix_key"
+        | "bank_description"
+        | "service_hint"
+        | "product_hint"
+        | "plan_hint"
+      import_row_status:
+        | "pending"
+        | "matched"
+        | "review"
+        | "manual"
+        | "applied"
+        | "skipped"
+        | "failed"
+      import_source: "csv" | "xlsx" | "pdf" | "ofx" | "manual_text"
+      import_status: "uploaded" | "processing" | "completed" | "failed"
       invitation_status: "PENDING" | "ACCEPTED" | "EXPIRED" | "CANCELED"
       invoice_status: "OPEN" | "PAID" | "PAST_DUE" | "CANCELED" | "REFUNDED"
       offering_kind: "SERVICE" | "PRODUCT" | "PLAN"
@@ -2302,6 +3008,27 @@ export const Constants = {
       company_plan: ["starter", "professional", "premium"],
       contact_channel: ["WHATSAPP", "PHONE", "INSTAGRAM", "IN_PERSON", "EMAIL"],
       contact_result: ["ANSWERED", "NO_ANSWER", "SCHEDULED", "REFUSED"],
+      import_pattern_type: [
+        "amount",
+        "description",
+        "client_name",
+        "pix_key",
+        "bank_description",
+        "service_hint",
+        "product_hint",
+        "plan_hint",
+      ],
+      import_row_status: [
+        "pending",
+        "matched",
+        "review",
+        "manual",
+        "applied",
+        "skipped",
+        "failed",
+      ],
+      import_source: ["csv", "xlsx", "pdf", "ofx", "manual_text"],
+      import_status: ["uploaded", "processing", "completed", "failed"],
       invitation_status: ["PENDING", "ACCEPTED", "EXPIRED", "CANCELED"],
       invoice_status: ["OPEN", "PAID", "PAST_DUE", "CANCELED", "REFUNDED"],
       offering_kind: ["SERVICE", "PRODUCT", "PLAN"],
