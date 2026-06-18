@@ -179,7 +179,51 @@ function detectPaymentMethod(desc: string | null | undefined): string | null {
   return null;
 }
 
-async function runImportParse(admin: Admin, job: { payload: Record<string, unknown> | null; company_id: string | null }) {
+// Native-text PDF → tabular rows. Detects delimited tables first; falls back
+// to per-line heuristics (name + phone + amount + date).
+function parsePdfTextToRows(text: string): { headers: string[]; rows: Record<string, unknown>[] } {
+  const lines = text.split(/\r?\n/).map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean);
+  if (lines.length === 0) return { headers: [], rows: [] };
+
+  // 1) Try delimited table (CSV/TSV/semicolon/pipe leaked into PDF)
+  for (const delim of [";", "\t", "|", ","]) {
+    const headerCells = lines[0].split(delim).map((s) => s.trim());
+    if (headerCells.length >= 2 && lines.slice(1, 6).every((l) => l.split(delim).length >= 2)) {
+      const headers = headerCells;
+      const rows = lines.slice(1).map((l) => {
+        const parts = l.split(delim);
+        const o: Record<string, unknown> = {};
+        headers.forEach((h, i) => (o[h] = (parts[i] ?? "").trim()));
+        return o;
+      });
+      return { headers, rows };
+    }
+  }
+
+  // 2) Heuristic line-by-line extraction
+  const headers = ["nome", "telefone", "valor", "data", "descricao"];
+  const phoneRe = /(\(?\d{2}\)?\s*\d{4,5}-?\s*\d{4})/;
+  const amountRe = /R?\$?\s*([\d.]+,\d{2}|\d+\.\d{2})/;
+  const dateRe = /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}-\d{2}-\d{2})/;
+  const rows: Record<string, unknown>[] = [];
+  for (const line of lines) {
+    const phone = line.match(phoneRe)?.[1] ?? "";
+    const amount = line.match(amountRe)?.[1] ?? "";
+    const date = line.match(dateRe)?.[1] ?? "";
+    let rest = line;
+    [phone, amount, date].forEach((v) => { if (v) rest = rest.replace(v, " "); });
+    rest = rest.replace(/R\$\s*/gi, " ").replace(/\s+/g, " ").trim();
+    // Name = leading alpha tokens (>=2 chars, letters/spaces)
+    const nameMatch = rest.match(/^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ.\s]{2,}?)(?=\s{2,}|\s-|$|\s\d)/);
+    const name = (nameMatch?.[1] ?? "").trim();
+    const description = rest.replace(name, "").trim();
+    if (!name && !phone && !amount) continue;
+    rows.push({ nome: name, telefone: phone, valor: amount, data: date, descricao: description });
+  }
+  return { headers, rows };
+}
+
+
   const { import_id } = (job.payload ?? {}) as { import_id?: string };
   if (!import_id || !job.company_id) throw new Error("import.parse: missing import_id/company_id");
 
