@@ -49,8 +49,8 @@ const NAV: NavItem[] = [
   { to: "/app/services", label: "Serviços", icon: Scissors },
   { to: "/app/financial", label: "Financeiro", icon: DollarSign },
   { to: "/app/reports", label: "Indicadores", icon: BarChart3 },
-  { to: "/app/import", label: "Smart Import", icon: Sparkles },
-  { to: "/app/sie", label: "SIE (Arquivos)", icon: Sparkles },
+  { to: "/app/sie", label: "Importar Dados", icon: Sparkles },
+
   { to: "/app/comunicacao", label: "Comunicação", icon: MessageSquare },
   { to: "/app/mensageria", label: "Mensageria (MIE)", icon: Send },
   { to: "/app/settings", label: "Configurações", icon: Settings },
