@@ -153,7 +153,13 @@ function ClientsPage() {
   }, [list.data]);
 
   return (
-    <div className="space-y-6">
+    <Tabs defaultValue="cadastro" className="space-y-6">
+      <TabsList>
+        <TabsTrigger value="cadastro" className="gap-1.5"><Users className="h-3.5 w-3.5" /> Clientes</TabsTrigger>
+        <TabsTrigger value="retorno" className="gap-1.5"><Heart className="h-3.5 w-3.5" /> Clientes para retorno</TabsTrigger>
+      </TabsList>
+      <TabsContent value="cadastro" className="space-y-6 mt-0">
+
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Clientes</h1>
@@ -396,9 +402,14 @@ function ClientsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+      </TabsContent>
+      <TabsContent value="retorno" className="mt-0">
+        <RecoveryPage />
+      </TabsContent>
+    </Tabs>
   );
 }
+
 
 function EditClientDialog({
   client,
