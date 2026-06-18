@@ -19,12 +19,14 @@ import {
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, Search, Users, Cake, ChevronRight, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { Plus, Search, Users, Cake, ChevronRight, MoreVertical, Pencil, Trash2, Heart } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { formatBRL } from "@/lib/format";
+import { RecoveryPage } from "./app.returns";
 
 export const Route = createFileRoute("/_authenticated/app/clients")({
   head: () => ({ meta: [{ title: "Clientes · BeautyFlow" }] }),
