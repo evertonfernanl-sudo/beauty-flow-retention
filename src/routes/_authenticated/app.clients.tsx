@@ -56,6 +56,9 @@ function ClientsPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("ALL");
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+  type DupMatch = { id: string; name: string; phone: string | null; confidence: number; reason: string };
+  const [duplicate, setDuplicate] = useState<{ match: DupMatch; values: z.infer<typeof clientSchema> } | null>(null);
 
   const list = useQuery({
     enabled: !!companyId,
