@@ -36,6 +36,7 @@ function ClientProfilePage() {
   const navigate = useNavigate();
   const { data: profile } = useCurrentProfile();
   const companyId = profile?.company?.id;
+  const canEdit = profile?.role === "owner" || profile?.role === "admin";
   const queryClient = useQueryClient();
 
   const clientQ = useQuery({
