@@ -437,27 +437,20 @@ async function runImportApplyRow(admin: Admin, job: { payload: Record<string, un
     reason: createdClient ? "created" : "matched", action: createdClient ? "created" : "matched",
   });
 
-  // Update import counters
-  await admin.rpc("enqueue_job", {
-    _company_id: companyId, _type: "noop",
-    _payload: { post_apply: row.import_id } as never, _priority: 9,
-  });
-  await admin.from("imports").update({
-    clients_created: createdClient ? 1 : 0,
-    appointments_created: appointmentId ? 1 : 0,
-    transactions_created: transactionId ? 1 : 0,
-  }).eq("id", row.import_id).select("id"); // no-op increment placeholder; replaced below
-  // proper atomic increments:
+  // Increment import counters
   if (createdClient || appointmentId || transactionId) {
-    await admin.from("imports").select("clients_created,appointments_created,transactions_created").eq("id", row.import_id).single()
-      .then(async ({ data }: { data: { clients_created: number; appointments_created: number; transactions_created: number } | null }) => {
-        if (!data) return;
-        await admin.from("imports").update({
-          clients_created: data.clients_created + (createdClient ? 1 : 0),
-          appointments_created: data.appointments_created + (appointmentId ? 1 : 0),
-          transactions_created: data.transactions_created + (transactionId ? 1 : 0),
-        }).eq("id", row.import_id);
-      });
+    const { data: cur } = await admin
+      .from("imports")
+      .select("clients_created,appointments_created,transactions_created")
+      .eq("id", row.import_id)
+      .single();
+    if (cur) {
+      await admin.from("imports").update({
+        clients_created: cur.clients_created + (createdClient ? 1 : 0),
+        appointments_created: cur.appointments_created + (appointmentId ? 1 : 0),
+        transactions_created: cur.transactions_created + (transactionId ? 1 : 0),
+      }).eq("id", row.import_id);
+    }
   }
 
   return { clientId, appointmentId, transactionId, createdClient };
