@@ -7,13 +7,14 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
-import { MessageCircle, Sparkles, Search, AlertCircle, Clock, TrendingDown, XCircle, RefreshCw } from "lucide-react";
+import { MessageCircle, Sparkles, Search, AlertCircle, Clock, TrendingDown, XCircle, RefreshCw, MessageSquare } from "lucide-react";
 import { formatBRL } from "@/lib/format";
 import { whatsappLink } from "@/lib/phone";
 import { toast } from "sonner";
+import { ComunicacaoPage } from "./app.comunicacao";
 
 export const Route = createFileRoute("/_authenticated/app/recorrencia")({
   head: () => ({ meta: [{ title: "Recorrência · BeautyFlow" }] }),
@@ -131,7 +132,13 @@ function RecorrenciaPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <Tabs defaultValue="oportunidades" className="space-y-6">
+      <TabsList>
+        <TabsTrigger value="oportunidades" className="gap-1.5"><Sparkles className="h-3.5 w-3.5" /> Oportunidades</TabsTrigger>
+        <TabsTrigger value="comunicacao" className="gap-1.5"><MessageSquare className="h-3.5 w-3.5" /> Comunicação</TabsTrigger>
+      </TabsList>
+      <TabsContent value="oportunidades" className="space-y-6 mt-0">
+
       <header>
         <div className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-primary uppercase tracking-wider">
           <Sparkles className="h-3 w-3" /> Motor de Recorrência
@@ -223,9 +230,14 @@ function RecorrenciaPage() {
           </ul>
         )}
       </Card>
-    </div>
+      </TabsContent>
+      <TabsContent value="comunicacao" className="mt-0">
+        <ComunicacaoPage />
+      </TabsContent>
+    </Tabs>
   );
 }
+
 
 function Stat({ label, value, icon: Icon, highlight }: { label: string; value: string; icon: typeof Clock; highlight?: boolean }) {
   return (
