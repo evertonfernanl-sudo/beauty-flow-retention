@@ -101,7 +101,7 @@ function ClientsPage() {
       const { data: dup } = await supabase.rpc("find_duplicate_client", {
         _company_id: companyId,
         _name: values.name,
-        _phone: values.phone || null,
+        _phone: values.phone || "",
         _threshold: 0.7,
       });
       const match = Array.isArray(dup) && dup.length ? (dup[0] as { id: string; name: string; phone: string | null; confidence: number; reason: string }) : null;
