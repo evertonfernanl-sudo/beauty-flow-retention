@@ -2921,6 +2921,14 @@ export type Database = {
       }
     }
     Functions: {
+      assign_user_role: {
+        Args: {
+          _company_id: string
+          _role: Database["public"]["Enums"]["app_role"]
+          _target_user: string
+        }
+        Returns: undefined
+      }
       calc_recovery_score: { Args: { _client_id: string }; Returns: number }
       claim_next_job: {
         Args: never
@@ -3055,6 +3063,14 @@ export type Database = {
         Returns: undefined
       }
       refresh_return_opportunities: { Args: never; Returns: undefined }
+      revoke_user_role: {
+        Args: {
+          _company_id: string
+          _role: Database["public"]["Enums"]["app_role"]
+          _target_user: string
+        }
+        Returns: undefined
+      }
       slugify: { Args: { _input: string }; Returns: string }
     }
     Enums: {
