@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,6 +12,10 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Plus, Search, Users, Cake, ChevronRight } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -52,6 +56,9 @@ function ClientsPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("ALL");
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+  type DupMatch = { id: string; name: string; phone: string | null; confidence: number; reason: string };
+  const [duplicate, setDuplicate] = useState<{ match: DupMatch; values: z.infer<typeof clientSchema> } | null>(null);
 
   const list = useQuery({
     enabled: !!companyId,
@@ -89,6 +96,25 @@ function ClientsPage() {
 
   async function onCreate(values: z.infer<typeof clientSchema>) {
     if (!companyId) return;
+    // Anti-duplicação: telefone exato OU nome similar (>=70%)
+    if (values.phone || values.name) {
+      const { data: dup } = await supabase.rpc("find_duplicate_client", {
+        _company_id: companyId,
+        _name: values.name,
+        _phone: values.phone || "",
+        _threshold: 0.7,
+      });
+      const match = Array.isArray(dup) && dup.length ? (dup[0] as { id: string; name: string; phone: string | null; confidence: number; reason: string }) : null;
+      if (match) {
+        setDuplicate({ match: { ...match, phone: match.phone ?? null }, values });
+        return;
+      }
+    }
+    await persistClient(values);
+  }
+
+  async function persistClient(values: z.infer<typeof clientSchema>) {
+    if (!companyId) return;
     const { error } = await supabase.from("clients").insert({
       company_id: companyId,
       name: values.name,
@@ -107,6 +133,7 @@ function ClientsPage() {
     toast.success("Cliente cadastrada!");
     form.reset();
     setOpen(false);
+    setDuplicate(null);
     queryClient.invalidateQueries({ queryKey: ["clients", companyId] });
   }
 
@@ -251,6 +278,51 @@ function ClientsPage() {
           </ul>
         )}
       </Card>
+
+      <AlertDialog open={!!duplicate} onOpenChange={(o) => { if (!o) setDuplicate(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cliente já existe?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  Encontramos um cadastro parecido por <strong>{duplicate?.match.reason === "phone" ? "telefone" : "nome"}</strong>
+                  {duplicate ? ` (${duplicate.match.confidence}% de confiança)` : ""}:
+                </p>
+                <div className="rounded-md border bg-muted/40 p-3 text-sm">
+                  <div className="font-medium text-foreground">{duplicate?.match.name}</div>
+                  {duplicate?.match.phone && (
+                    <div className="text-muted-foreground">{duplicate.match.phone}</div>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Use o cadastro existente para evitar histórico duplicado.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel onClick={() => setDuplicate(null)}>Cancelar</AlertDialogCancel>
+            <Button
+              variant="secondary"
+              onClick={() => duplicate && persistClient(duplicate.values)}
+            >
+              Criar mesmo assim
+            </Button>
+            <AlertDialogAction
+              onClick={() => {
+                if (!duplicate) return;
+                const id = duplicate.match.id;
+                setDuplicate(null);
+                setOpen(false);
+                navigate({ to: "/app/clients/$clientId", params: { clientId: id } });
+              }}
+            >
+              Usar cadastro existente
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
