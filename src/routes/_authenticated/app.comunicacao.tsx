@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -32,8 +32,10 @@ import { toStoragePhone } from "@/lib/phone";
 import { enqueueCampaignRecord } from "@/lib/api/campaigns.functions";
 
 export const Route = createFileRoute("/_authenticated/app/comunicacao")({
-  head: () => ({ meta: [{ title: "Comunicação — BeautyFlow" }] }),
-  component: ComunicacaoPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/app/recorrencia", search: { tab: "comunicacao" } as any });
+  },
+  component: () => null,
 });
 
 type Template = {
@@ -54,7 +56,7 @@ const SEGMENT_LABEL: Record<Segment, string> = {
   RETURN_DUE: "Para retornar (oportunidades abertas)",
 };
 
-function ComunicacaoPage() {
+export function ComunicacaoPage() {
   return (
     <div className="space-y-6 p-4 md:p-6">
       <div>

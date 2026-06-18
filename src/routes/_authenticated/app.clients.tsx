@@ -19,12 +19,14 @@ import {
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, Search, Users, Cake, ChevronRight, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { Plus, Search, Users, Cake, ChevronRight, MoreVertical, Pencil, Trash2, Heart } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { formatBRL } from "@/lib/format";
+import { RecoveryPage } from "./app.returns";
 
 export const Route = createFileRoute("/_authenticated/app/clients")({
   head: () => ({ meta: [{ title: "Clientes · BeautyFlow" }] }),
@@ -151,7 +153,13 @@ function ClientsPage() {
   }, [list.data]);
 
   return (
-    <div className="space-y-6">
+    <Tabs defaultValue="cadastro" className="space-y-6">
+      <TabsList>
+        <TabsTrigger value="cadastro" className="gap-1.5"><Users className="h-3.5 w-3.5" /> Clientes</TabsTrigger>
+        <TabsTrigger value="retorno" className="gap-1.5"><Heart className="h-3.5 w-3.5" /> Clientes para retorno</TabsTrigger>
+      </TabsList>
+      <TabsContent value="cadastro" className="space-y-6 mt-0">
+
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Clientes</h1>
@@ -394,9 +402,14 @@ function ClientsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+      </TabsContent>
+      <TabsContent value="retorno" className="mt-0">
+        <RecoveryPage />
+      </TabsContent>
+    </Tabs>
   );
 }
+
 
 function EditClientDialog({
   client,

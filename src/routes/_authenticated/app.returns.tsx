@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,18 +22,15 @@ import { toast } from "sonner";
 import { formatBRL } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/app/returns")({
-  head: () => ({
-    meta: [
-      { title: "Clientes para Retorno · BeautyFlow" },
-      { name: "description", content: "Veja quem está pronta para voltar — e quanto faturamento você pode recuperar hoje." },
-    ],
-  }),
-  component: RecoveryPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/app/clients", search: { tab: "retorno" } as any });
+  },
+  component: () => null,
 });
 
 type Filter = "all" | "today" | "week" | "at_risk" | "lost" | "vip";
 
-function RecoveryPage() {
+export function RecoveryPage() {
   const { data: profile } = useCurrentProfile();
   const companyId = profile?.company?.id;
   const qc = useQueryClient();
