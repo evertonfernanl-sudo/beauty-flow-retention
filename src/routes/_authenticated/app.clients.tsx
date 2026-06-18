@@ -96,6 +96,25 @@ function ClientsPage() {
 
   async function onCreate(values: z.infer<typeof clientSchema>) {
     if (!companyId) return;
+    // Anti-duplicação: telefone exato OU nome similar (>=70%)
+    if (values.phone || values.name) {
+      const { data: dup } = await supabase.rpc("find_duplicate_client", {
+        _company_id: companyId,
+        _name: values.name,
+        _phone: values.phone || null,
+        _threshold: 0.7,
+      });
+      const match = Array.isArray(dup) && dup.length ? dup[0] : null;
+      if (match) {
+        setDuplicate({ match: match as DupMatch, values });
+        return;
+      }
+    }
+    await persistClient(values);
+  }
+
+  async function persistClient(values: z.infer<typeof clientSchema>) {
+    if (!companyId) return;
     const { error } = await supabase.from("clients").insert({
       company_id: companyId,
       name: values.name,
@@ -114,6 +133,7 @@ function ClientsPage() {
     toast.success("Cliente cadastrada!");
     form.reset();
     setOpen(false);
+    setDuplicate(null);
     queryClient.invalidateQueries({ queryKey: ["clients", companyId] });
   }
 
