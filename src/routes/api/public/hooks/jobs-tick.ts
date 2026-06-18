@@ -179,8 +179,53 @@ function detectPaymentMethod(desc: string | null | undefined): string | null {
   return null;
 }
 
+// Native-text PDF → tabular rows. Detects delimited tables first; falls back
+// to per-line heuristics (name + phone + amount + date).
+function parsePdfTextToRows(text: string): { headers: string[]; rows: Record<string, unknown>[] } {
+  const lines = text.split(/\r?\n/).map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean);
+  if (lines.length === 0) return { headers: [], rows: [] };
+
+  // 1) Try delimited table (CSV/TSV/semicolon/pipe leaked into PDF)
+  for (const delim of [";", "\t", "|", ","]) {
+    const headerCells = lines[0].split(delim).map((s) => s.trim());
+    if (headerCells.length >= 2 && lines.slice(1, 6).every((l) => l.split(delim).length >= 2)) {
+      const headers = headerCells;
+      const rows = lines.slice(1).map((l) => {
+        const parts = l.split(delim);
+        const o: Record<string, unknown> = {};
+        headers.forEach((h, i) => (o[h] = (parts[i] ?? "").trim()));
+        return o;
+      });
+      return { headers, rows };
+    }
+  }
+
+  // 2) Heuristic line-by-line extraction
+  const headers = ["nome", "telefone", "valor", "data", "descricao"];
+  const phoneRe = /(\(?\d{2}\)?\s*\d{4,5}-?\s*\d{4})/;
+  const amountRe = /R?\$?\s*([\d.]+,\d{2}|\d+\.\d{2})/;
+  const dateRe = /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}-\d{2}-\d{2})/;
+  const rows: Record<string, unknown>[] = [];
+  for (const line of lines) {
+    const phone = line.match(phoneRe)?.[1] ?? "";
+    const amount = line.match(amountRe)?.[1] ?? "";
+    const date = line.match(dateRe)?.[1] ?? "";
+    let rest = line;
+    [phone, amount, date].forEach((v) => { if (v) rest = rest.replace(v, " "); });
+    rest = rest.replace(/R\$\s*/gi, " ").replace(/\s+/g, " ").trim();
+    // Name = leading alpha tokens (>=2 chars, letters/spaces)
+    const nameMatch = rest.match(/^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ.\s]{2,}?)(?=\s{2,}|\s-|$|\s\d)/);
+    const name = (nameMatch?.[1] ?? "").trim();
+    const description = rest.replace(name, "").trim();
+    if (!name && !phone && !amount) continue;
+    rows.push({ nome: name, telefone: phone, valor: amount, data: date, descricao: description });
+  }
+  return { headers, rows };
+}
+
 async function runImportParse(admin: Admin, job: { payload: Record<string, unknown> | null; company_id: string | null }) {
   const { import_id } = (job.payload ?? {}) as { import_id?: string };
+
   if (!import_id || !job.company_id) throw new Error("import.parse: missing import_id/company_id");
 
   await admin.from("imports").update({ status: "processing", started_at: new Date().toISOString() }).eq("id", import_id);
@@ -219,9 +264,21 @@ async function runImportParse(admin: Admin, job: { payload: Record<string, unkno
       headers.forEach((h, i) => (o[h] = (r as unknown[])[i]));
       return o;
     });
+  } else if (imp.source === "pdf") {
+    const { extractText, getDocumentProxy } = await import("unpdf");
+    const buf = new Uint8Array(await file.arrayBuffer());
+    const pdf = await getDocumentProxy(buf);
+    const { text } = await extractText(pdf, { mergePages: true });
+    const fullText = Array.isArray(text) ? text.join("\n") : String(text ?? "");
+    if (!fullText.trim()) throw new Error("PDF sem texto extraível (pode ser escaneado).");
+    const parsed = parsePdfTextToRows(fullText);
+    headers = parsed.headers;
+    rows = parsed.rows;
+    if (rows.length === 0) throw new Error("Nenhuma linha reconhecida no PDF.");
   } else {
     throw new Error(`Fonte não suportada nesta fase: ${imp.source}`);
   }
+
 
   const cols = detectColumns(headers);
   const idx = (k: string) => (cols[k] !== undefined ? headers[cols[k]] : null);

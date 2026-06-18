@@ -15,9 +15,10 @@ import { useFeature } from "@/lib/hooks/use-feature";
 import { formatPhoneBR } from "@/lib/phone";
 
 export const Route = createFileRoute("/_authenticated/app/sie")({
-  head: () => ({ meta: [{ title: "Smart Import Engine · BeautyFlow" }] }),
+  head: () => ({ meta: [{ title: "Importar Dados · BeautyFlow" }] }),
   component: SiePage,
 });
+
 
 type ImportRow = {
   id: string;
@@ -61,23 +62,28 @@ function SiePage() {
   async function onPick(file: File) {
     if (!companyId) return;
     const ext = file.name.split(".").pop()?.toLowerCase();
-    if (!ext || !["csv", "xlsx", "xls"].includes(ext)) {
-      toast.error("Use CSV ou XLSX.");
+    if (!ext || !["csv", "xlsx", "xls", "pdf"].includes(ext)) {
+      toast.error("Use CSV, XLSX ou PDF (texto nativo).");
       return;
     }
     if (file.size > 20 * 1024 * 1024) {
       toast.error("Arquivo > 20 MB.");
       return;
     }
+    const source: "csv" | "xlsx" | "pdf" = ext === "csv" ? "csv" : ext === "pdf" ? "pdf" : "xlsx";
     setUploading(true);
     try {
       const path = `${companyId}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
       const { error: upErr } = await supabase.storage.from("imports").upload(path, file, { upsert: false });
       if (upErr) throw upErr;
       const res = await register({
-        data: { filename: file.name, storagePath: path, size: file.size, source: ext === "csv" ? "csv" : "xlsx" },
+        data: { filename: file.name, storagePath: path, size: file.size, source },
       });
-      toast.success("Arquivo enviado — processamento em segundo plano.");
+      toast.success(
+        source === "pdf"
+          ? "PDF enviado — extraindo texto e detectando estrutura…"
+          : "Arquivo enviado — processamento em segundo plano.",
+      );
       setSelected(res.importId);
       qc.invalidateQueries({ queryKey: ["sie-imports"] });
     } catch (e) {
@@ -87,6 +93,7 @@ function SiePage() {
       if (fileRef.current) fileRef.current.value = "";
     }
   }
+
 
   if (!feature.loading && !feature.enabled) {
     return (
@@ -104,25 +111,33 @@ function SiePage() {
     <div className="space-y-6 max-w-5xl">
       <div>
         <h1 className="text-2xl font-semibold flex items-center gap-2">
-          <Sparkles className="h-6 w-6 text-primary" /> Smart Import Engine
+          <Sparkles className="h-6 w-6 text-primary" /> Importar Dados
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Envie um CSV ou XLSX. A plataforma identifica clientes, recria atendimentos e aprende seus padrões a cada importação.
+          Envie CSV, XLSX ou PDF (texto nativo). A plataforma detecta o formato, identifica clientes, recria atendimentos e aprende seus padrões a cada importação.
         </p>
       </div>
 
       <Card className="p-5">
         <input
-          ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden"
+          ref={fileRef} type="file" accept=".csv,.xlsx,.xls,.pdf" className="hidden"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) onPick(f); }}
         />
-        <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div
+          onDragOver={(e) => { e.preventDefault(); }}
+          onDrop={(e) => {
+            e.preventDefault();
+            const f = e.dataTransfer.files?.[0];
+            if (f) onPick(f);
+          }}
+          className="border-2 border-dashed rounded-lg p-6 flex items-center justify-between gap-3 flex-wrap hover:border-primary/50 transition"
+        >
           <div className="flex items-center gap-3">
             <FileSpreadsheet className="h-8 w-8 text-primary" />
             <div>
-              <div className="font-medium">Envie CSV ou XLSX (até 20 MB)</div>
+              <div className="font-medium">Arraste um arquivo ou clique para escolher (até 20 MB)</div>
               <div className="text-xs text-muted-foreground">
-                Colunas reconhecidas: nome, telefone, valor, data, descrição, pagamento.
+                Aceita <strong>CSV</strong>, <strong>XLSX</strong> e <strong>PDF nativo</strong>. Detecta clientes, agendamentos e financeiro automaticamente.
               </div>
             </div>
           </div>
@@ -131,6 +146,7 @@ function SiePage() {
           </Button>
         </div>
       </Card>
+
 
       <Card className="p-4">
         <div className="flex items-center justify-between mb-3">
