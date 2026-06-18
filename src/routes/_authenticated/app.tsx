@@ -5,7 +5,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  BarChart3,
   Bell,
   Calendar,
   DollarSign,
@@ -41,14 +40,13 @@ export const Route = createFileRoute("/_authenticated/app")({
 
 type NavItem = { to: string; label: string; icon: any; exact?: boolean };
 const NAV: NavItem[] = [
-  { to: "/app", label: "Dashboard", icon: LayoutDashboard, exact: true },
+  { to: "/app", label: "Visão Geral", icon: LayoutDashboard, exact: true },
   { to: "/app/agenda", label: "Agenda", icon: Calendar },
   { to: "/app/clients", label: "Clientes", icon: Users },
   { to: "/app/recorrencia", label: "Recorrência", icon: TrendingUp },
   { to: "/app/returns", label: "Clientes para Retorno", icon: TrendingUp },
   { to: "/app/services", label: "Serviços", icon: Scissors },
   { to: "/app/financial", label: "Financeiro", icon: DollarSign },
-  { to: "/app/reports", label: "Indicadores", icon: BarChart3 },
   { to: "/app/sie", label: "Importar Dados", icon: Sparkles },
 
   { to: "/app/comunicacao", label: "Comunicação", icon: MessageSquare },
