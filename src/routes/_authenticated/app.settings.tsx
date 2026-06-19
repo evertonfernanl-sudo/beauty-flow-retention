@@ -241,7 +241,10 @@ function UsersTab({ companyId, canManage, qc }: { companyId?: string; canManage:
     enabled: !!companyId,
     queryKey: ["invitations", companyId],
     queryFn: async () => {
-      const { data } = await supabase.from("invitations").select("*").eq("company_id", companyId!)
+      const { data } = await supabase
+        .from("invitations")
+        .select("id, company_id, email, role, status, invited_by, expires_at, accepted_at, created_at, updated_at")
+        .eq("company_id", companyId!)
         .order("created_at", { ascending: false });
       return data ?? [];
     },
