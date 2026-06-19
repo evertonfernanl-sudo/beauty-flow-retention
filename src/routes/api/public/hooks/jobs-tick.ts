@@ -6,12 +6,27 @@ import * as XLSX from "xlsx";
 // Called by pg_cron once per minute via /api/public/hooks/jobs-tick.
 
 export const Route = createFileRoute("/api/public/hooks/jobs-tick")({
-  server: { handlers: { POST: async () => handle(), GET: async () => handle() } },
+  server: {
+    handlers: {
+      POST: async ({ request }) => handle(request),
+      GET: async ({ request }) => handle(request),
+    },
+  },
 });
 
 const MAX_PER_TICK = 20;
 
-async function handle() {
+function authorized(request: Request): boolean {
+  const expected = process.env.JOBS_TICK_SECRET;
+  if (!expected) return false;
+  const header = request.headers.get("x-hook-secret") ?? "";
+  const auth = request.headers.get("authorization") ?? "";
+  const bearer = auth.toLowerCase().startsWith("bearer ") ? auth.slice(7) : "";
+  return header === expected || bearer === expected;
+}
+
+async function handle(request: Request) {
+  if (!authorized(request)) return json({ ok: false, error: "forbidden" }, 403);
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const processed: Array<{ id: string; type: string; ok: boolean; error?: string }> = [];
 
