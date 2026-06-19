@@ -64,7 +64,7 @@ function toISODate(d: Date) { return d.toISOString().slice(0, 10); }
 function addDays(d: Date, n: number) { const c = new Date(d); c.setDate(c.getDate() + n); return c; }
 
 function BookingPage() {
-  const { company } = Route.useLoaderData();
+  const { company } = Route.useLoaderData() as any;
   const [step, setStep] = useState<Step>("service");
 
   const [services, setServices] = useState<Service[]>([]);

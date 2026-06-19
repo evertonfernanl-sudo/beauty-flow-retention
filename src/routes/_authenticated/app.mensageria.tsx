@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,8 +22,10 @@ import { whatsappLink } from "@/lib/phone";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/app/mensageria")({
-  head: () => ({ meta: [{ title: "Mensageria · BeautyFlow" }] }),
-  component: MensageriaPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/app/recorrencia", search: { tab: "mensageria" } as any });
+  },
+  component: () => null,
 });
 
 type TabKey = "fila" | "templates" | "dashboard";
@@ -43,7 +45,7 @@ const PLAN_LIMIT: Record<string, number> = {
   starter: 500, basic: 500, professional: 5000, pro: 5000, premium: 20000, growth: 20000,
 };
 
-function MensageriaPage() {
+export function MensageriaPage() {
   const { data: profile } = useCurrentProfile();
   const companyId = profile?.company?.id;
   const isAdmin = profile?.role === "owner" || profile?.role === "admin";
