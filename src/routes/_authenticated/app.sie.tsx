@@ -15,6 +15,7 @@ import {
   Check,
   AlertTriangle,
   Lock,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -43,6 +44,7 @@ type ImportRow = {
   revenue_identified: number;
   created_at: string;
   last_error: string | null;
+  storage_path: string | null;
 };
 
 function SiePage() {
@@ -105,6 +107,26 @@ function SiePage() {
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  async function onDeleteImport(id: string, storagePath: string | null) {
+    if (!confirm("Tem certeza que deseja excluir esta importação? Isso removerá o histórico do arquivo, mas NÃO apagará os clientes ou agendamentos criados por ela.")) {
+      return;
+    }
+    try {
+      if (storagePath) {
+        await supabase.storage.from("imports").remove([storagePath]);
+      }
+      const { error } = await supabase.from("imports").delete().eq("id", id);
+      if (error) throw error;
+      toast.success("Importação excluída com sucesso.");
+      if (selected === id) {
+        setSelected(null);
+      }
+      qc.invalidateQueries({ queryKey: ["sie-imports"] });
+    } catch (e) {
+      toast.error((e as Error).message);
     }
   }
 
@@ -195,19 +217,30 @@ function SiePage() {
           <ul className="divide-y">
             {imports.data!.map((imp) => (
               <li key={imp.id} className="py-3">
-                <button
-                  onClick={() => setSelected((s) => (s === imp.id ? null : imp.id))}
-                  className="w-full flex items-center justify-between text-left gap-3"
-                >
-                  <div className="min-w-0">
-                    <div className="font-medium truncate">{imp.filename}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {new Date(imp.created_at).toLocaleString()} · {imp.source.toUpperCase()} ·{" "}
-                      {imp.rows_total} linhas
+                <div className="flex items-center justify-between gap-3">
+                  <button
+                    onClick={() => setSelected((s) => (s === imp.id ? null : imp.id))}
+                    className="flex-1 flex items-center justify-between text-left min-w-0 gap-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-medium truncate">{imp.filename}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {new Date(imp.created_at).toLocaleString()} · {imp.source.toUpperCase()} ·{" "}
+                        {imp.rows_total} linhas
+                      </div>
                     </div>
-                  </div>
-                  <StatusBadge status={imp.status} />
-                </button>
+                    <StatusBadge status={imp.status} />
+                  </button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="text-destructive hover:bg-destructive/10 h-8 w-8 flex-shrink-0"
+                    onClick={() => onDeleteImport(imp.id, imp.storage_path)}
+                    title="Excluir histórico de importação"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
                 {imp.status === "processing" && <Progress value={50} className="mt-2 h-1" />}
                 {imp.last_error && (
                   <div className="text-xs text-destructive mt-1 flex items-center gap-1">
