@@ -175,7 +175,7 @@ const HEADER_MAP: Record<string, RegExp> = {
   amount: /^(valor|amount|preco|preço|price|total|vlr|valor\s*\(r\$\)|valor\s*r\$|quantia)$/i,
   date: /^(data|date|dt|dia|quando|occurred|venda|atendimento|data\s+do\s+lan\S+amento|data\s+lan\S+amento)$/i,
   description:
-    /^(descri[cç]ao|descri[cç]ão|description|hist[óo]rico|lan[cç]amento|memo|complemento|hist[óo]rico\s+complementar|obs|observa|servi[cç]o|produto|hist[óo]rico\s*\/?\s*descri\S+ao|descri\S+ao\s+do\s+lan\S+amento)$/i,
+    /^(descri.*|hist.*|lan[cç].*|memo|complemento|obs|observa|servi[cç]o|produto)$/i,
   payment: /^(pagamento|payment|metodo|método|forma)$/i,
 };
 
@@ -405,12 +405,14 @@ function normalizeAndMapHeaders(rawHeaders: string[]): string[] {
       return "telefone 2";
     }
     
-    const descTitles = [
-      "descrição", "descricao", "histórico", "historico", 
-      "lançamento", "lancamento", "memo", "complemento", 
-      "histórico complementar", "historico complementar"
-    ];
-    if (descTitles.includes(cleanLower)) {
+    if (
+      cleanLower.includes("descri") ||
+      cleanLower.includes("hist") ||
+      cleanLower.includes("lanç") ||
+      cleanLower.includes("lanc") ||
+      cleanLower === "memo" ||
+      cleanLower === "complemento"
+    ) {
       return "descrição";
     }
     
