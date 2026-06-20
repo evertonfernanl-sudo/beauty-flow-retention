@@ -1,7 +1,7 @@
--- Update trigger to run on both INSERT and UPDATE of name/slug
+-- Update trigger to run on both INSERT and UPDATE
 DROP TRIGGER IF EXISTS trg_companies_slug ON public.companies;
 CREATE TRIGGER trg_companies_slug
-  BEFORE INSERT OR UPDATE OF name, slug
+  BEFORE INSERT OR UPDATE
   ON public.companies
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_company_slug();
