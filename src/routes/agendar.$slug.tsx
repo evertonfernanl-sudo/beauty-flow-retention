@@ -218,44 +218,25 @@ function BookingPage() {
     setSubmitting(true);
     try {
       const phoneNorm = toStoragePhone(phone) ?? phone;
-      const { data: client, error: cErr } = await supabase
-        .from("clients")
-        .insert({ 
-          company_id: company.id, 
-          name: name.trim(), 
-          phone: phoneNorm,
-          email: email.trim() || null
-        })
-        .select("id")
-        .single();
-      if (cErr) throw cErr;
+      
+      const { data, error } = await supabase.rpc("create_online_booking" as any, {
+        p_company_id: company.id,
+        p_client_name: name.trim(),
+        p_client_phone: phoneNorm,
+        p_client_email: email.trim() || null,
+        p_service_ids: selectedServices.map((s) => s.id),
+        p_professional_id: professional?.id ?? null,
+        p_start_time: selectedTime,
+        p_notes: notes.trim() || null,
+      });
 
-      let currentStart = selectedTime;
-      for (const s of selectedServices) {
-        const duration = s.duration_minutes ?? 60;
-        const currentEnd = new Date(new Date(currentStart).getTime() + duration * 60 * 1000).toISOString();
-
-        const { error: aErr } = await supabase.from("appointments").insert({
-          company_id: company.id,
-          client_id: client.id,
-          service_id: s.id,
-          professional_id: professional?.id ?? null,
-          start_datetime: currentStart,
-          end_datetime: currentEnd,
-          price: s.price,
-          status: "SCHEDULED",
-          source: "ONLINE",
-          notes: notes.trim() || null,
-        });
-        if (aErr) throw aErr;
-        currentStart = currentEnd;
-      }
+      if (error) throw error;
 
       setConfirmation({ when: new Date(selectedTime) });
       setStep("done");
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      toast.error("Não foi possível agendar. Tente outro horário.");
+      toast.error(e?.message || "Não foi possível agendar. Tente outro horário.");
     } finally {
       setSubmitting(false);
     }
@@ -265,14 +246,29 @@ function BookingPage() {
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30">
       <header className="border-b bg-card/70 backdrop-blur sticky top-0 z-10">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center gap-3">
+          {step !== "service" && step !== "done" && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 -ml-1 rounded-full text-muted-foreground hover:text-foreground flex-shrink-0"
+              onClick={() => {
+                if (step === "professional") setStep("service");
+                else if (step === "time") setStep(professionals.length > 0 ? "professional" : "service");
+                else if (step === "info") setStep("time");
+              }}
+            >
+              <ChevronLeft className="h-5 w-5" />
+              <span className="sr-only">Voltar</span>
+            </Button>
+          )}
           {company.logo_url ? (
             <img
               src={company.logo_url}
               alt={company.name}
-              className="h-10 w-10 rounded-lg object-cover"
+              className="h-10 w-10 rounded-lg object-cover flex-shrink-0"
             />
           ) : (
-            <div className="h-10 w-10 rounded-lg gradient-primary grid place-items-center text-primary-foreground">
+            <div className="h-10 w-10 rounded-lg gradient-primary grid place-items-center text-primary-foreground flex-shrink-0">
               <Sparkles className="h-5 w-5" />
             </div>
           )}
@@ -618,12 +614,14 @@ function BookingPage() {
 
 function BackBtn({ onClick }: { onClick: () => void }) {
   return (
-    <button
+    <Button
+      variant="ghost"
+      size="sm"
       onClick={onClick}
-      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-3"
+      className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4 -ml-2 h-8"
     >
-      <ChevronLeft className="h-3 w-3" /> Voltar
-    </button>
+      <ChevronLeft className="h-4 w-4" /> Voltar ao passo anterior
+    </Button>
   );
 }
 
