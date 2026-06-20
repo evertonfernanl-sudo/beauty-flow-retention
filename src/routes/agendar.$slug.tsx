@@ -223,14 +223,16 @@ function BookingPage() {
       const phoneNorm = toStoragePhone(phone) ?? phone;
       
       const { data, error } = await supabase.rpc("create_online_booking" as any, {
-        p_company_id: company.id,
-        p_client_name: name.trim(),
-        p_client_phone: phoneNorm,
-        p_client_email: email.trim() || null,
-        p_service_ids: selectedServices.map((s) => s.id),
-        p_professional_id: professional?.id ?? null,
-        p_start_time: selectedTime,
-        p_notes: notes.trim() || null,
+        p_data: {
+          p_company_id: company.id,
+          p_client_name: name.trim(),
+          p_client_phone: phoneNorm,
+          p_client_email: email.trim() || null,
+          p_service_ids: selectedServices.map((s) => s.id),
+          p_professional_id: professional?.id ?? null,
+          p_start_time: selectedTime,
+          p_notes: notes.trim() || null,
+        }
       });
 
       if (error) throw error;
