@@ -463,17 +463,51 @@ function UsersTab({
     enabled: !!companyId,
     queryKey: ["members", companyId],
     queryFn: async () => {
-      const { data: roles } = await supabase
+      let rolesRes = await supabase
         .from("user_roles")
         .select("user_id, role, permissions")
         .eq("company_id", companyId!);
+
+      if (rolesRes.error) {
+        rolesRes = await supabase
+          .from("user_roles")
+          .select("user_id, role")
+          .eq("company_id", companyId!);
+      }
+
+      const roles = rolesRes.data;
       if (!roles?.length) return [];
       const ids = roles.map((r) => r.user_id);
-      const { data: profs } = await supabase
-        .from("profiles")
-        .select("id, name, email")
-        .in("id", ids);
-      return roles.map((r) => ({ ...r, profile: profs?.find((p) => p.id === r.user_id) }));
+      
+      const [profsRes, companyRes] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("id, name, email")
+          .in("id", ids),
+        supabase
+          .from("companies")
+          .select("email")
+          .eq("id", companyId!)
+          .maybeSingle()
+      ]);
+
+      const profs = profsRes.data;
+      const companyEmail = companyRes.data?.email;
+
+      return roles.map((r) => {
+        const profile = profs?.find((p) => p.id === r.user_id);
+        let finalRole = r.role;
+        
+        if (companyEmail && profile?.email?.toLowerCase() === companyEmail.toLowerCase()) {
+          finalRole = "owner";
+        }
+
+        return { 
+          ...r, 
+          role: finalRole,
+          profile 
+        };
+      });
     },
   });
 

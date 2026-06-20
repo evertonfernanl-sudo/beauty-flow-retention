@@ -124,7 +124,23 @@ export const deleteCompanyMember = createServerFn({ method: "POST" })
       throw new Error("O usuário não pertence a sua empresa.");
     }
 
-    if (targetRoleRow.role === "owner") {
+    const { data: companyRow } = await supabaseAdmin
+      .from("companies")
+      .select("email")
+      .eq("id", companyId)
+      .maybeSingle();
+
+    const { data: targetProfile } = await supabaseAdmin
+      .from("profiles")
+      .select("email")
+      .eq("id", data.targetUserId)
+      .maybeSingle();
+
+    const isTargetOwner = 
+      targetRoleRow.role === "owner" || 
+      (companyRow?.email && targetProfile?.email?.toLowerCase() === companyRow.email.toLowerCase());
+
+    if (isTargetOwner) {
       throw new Error("O proprietário da empresa não pode ser excluído.");
     }
 
@@ -188,7 +204,23 @@ export const updateUserPermissions = createServerFn({ method: "POST" })
       throw new Error("O usuário não pertence a sua empresa.");
     }
 
-    if (targetRoleRow.role === "owner") {
+    const { data: companyRow } = await supabaseAdmin
+      .from("companies")
+      .select("email")
+      .eq("id", companyId)
+      .maybeSingle();
+
+    const { data: targetProfile } = await supabaseAdmin
+      .from("profiles")
+      .select("email")
+      .eq("id", data.targetUserId)
+      .maybeSingle();
+
+    const isTargetOwner = 
+      targetRoleRow.role === "owner" || 
+      (companyRow?.email && targetProfile?.email?.toLowerCase() === companyRow.email.toLowerCase());
+
+    if (isTargetOwner) {
       throw new Error("As permissões do proprietário não podem ser alteradas.");
     }
 

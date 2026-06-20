@@ -19,6 +19,7 @@ export type CurrentProfile = {
     vertical: "BEAUTY" | "SALES" | "GYM";
     whatsapp: string | null;
     whatsapp_template: string | null;
+    email: string | null;
   } | null;
   role: "owner" | "admin" | "employee" | null;
   permissions: Record<string, boolean> | null;
@@ -45,12 +46,12 @@ export function useCurrentProfile() {
       if (profile?.company_id) {
         const { data: companyRow } = await supabase
           .from("companies")
-          .select("id, name, plan, onboarding_completed, vertical, whatsapp, whatsapp_template")
+          .select("id, name, plan, onboarding_completed, vertical, whatsapp, whatsapp_template, email")
           .eq("id", profile.company_id)
           .maybeSingle();
         company = (companyRow as CurrentProfile["company"]) ?? null;
 
-        const { data: roleRow } = await supabase
+        let roleRowRes = await supabase
           .from("user_roles")
           .select("role, permissions")
           .eq("user_id", user.id)
@@ -58,8 +59,26 @@ export function useCurrentProfile() {
           .order("role", { ascending: true })
           .limit(1)
           .maybeSingle();
+
+        if (roleRowRes.error) {
+          roleRowRes = await supabase
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", user.id)
+            .eq("company_id", profile.company_id)
+            .order("role", { ascending: true })
+            .limit(1)
+            .maybeSingle();
+        }
+
+        const roleRow = roleRowRes.data;
         role = (roleRow?.role as CurrentProfile["role"]) ?? null;
-        permissions = (roleRow?.permissions as CurrentProfile["permissions"]) ?? null;
+        permissions = ((roleRow as any)?.permissions as CurrentProfile["permissions"]) ?? null;
+
+        // Force 'owner' role if user's email matches the company's email
+        if (companyRow?.email && user.email?.toLowerCase() === companyRow.email.toLowerCase()) {
+          role = "owner";
+        }
       }
 
       return {
