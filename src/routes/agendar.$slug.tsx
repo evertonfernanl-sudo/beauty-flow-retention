@@ -52,6 +52,9 @@ export const Route = createFileRoute("/agendar/$slug")({
         <p className="text-sm text-muted-foreground mt-2">
           Esse link de agendamento não existe ou foi desativado.
         </p>
+        <Button className="mt-4" onClick={() => window.history.back()}>
+          Voltar para a página anterior
+        </Button>
       </div>
     </div>
   ),
