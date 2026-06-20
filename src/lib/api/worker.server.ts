@@ -167,15 +167,15 @@ async function runCampaignRecord(
 
 // ===================== SIE: import.parse =====================
 const HEADER_MAP: Record<string, RegExp> = {
-  name: /^(nome|name|cliente|client|customer|contato|first\s+name|given\s+name|nome\s+pr\S+prio|nome\s+proprio)$/i,
+  name: /^(cliente|nome|name|client|customer|contato|first\s+name|given\s+name|nome\s+pr\S+prio|nome\s+proprio)$/i,
   phone:
-    /^(telefone|fone|phone|whatsapp|celular|cel|phone\s+1(\s*-\s*value)?|telefone\s+1(\s*-\s*valor)?)$/i,
-  phone2: /^(phone\s+2(\s*-\s*value)?|telefone\s+2(\s*-\s*valor)?)$/i,
+    /^(telefone\s+1|telefone|fone|phone|whatsapp|celular|cel|phone\s+1(\s*-\s*value)?|telefone\s+1(\s*-\s*valor)?)$/i,
+  phone2: /^(telefone\s+2|phone\s+2(\s*-\s*value)?|telefone\s+2(\s*-\s*valor)?)$/i,
   email: /^(e-?mail|email)$/i,
   amount: /^(valor|amount|preco|preço|price|total|vlr|valor\s*\(r\$\)|valor\s*r\$|quantia)$/i,
   date: /^(data|date|dt|dia|quando|occurred|venda|atendimento|data\s+do\s+lan\S+amento|data\s+lan\S+amento)$/i,
   description:
-    /^(descricao|descrição|description|hist[óo]rico|lan[cç]amento|memo|complemento|hist[óo]rico\s+complementar|obs|observa|servi[cç]o|produto|hist[óo]rico\s*\/?\s*descri\S+ao|descri\S+ao\s+do\s+lan\S+amento)$/i,
+    /^(descri[cç]ao|descri[cç]ão|description|hist[óo]rico|lan[cç]amento|memo|complemento|hist[óo]rico\s+complementar|obs|observa|servi[cç]o|produto|hist[óo]rico\s*\/?\s*descri\S+ao|descri\S+ao\s+do\s+lan\S+amento)$/i,
   payment: /^(pagamento|payment|metodo|método|forma)$/i,
 };
 
@@ -385,6 +385,12 @@ async function runImportParse(
     .eq("active", true);
   const activeServices = (servicesData ?? []) as Array<{ id: string; name: string; price: number }>;
 
+  const { data: clientsData } = await admin
+    .from("clients")
+    .select("id, name")
+    .eq("company_id", job.company_id);
+  const companyClients = (clientsData ?? []) as Array<{ id: string; name: string }>;
+
   const { data: imp, error: impErr } = await admin
     .from("imports")
     .select("id, source, storage_path, company_id")
@@ -406,7 +412,16 @@ async function runImportParse(
     const parsed = Papa.parse<string[]>(text, { skipEmptyLines: true });
     const data = parsed.data as string[][];
     if (data.length === 0) throw new Error("CSV vazio");
-    headers = data[0].map((h) => String(h ?? "").trim());
+    headers = data[0].map((h) => {
+      const clean = String(h ?? "").trim();
+      const cleanLower = clean.toLowerCase();
+      if (cleanLower === "first name") return "cliente";
+      if (cleanLower === "phone 1 - value") return "telefone 1";
+      if (cleanLower === "phone 2 - value") return "telefone 2";
+      const descTitles = ["descrição", "descricao", "histórico", "historico", "lançamento", "lancamento", "memo", "complemento", "histórico complementar", "historico complementar"];
+      if (descTitles.includes(cleanLower)) return "descrição";
+      return clean;
+    });
     rows = data.slice(1).map((r) => {
       const o: Record<string, unknown> = {};
       headers.forEach((h, i) => (o[h] = r[i]));
@@ -418,7 +433,16 @@ async function runImportParse(
     const sheet = wb.Sheets[wb.SheetNames[0]];
     const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true, defval: null });
     if (aoa.length === 0) throw new Error("Planilha vazia");
-    headers = (aoa[0] as unknown[]).map((h) => String(h ?? "").trim());
+    headers = (aoa[0] as unknown[]).map((h) => {
+      const clean = String(h ?? "").trim();
+      const cleanLower = clean.toLowerCase();
+      if (cleanLower === "first name") return "cliente";
+      if (cleanLower === "phone 1 - value") return "telefone 1";
+      if (cleanLower === "phone 2 - value") return "telefone 2";
+      const descTitles = ["descrição", "descricao", "histórico", "historico", "lançamento", "lancamento", "memo", "complemento", "histórico complementar", "historico complementar"];
+      if (descTitles.includes(cleanLower)) return "descrição";
+      return clean;
+    });
     rows = aoa.slice(1).map((r) => {
       const o: Record<string, unknown> = {};
       headers.forEach((h, i) => (o[h] = (r as unknown[])[i]));
@@ -432,9 +456,20 @@ async function runImportParse(
     const fullText = Array.isArray(text) ? text.join("\n") : String(text ?? "");
     if (!fullText.trim()) throw new Error("PDF sem texto extraível (pode ser escaneado).");
     const parsed = parsePdfTextToRows(fullText);
-    headers = parsed.headers;
-    rows = parsed.rows;
-    if (rows.length === 0) throw new Error("Nenhuma linha reconhecida no PDF.");
+    headers = parsed.headers.map((h) => {
+      const clean = String(h ?? "").trim();
+      const cleanLower = clean.toLowerCase();
+      if (cleanLower === "descricao") return "descrição";
+      return clean;
+    });
+    rows = parsed.rows.map((r) => {
+      const o: Record<string, unknown> = {};
+      headers.forEach((h, i) => {
+        const origKey = parsed.headers[i];
+        o[h] = r[origKey];
+      });
+      return o;
+    });
   } else {
     throw new Error(`Fonte não suportada nesta fase: ${imp.source}`);
   }
@@ -462,6 +497,41 @@ async function runImportParse(
       detectPaymentMethod(description);
 
     let name = nameFromCol;
+    let clientId: string | null = null;
+    let clientFound = false;
+
+    // Search description content to find the client name from the database (Brazilian bank statement match style)
+    if (!name && description && companyClients.length > 0) {
+      const descLower = description.toLowerCase();
+      const sortedClients = [...companyClients].sort((a, b) => b.name.length - a.name.length);
+      for (const client of sortedClients) {
+        const clientNameLower = client.name.toLowerCase().trim();
+        if (clientNameLower.length >= 4 && descLower.includes(clientNameLower)) {
+          name = client.name;
+          clientId = client.id;
+          clientFound = true;
+          break;
+        }
+      }
+    }
+
+    if (!clientFound && (name || phoneRaw)) {
+      const { data: dup } = await admin.rpc("find_duplicate_client", {
+        _company_id: job.company_id,
+        _name: name || "",
+        _phone: phoneRaw || "",
+        _threshold: 0.7,
+      });
+      const first = Array.isArray(dup) ? dup[0] : null;
+      if (first) {
+        clientId = first.id;
+        clientFound = true;
+        if (!name) {
+          name = first.name;
+        }
+      }
+    }
+
     if (!name && description) {
       const extracted = extractNameFromDescription(description);
       if (extracted) {
@@ -485,23 +555,6 @@ async function runImportParse(
     if (phoneRaw2) {
       const { data: p } = await admin.rpc("normalize_phone", { _phone: phoneRaw2 });
       phoneApi2 = (p as string | null) ?? null;
-    }
-
-    // Identity resolution
-    let clientId: string | null = null;
-    let clientFound = false;
-    if (!isExpense && (name || phoneRaw)) {
-      const { data: dup } = await admin.rpc("find_duplicate_client", {
-        _company_id: job.company_id,
-        _name: name || "",
-        _phone: phoneRaw || "",
-        _threshold: 0.7,
-      });
-      const first = Array.isArray(dup) ? dup[0] : null;
-      if (first) {
-        clientId = first.id;
-        clientFound = true;
-      }
     }
 
     // Offering prediction
@@ -579,11 +632,18 @@ async function runImportParse(
     if (status === "matched") matched++;
     else if (status === "review") review++;
 
+    // Retain only mapped columns for raw data
+    const cleanRaw: Record<string, unknown> = {};
+    for (const [key, index] of Object.entries(cols)) {
+      const hName = headers[index];
+      cleanRaw[hName] = r[hName];
+    }
+
     const { error: rowErr } = await admin.from("import_rows").insert({
       import_id,
       company_id: job.company_id,
       row_index: i,
-      raw: r as never,
+      raw: cleanRaw as never,
       parsed: {
         name,
         phoneRaw: phoneRaw1,
