@@ -166,10 +166,40 @@ function Fila({ companyId }: { companyId: string }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<QueueRow | null>(null);
 
-  const list = useQuery({
-    queryKey: ["mie", "queue", companyId],
+  const { data: profile } = useCurrentProfile();
+  const shouldRestrictRecurrence = profile?.role === "employee" && !profile?.permissions?.view_all_recurrence;
+
+  const { data: myProfessional } = useQuery({
+    enabled: !!companyId && shouldRestrictRecurrence && !!profile,
+    queryKey: ["my-professional-mensageria-fila", profile?.userId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("professionals")
+        .select("id, name")
+        .eq("user_id", profile!.userId)
+        .maybeSingle();
+      return data;
+    },
+  });
+
+  const { data: restrictedClientIds } = useQuery({
+    enabled: !!companyId && shouldRestrictRecurrence && !!myProfessional?.id,
+    queryKey: ["my-served-clients-mensageria-fila", myProfessional?.id],
     queryFn: async () => {
       const { data, error } = await supabase
+        .from("appointments")
+        .select("client_id")
+        .eq("professional_id", myProfessional!.id);
+      if (error) throw error;
+      return Array.from(new Set(data.map((d) => d.client_id).filter(Boolean)));
+    },
+  });
+
+  const list = useQuery({
+    queryKey: ["mie", "queue", companyId, shouldRestrictRecurrence, restrictedClientIds],
+    enabled: !!companyId && (!shouldRestrictRecurrence || restrictedClientIds !== undefined),
+    queryFn: async () => {
+      let q = supabase
         .from("message_queue")
         .select(
           "id, client_id, type, priority, offset_days, scheduled_at, rendered_body, status, template_id, clients(id,name,phone)",
@@ -177,8 +207,16 @@ function Fila({ companyId }: { companyId: string }) {
         .eq("company_id", companyId)
         .in("status", ["READY", "PENDING", "SENT"])
         .order("priority", { ascending: false })
-        .order("scheduled_at", { ascending: true })
-        .limit(300);
+        .order("scheduled_at", { ascending: true });
+
+      if (shouldRestrictRecurrence) {
+        if (!restrictedClientIds || restrictedClientIds.length === 0) {
+          return [];
+        }
+        q = q.in("client_id", restrictedClientIds);
+      }
+
+      const { data, error } = await q.limit(300);
       if (error) throw error;
       return (data ?? []) as unknown as QueueRow[];
     },
@@ -596,22 +634,64 @@ function TemplateDialog({
 function Dashboard({ companyId, plan }: { companyId: string; plan: string }) {
   const limit = PLAN_LIMIT[plan] ?? 500;
 
+  const { data: profile } = useCurrentProfile();
+  const shouldRestrictRecurrence = profile?.role === "employee" && !profile?.permissions?.view_all_recurrence;
+
+  const { data: myProfessional } = useQuery({
+    enabled: !!companyId && shouldRestrictRecurrence && !!profile,
+    queryKey: ["my-professional-mensageria-dash", profile?.userId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("professionals")
+        .select("id, name")
+        .eq("user_id", profile!.userId)
+        .maybeSingle();
+      return data;
+    },
+  });
+
+  const { data: restrictedClientIds } = useQuery({
+    enabled: !!companyId && shouldRestrictRecurrence && !!myProfessional?.id,
+    queryKey: ["my-served-clients-mensageria-dash", myProfessional?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("appointments")
+        .select("client_id")
+        .eq("professional_id", myProfessional!.id);
+      if (error) throw error;
+      return Array.from(new Set(data.map((d) => d.client_id).filter(Boolean)));
+    },
+  });
+
   const stats = useQuery({
-    queryKey: ["mie", "dashboard", companyId],
+    queryKey: ["mie", "dashboard", companyId, shouldRestrictRecurrence, restrictedClientIds],
+    enabled: !!companyId && (!shouldRestrictRecurrence || restrictedClientIds !== undefined),
     queryFn: async () => {
       const startMonth = new Date();
       startMonth.setDate(1);
       startMonth.setHours(0, 0, 0, 0);
-      const { data: logs } = await supabase
+
+      let logsQuery = supabase
         .from("message_logs")
-        .select("event, template_id, created_at")
+        .select("event, template_id, created_at, client_id")
         .eq("company_id", companyId)
         .gte("created_at", startMonth.toISOString());
 
-      const { data: queue } = await supabase
+      let queueQuery = supabase
         .from("message_queue")
-        .select("status, recovered_value, template_id")
+        .select("status, recovered_value, template_id, client_id")
         .eq("company_id", companyId);
+
+      if (shouldRestrictRecurrence) {
+        if (!restrictedClientIds || restrictedClientIds.length === 0) {
+          return { logs: [], queue: [] };
+        }
+        logsQuery = logsQuery.in("client_id", restrictedClientIds);
+        queueQuery = queueQuery.in("client_id", restrictedClientIds);
+      }
+
+      const { data: logs } = await logsQuery;
+      const { data: queue } = await queueQuery;
 
       return { logs: logs ?? [], queue: queue ?? [] };
     },

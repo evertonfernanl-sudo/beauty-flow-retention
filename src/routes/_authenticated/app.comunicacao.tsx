@@ -299,6 +299,34 @@ function CampaignsPanel() {
   const [templateId, setTemplateId] = useState<string>("");
   const [body, setBody] = useState("");
 
+  const shouldRestrictRecurrence = profile?.role === "employee" && !profile?.permissions?.view_all_recurrence;
+
+  const { data: myProfessional } = useQuery({
+    enabled: !!companyId && shouldRestrictRecurrence,
+    queryKey: ["my-professional-campaigns", profile?.userId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("professionals")
+        .select("id, name")
+        .eq("user_id", profile!.userId)
+        .maybeSingle();
+      return data;
+    },
+  });
+
+  const { data: restrictedClientIds } = useQuery({
+    enabled: !!companyId && shouldRestrictRecurrence && !!myProfessional?.id,
+    queryKey: ["my-served-clients-campaigns", myProfessional?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("appointments")
+        .select("client_id")
+        .eq("professional_id", myProfessional!.id);
+      if (error) throw error;
+      return Array.from(new Set(data.map((d) => d.client_id).filter(Boolean)));
+    },
+  });
+
   const templatesQ = useQuery({
     queryKey: ["msg-templates", companyId],
     enabled: !!companyId,
@@ -312,14 +340,21 @@ function CampaignsPanel() {
   });
 
   const clientsQ = useQuery({
-    queryKey: ["campaign-clients", companyId, segment],
-    enabled: !!companyId,
+    queryKey: ["campaign-clients", companyId, segment, shouldRestrictRecurrence, restrictedClientIds],
+    enabled: !!companyId && (!shouldRestrictRecurrence || restrictedClientIds !== undefined),
     queryFn: async () => {
       let query = supabase
         .from("clients")
         .select("id,name,phone,status")
         .eq("company_id", companyId!)
         .not("phone", "is", null);
+
+      if (shouldRestrictRecurrence) {
+        if (!restrictedClientIds || restrictedClientIds.length === 0) {
+          return [];
+        }
+        query = query.in("id", restrictedClientIds);
+      }
 
       if (segment === "ACTIVE") query = query.eq("status", "ACTIVE");
       else if (segment === "LOST") query = query.eq("status", "LOST");
@@ -331,12 +366,19 @@ function CampaignsPanel() {
       if (segment === "AT_RISK" || segment === "RETURN_DUE") {
         const classes: ("ATTENTION" | "AT_RISK" | "LATE" | "LOST" | "ON_TIME")[] =
           segment === "AT_RISK" ? ["AT_RISK", "LATE"] : ["ON_TIME", "ATTENTION", "LATE"];
-        const { data: ops } = await supabase
+
+        let opsQuery = supabase
           .from("recovery_opportunities")
           .select("client_id")
           .eq("company_id", companyId!)
           .in("status", ["OPEN", "IN_CONTACT"])
           .in("classification", classes);
+
+        if (shouldRestrictRecurrence && restrictedClientIds) {
+          opsQuery = opsQuery.in("client_id", restrictedClientIds);
+        }
+
+        const { data: ops } = await opsQuery;
         const ids = new Set((ops ?? []).map((o) => o.client_id));
         rows = rows.filter((r) => ids.has(r.id));
       }

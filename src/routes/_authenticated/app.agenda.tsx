@@ -73,6 +73,7 @@ function AgendaPage() {
   const [open, setOpen] = useState(false);
 
   const isEmployee = profile?.role === "employee";
+  const shouldRestrictAgenda = isEmployee && !profile?.permissions?.view_other_professionals_agenda;
 
   const { data: myProfessional } = useQuery({
     enabled: !!companyId && isEmployee,
@@ -104,14 +105,14 @@ function AgendaPage() {
   const { start, end, label } = useMemo(() => rangeFor(view, cursor), [view, cursor]);
 
   const list = useQuery({
-    enabled: !!companyId && (!isEmployee || !!myProfessional),
+    enabled: !!companyId && (!shouldRestrictAgenda || !!myProfessional),
     queryKey: [
       "appointments",
       companyId,
       view,
       start.toISOString(),
       statusFilter,
-      isEmployee,
+      shouldRestrictAgenda,
       myProfessional?.id,
     ],
     queryFn: async () => {
@@ -125,7 +126,7 @@ function AgendaPage() {
         .lt("start_datetime", end.toISOString())
         .order("start_datetime");
       if (statusFilter !== "ALL") q = q.eq("status", statusFilter);
-      if (isEmployee && myProfessional) {
+      if (shouldRestrictAgenda && myProfessional) {
         q = q.eq("professional_id", myProfessional.id);
       }
       const { data, error } = await q;
@@ -196,7 +197,7 @@ function AgendaPage() {
       company_id: companyId,
       client_id: values.client_id,
       service_id: values.service_id,
-      professional_id: isEmployee ? (myProfessional?.id ?? null) : values.professional_id || null,
+      professional_id: shouldRestrictAgenda ? (myProfessional?.id ?? null) : values.professional_id || null,
       start_datetime: startDt.toISOString(),
       end_datetime: endDt.toISOString(),
       price: values.price ?? Number(svc.price ?? 0),
@@ -297,7 +298,7 @@ function AgendaPage() {
                   form={form}
                   options={(clients.data ?? []).map((c: any) => ({ value: c.id, label: c.name }))}
                 />
-                {!isEmployee && (
+                {!shouldRestrictAgenda && (
                   <FormSelectField
                     label="Profissional"
                     name="professional_id"
@@ -319,7 +320,7 @@ function AgendaPage() {
                 />
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
-                    <Label>Data</Label>
+                     <Label>Data</Label>
                     <Input type="date" {...form.register("date")} />
                   </div>
                   <div className="space-y-2">
@@ -395,7 +396,7 @@ function AgendaPage() {
             }
             services={services.data ?? []}
             professionals={professionals.data ?? []}
-            isEmployee={isEmployee}
+            shouldRestrictAgenda={shouldRestrictAgenda}
             myProfessional={myProfessional}
           />
         )}
@@ -412,7 +413,7 @@ function GroupedList({
   onChanged,
   services,
   professionals,
-  isEmployee,
+  shouldRestrictAgenda,
   myProfessional,
 }: {
   items: any[];
@@ -422,7 +423,7 @@ function GroupedList({
   onChanged: () => void;
   services: any[];
   professionals: any[];
-  isEmployee: boolean;
+  shouldRestrictAgenda: boolean;
   myProfessional: any;
 }) {
   if (view === "day") {
@@ -437,7 +438,7 @@ function GroupedList({
             onChanged={onChanged}
             services={services}
             professionals={professionals}
-            isEmployee={isEmployee}
+            shouldRestrictAgenda={shouldRestrictAgenda}
             myProfessional={myProfessional}
           />
         ))}
@@ -471,7 +472,7 @@ function GroupedList({
                 onChanged={onChanged}
                 services={services}
                 professionals={professionals}
-                isEmployee={isEmployee}
+                shouldRestrictAgenda={shouldRestrictAgenda}
                 myProfessional={myProfessional}
               />
             ))}
@@ -489,7 +490,7 @@ function AppointmentRow({
   onChanged,
   services,
   professionals,
-  isEmployee,
+  shouldRestrictAgenda,
   myProfessional,
 }: {
   a: any;
@@ -498,7 +499,7 @@ function AppointmentRow({
   onChanged: () => void;
   services: any[];
   professionals: any[];
-  isEmployee: boolean;
+  shouldRestrictAgenda: boolean;
   myProfessional: any;
 }) {
   return (
@@ -552,7 +553,7 @@ function AppointmentRow({
               a={a}
               services={services}
               professionals={professionals}
-              isEmployee={isEmployee}
+              shouldRestrictAgenda={shouldRestrictAgenda}
               myProfessional={myProfessional}
               onChanged={onChanged}
             />
@@ -568,14 +569,14 @@ function EditAppointment({
   a,
   services,
   professionals,
-  isEmployee,
+  shouldRestrictAgenda,
   myProfessional,
   onChanged,
 }: {
   a: any;
   services: any[];
   professionals: any[];
-  isEmployee: boolean;
+  shouldRestrictAgenda: boolean;
   myProfessional: any;
   onChanged: () => void;
 }) {
@@ -591,7 +592,7 @@ function EditAppointment({
     const svc = services.find((s) => s.id === serviceId);
     const startDt = new Date(`${date}T${time}:00`);
     const endDt = new Date(startDt.getTime() + (svc?.duration_minutes ?? 60) * 60_000);
-    const finalProfId = isEmployee
+    const finalProfId = shouldRestrictAgenda
       ? (myProfessional?.id ?? null)
       : professionalId === "none" || !professionalId
         ? null
@@ -643,7 +644,7 @@ function EditAppointment({
               </SelectContent>
             </Select>
           </div>
-          {!isEmployee && (
+          {!shouldRestrictAgenda && (
             <div className="space-y-2">
               <Label>Profissional</Label>
               <Select value={professionalId || "none"} onValueChange={setProfessionalId}>

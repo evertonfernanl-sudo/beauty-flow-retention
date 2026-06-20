@@ -71,7 +71,7 @@ import {
   MoreVertical,
   Loader2,
 } from "lucide-react";
-import { createProfessionalUser, deleteCompanyMember } from "@/lib/api/users.functions";
+import { createProfessionalUser, deleteCompanyMember, updateUserPermissions } from "@/lib/api/users.functions";
 
 const settingsSearchSchema = z.object({
   tab: z.string().optional().catch("company"),
@@ -429,8 +429,24 @@ function UsersTab({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<"admin" | "employee">("employee");
+  const [permissions, setPermissions] = useState<Record<string, boolean>>({
+    view_dashboard: false,
+    view_clients: false,
+    view_financial: false,
+    view_imports: false,
+    view_settings: false,
+    view_other_professionals_agenda: false,
+    view_all_recurrence: false,
+  });
+
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Edit Permissions Dialog state
+  const [editUser, setEditUser] = useState<any>(null);
+  const [editPermissionsOpen, setEditPermissionsOpen] = useState(false);
+  const [editPermissions, setEditPermissions] = useState<Record<string, boolean>>({});
+  const [updatingPermissions, setUpdatingPermissions] = useState(false);
 
   // Credentials dialog state
   const [credsModalOpen, setCredsModalOpen] = useState(false);
@@ -449,7 +465,7 @@ function UsersTab({
     queryFn: async () => {
       const { data: roles } = await supabase
         .from("user_roles")
-        .select("user_id, role")
+        .select("user_id, role, permissions")
         .eq("company_id", companyId!);
       if (!roles?.length) return [];
       const ids = roles.map((r) => r.user_id);
@@ -482,6 +498,7 @@ function UsersTab({
           email: email.trim(),
           password: password,
           role: role,
+          permissions: role === "employee" ? permissions : {},
         },
       });
 
@@ -504,6 +521,15 @@ function UsersTab({
       setEmail("");
       setPassword("");
       setRole("employee");
+      setPermissions({
+        view_dashboard: false,
+        view_clients: false,
+        view_financial: false,
+        view_imports: false,
+        view_settings: false,
+        view_other_professionals_agenda: false,
+        view_all_recurrence: false,
+      });
       setOpen(false);
 
       qc.invalidateQueries({ queryKey: ["members", companyId] });
@@ -534,6 +560,26 @@ function UsersTab({
     }
   }
 
+  async function handleUpdatePermissions() {
+    if (!editUser) return;
+    setUpdatingPermissions(true);
+    try {
+      await updateUserPermissions({
+        data: {
+          targetUserId: editUser.user_id,
+          permissions: editPermissions,
+        },
+      });
+      toast.success("Permissões atualizadas com sucesso!");
+      setEditPermissionsOpen(false);
+      qc.invalidateQueries({ queryKey: ["members", companyId] });
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao atualizar permissões.");
+    } finally {
+      setUpdatingPermissions(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <Card className="p-5 shadow-soft">
@@ -551,7 +597,7 @@ function UsersTab({
                   <Plus className="h-3.5 w-3.5 mr-1.5" /> Criar Usuário
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="max-w-md max-h-[90dvh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Criar usuário do profissional</DialogTitle>
                 </DialogHeader>
@@ -590,7 +636,7 @@ function UsersTab({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="employee">
-                          Profissional (employee) · Apenas própria agenda
+                          Profissional (employee) · Acesso Personalizado
                         </SelectItem>
                         <SelectItem value="admin">
                           Administrador (admin) · Operação completa
@@ -598,6 +644,39 @@ function UsersTab({
                       </SelectContent>
                     </Select>
                   </Field>
+
+                  {role === "employee" && (
+                    <div className="space-y-3 pt-2 border-t mt-2">
+                      <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                        Permissões adicionais (Por padrão, tudo bloqueado)
+                      </Label>
+                      <div className="space-y-2 border rounded-lg p-3 bg-muted/30">
+                        {Object.entries({
+                          view_dashboard: "Visão Geral (Dashboard)",
+                          view_clients: "Clientes",
+                          view_financial: "Financeiro",
+                          view_imports: "Importar Dados",
+                          view_settings: "Configurações",
+                          view_other_professionals_agenda: "Ver agenda de outros profissionais",
+                          view_all_recurrence: "Ver todos os clientes na recorrência",
+                        }).map(([key, label]) => (
+                          <div key={key} className="flex items-center justify-between">
+                            <Label htmlFor={`create-${key}`} className="text-xs font-medium cursor-pointer flex-1 py-1">
+                              {label}
+                            </Label>
+                            <Switch
+                              id={`create-${key}`}
+                              checked={!!permissions[key]}
+                              onCheckedChange={(checked) =>
+                                setPermissions((prev) => ({ ...prev, [key]: checked }))
+                              }
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <DialogFooter className="pt-2">
                     <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                       Cancelar
@@ -637,6 +716,31 @@ function UsersTab({
                 >
                   {m.role}
                 </Badge>
+                {canManage && m.role === "employee" && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="text-primary hover:bg-primary/10 h-8 w-8 mr-1"
+                    onClick={() => {
+                      setEditUser(m);
+                      setEditPermissions(
+                        m.permissions ?? {
+                          view_dashboard: false,
+                          view_clients: false,
+                          view_financial: false,
+                          view_imports: false,
+                          view_settings: false,
+                          view_other_professionals_agenda: false,
+                          view_all_recurrence: false,
+                        }
+                      );
+                      setEditPermissionsOpen(true);
+                    }}
+                    title="Editar Permissões"
+                  >
+                    <ShieldCheck className="h-4 w-4" />
+                  </Button>
+                )}
                 {canManage && m.user_id !== currentProfile?.userId && m.role !== "owner" && (
                   <Button
                     size="icon"
@@ -658,6 +762,53 @@ function UsersTab({
           </ul>
         )}
       </Card>
+
+      {/* Edit Permissions Dialog */}
+      <Dialog open={editPermissionsOpen} onOpenChange={setEditPermissionsOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar permissões de {editUser?.profile?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-xs text-muted-foreground">
+              Ative ou desative as telas e recursos que este profissional pode acessar.
+            </p>
+            <div className="space-y-3.5 border rounded-lg p-4 bg-muted/20">
+              {Object.entries({
+                view_dashboard: "Visão Geral (Dashboard)",
+                view_clients: "Clientes",
+                view_financial: "Financeiro",
+                view_imports: "Importar Dados",
+                view_settings: "Configurações",
+                view_other_professionals_agenda: "Ver agenda de outros profissionais",
+                view_all_recurrence: "Ver todos os clientes na recorrência",
+              }).map(([key, label]) => (
+                <div key={key} className="flex items-center justify-between">
+                  <Label htmlFor={`edit-${key}`} className="text-sm font-medium leading-none cursor-pointer flex-1 py-1">
+                    {label}
+                  </Label>
+                  <Switch
+                    id={`edit-${key}`}
+                    checked={!!editPermissions[key]}
+                    onCheckedChange={(checked) =>
+                      setEditPermissions((prev) => ({ ...prev, [key]: checked }))
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditPermissionsOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleUpdatePermissions} disabled={updatingPermissions}>
+              {updatingPermissions && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Salvar Permissões
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Credentials Presentation Modal */}
       <Dialog open={credsModalOpen} onOpenChange={setCredsModalOpen}>

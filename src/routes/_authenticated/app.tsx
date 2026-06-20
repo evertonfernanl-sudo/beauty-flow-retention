@@ -63,11 +63,40 @@ function AppShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [moreOpen, setMoreOpen] = useState(false);
 
+  const isAllowed = (itemTo: string) => {
+    if (!profile) return false;
+    if (profile.role === "owner" || profile.role === "admin") return true;
+    if (itemTo === "/app") return !!profile.permissions?.view_dashboard;
+    if (itemTo === "/app/clients") return !!profile.permissions?.view_clients;
+    if (itemTo === "/app/financial") return !!profile.permissions?.view_financial;
+    if (itemTo === "/app/sie") return !!profile.permissions?.view_imports;
+    if (itemTo === "/app/settings") return !!profile.permissions?.view_settings;
+    return true; // agenda and recurrence are always allowed
+  };
+
   useEffect(() => {
-    if (!profileQuery.isLoading && profile && !profile.company?.onboarding_completed) {
-      navigate({ to: "/onboarding" });
+    if (!profileQuery.isLoading && profile) {
+      if (!profile.company?.onboarding_completed) {
+        navigate({ to: "/onboarding" });
+        return;
+      }
+
+      // Check permissions for the current path
+      let allowed = true;
+      if (profile.role === "employee") {
+        if (pathname === "/app" && !profile.permissions?.view_dashboard) allowed = false;
+        if (pathname.startsWith("/app/clients") && !profile.permissions?.view_clients) allowed = false;
+        if (pathname.startsWith("/app/financial") && !profile.permissions?.view_financial) allowed = false;
+        if (pathname.startsWith("/app/sie") && !profile.permissions?.view_imports) allowed = false;
+        if (pathname.startsWith("/app/settings") && !profile.permissions?.view_settings) allowed = false;
+      }
+
+      if (!allowed) {
+        toast.error("Acesso negado. Você não tem permissão para acessar esta tela.");
+        navigate({ to: "/app/agenda", replace: true });
+      }
     }
-  }, [profile, profileQuery.isLoading, navigate]);
+  }, [profile, profileQuery.isLoading, pathname, navigate]);
 
   async function handleSignOut() {
     await queryClient.cancelQueries();
@@ -94,6 +123,11 @@ function AppShell() {
     .join("")
     .toUpperCase();
 
+  const filteredNav = NAV.filter((item) => isAllowed(item.to));
+  const mobilePrimary = filteredNav.slice(0, 4);
+  const mobileMore = filteredNav.slice(4);
+  const columnsCount = mobilePrimary.length + (mobileMore.length > 0 ? 1 : 0);
+
   return (
     <div className="min-h-dvh bg-background">
       {/* Desktop Sidebar */}
@@ -111,7 +145,7 @@ function AppShell() {
         </div>
 
         <nav className="px-3 py-4 space-y-0.5 flex-1 overflow-y-auto">
-          {NAV.map((item) => {
+          {filteredNav.map((item) => {
             const active = item.exact ? pathname === item.to : pathname.startsWith(item.to);
             return (
               <Link
@@ -170,11 +204,13 @@ function AppShell() {
           <div className="ml-auto flex items-center gap-1.5">
             {/* Quick actions */}
             <div className="hidden sm:flex items-center gap-1.5">
-              <Button variant="outline" size="sm" asChild>
-                <Link to="/app/clients">
-                  <Plus className="h-3.5 w-3.5" /> Cliente
-                </Link>
-              </Button>
+              {isAllowed("/app/clients") && (
+                <Button variant="outline" size="sm" asChild>
+                  <Link to="/app/clients">
+                    <Plus className="h-3.5 w-3.5" /> Cliente
+                  </Link>
+                </Button>
+              )}
               <Button size="sm" className="shadow-glow" asChild>
                 <Link to="/app/agenda">
                   <Plus className="h-3.5 w-3.5" /> Agendamento
@@ -204,11 +240,13 @@ function AppShell() {
                   <p className="text-xs text-muted-foreground truncate">{profile.email}</p>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link to="/app/settings">
-                    <Settings className="h-4 w-4 mr-2" /> Configurações
-                  </Link>
-                </DropdownMenuItem>
+                {isAllowed("/app/settings") && (
+                  <DropdownMenuItem asChild>
+                    <Link to="/app/settings">
+                      <Settings className="h-4 w-4 mr-2" /> Configurações
+                    </Link>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem
                   onClick={handleSignOut}
                   className="text-destructive focus:text-destructive"
@@ -222,8 +260,13 @@ function AppShell() {
       </header>
 
       {/* Mobile bottom nav */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 border-t bg-background/95 backdrop-blur grid grid-cols-5 pb-[env(safe-area-inset-bottom)]">
-        {MOBILE_PRIMARY.map((item) => {
+      <nav
+        className="lg:hidden fixed bottom-0 inset-x-0 z-30 border-t bg-background/95 backdrop-blur grid pb-[env(safe-area-inset-bottom)]"
+        style={{
+          gridTemplateColumns: `repeat(${columnsCount}, minmax(0, 1fr))`,
+        }}
+      >
+        {mobilePrimary.map((item) => {
           const active = item.exact ? pathname === item.to : pathname.startsWith(item.to);
           return (
             <Link
@@ -238,43 +281,45 @@ function AppShell() {
             </Link>
           );
         })}
-        <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
-          <SheetTrigger className="flex flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-medium text-muted-foreground">
-            <MoreHorizontal className="h-[18px] w-[18px]" /> Mais
-          </SheetTrigger>
-          <SheetContent side="bottom" className="rounded-t-2xl">
-            <SheetHeader>
-              <SheetTitle>Mais</SheetTitle>
-            </SheetHeader>
-            <div className="grid grid-cols-3 gap-3 pt-4">
-              {NAV.slice(4).map((item) => (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  onClick={() => setMoreOpen(false)}
+        {mobileMore.length > 0 && (
+          <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
+            <SheetTrigger className="flex flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-medium text-muted-foreground">
+              <MoreHorizontal className="h-[18px] w-[18px]" /> Mais
+            </SheetTrigger>
+            <SheetContent side="bottom" className="rounded-t-2xl">
+              <SheetHeader>
+                <SheetTitle>Mais</SheetTitle>
+              </SheetHeader>
+              <div className="grid grid-cols-3 gap-3 pt-4">
+                {mobileMore.map((item) => (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    onClick={() => setMoreOpen(false)}
+                    className="flex flex-col items-center gap-2 rounded-xl border p-4 text-xs font-medium hover:bg-accent/50"
+                  >
+                    <span className="grid h-10 w-10 place-items-center rounded-lg bg-secondary text-primary">
+                      <item.icon className="h-5 w-5" />
+                    </span>
+                    {item.label}
+                  </Link>
+                ))}
+                <button
+                  onClick={() => {
+                    setMoreOpen(false);
+                    handleSignOut();
+                  }}
                   className="flex flex-col items-center gap-2 rounded-xl border p-4 text-xs font-medium hover:bg-accent/50"
                 >
-                  <span className="grid h-10 w-10 place-items-center rounded-lg bg-secondary text-primary">
-                    <item.icon className="h-5 w-5" />
+                  <span className="grid h-10 w-10 place-items-center rounded-lg bg-destructive/10 text-destructive">
+                    <LogOut className="h-5 w-5" />
                   </span>
-                  {item.label}
-                </Link>
-              ))}
-              <button
-                onClick={() => {
-                  setMoreOpen(false);
-                  handleSignOut();
-                }}
-                className="flex flex-col items-center gap-2 rounded-xl border p-4 text-xs font-medium hover:bg-accent/50"
-              >
-                <span className="grid h-10 w-10 place-items-center rounded-lg bg-destructive/10 text-destructive">
-                  <LogOut className="h-5 w-5" />
-                </span>
-                Sair
-              </button>
-            </div>
-          </SheetContent>
-        </Sheet>
+                  Sair
+                </button>
+              </div>
+            </SheetContent>
+          </Sheet>
+        )}
       </nav>
 
       <main className="lg:pl-[280px] pb-24 lg:pb-0">

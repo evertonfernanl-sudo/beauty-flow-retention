@@ -21,6 +21,7 @@ export type CurrentProfile = {
     whatsapp_template: string | null;
   } | null;
   role: "owner" | "admin" | "employee" | null;
+  permissions: Record<string, boolean> | null;
 };
 
 export function useCurrentProfile() {
@@ -39,6 +40,7 @@ export function useCurrentProfile() {
 
       let company = null;
       let role: CurrentProfile["role"] = null;
+      let permissions: CurrentProfile["permissions"] = null;
 
       if (profile?.company_id) {
         const { data: companyRow } = await supabase
@@ -50,13 +52,14 @@ export function useCurrentProfile() {
 
         const { data: roleRow } = await supabase
           .from("user_roles")
-          .select("role")
+          .select("role, permissions")
           .eq("user_id", user.id)
           .eq("company_id", profile.company_id)
           .order("role", { ascending: true })
           .limit(1)
           .maybeSingle();
         role = (roleRow?.role as CurrentProfile["role"]) ?? null;
+        permissions = (roleRow?.permissions as CurrentProfile["permissions"]) ?? null;
       }
 
       return {
@@ -65,6 +68,7 @@ export function useCurrentProfile() {
         profile: profile ?? null,
         company,
         role,
+        permissions,
       };
     },
     staleTime: 30_000,

@@ -145,11 +145,39 @@ function RecorrenciaPage() {
   const activeTab = tabs.find((t) => t.key === tab) ?? tabs[0];
   const classes = activeTab?.classes ?? ["ATTENTION", "LATE"];
 
-  const list = useQuery({
-    enabled: !!companyId,
-    queryKey: ["recorrencia", companyId, tab],
+  const shouldRestrictRecurrence = profile?.role === "employee" && !profile?.permissions?.view_all_recurrence;
+
+  const { data: myProfessional } = useQuery({
+    enabled: !!companyId && shouldRestrictRecurrence,
+    queryKey: ["my-professional-recorrencia", profile?.userId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("professionals")
+        .select("id, name")
+        .eq("user_id", profile!.userId)
+        .maybeSingle();
+      return data;
+    },
+  });
+
+  const { data: restrictedClientIds } = useQuery({
+    enabled: !!companyId && shouldRestrictRecurrence && !!myProfessional?.id,
+    queryKey: ["my-served-clients-recorrencia", myProfessional?.id],
     queryFn: async () => {
       const { data, error } = await supabase
+        .from("appointments")
+        .select("client_id")
+        .eq("professional_id", myProfessional!.id);
+      if (error) throw error;
+      return Array.from(new Set(data.map((d) => d.client_id).filter(Boolean)));
+    },
+  });
+
+  const list = useQuery({
+    enabled: !!companyId && (!shouldRestrictRecurrence || restrictedClientIds !== undefined),
+    queryKey: ["recorrencia", companyId, tab, shouldRestrictRecurrence, restrictedClientIds],
+    queryFn: async () => {
+      let q = supabase
         .from("recovery_opportunities")
         .select(
           "id, client_id, expected_return_date, potential_value, classification, days_late, status, clients(id, name, phone), services(name)",
@@ -157,8 +185,16 @@ function RecorrenciaPage() {
         .eq("company_id", companyId!)
         .in("classification", classes)
         .in("status", ["OPEN", "IN_CONTACT"])
-        .order("days_late", { ascending: false })
-        .limit(300);
+        .order("days_late", { ascending: false });
+
+      if (shouldRestrictRecurrence) {
+        if (!restrictedClientIds || restrictedClientIds.length === 0) {
+          return [];
+        }
+        q = q.in("client_id", restrictedClientIds);
+      }
+
+      const { data, error } = await q.limit(300);
       if (error) throw error;
       return (data ?? []) as unknown as Row[];
     },

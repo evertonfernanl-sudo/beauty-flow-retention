@@ -136,5 +136,15 @@ export const enqueueImportClients = createServerFn({ method: "POST" })
       _priority: 3,
     });
     if (error) throw new Error(error.message);
+
+    // Trigger worker in background
+    import("@/integrations/supabase/client.server").then(({ supabaseAdmin }) => {
+      import("@/lib/api/worker.server").then(({ runWorker }) => {
+        runWorker(supabaseAdmin).catch((err) => {
+          console.error("[Worker] Background run error:", err);
+        });
+      });
+    });
+
     return { jobId: jobId as string, count: normalized.length };
   });

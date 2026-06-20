@@ -1,5 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { runAdminJobsTick } from "@/lib/api/users.functions";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -413,6 +415,7 @@ const JOB_STATUS_COLOR: Record<string, string> = {
 
 function JobsPanel() {
   const qc = useQueryClient();
+  const tick = useServerFn(runAdminJobsTick);
   const jobsQuery = useQuery({
     queryKey: ["admin-jobs"],
     queryFn: async () => {
@@ -431,10 +434,8 @@ function JobsPanel() {
 
   async function runTick() {
     try {
-      const res = await fetch("/api/public/hooks/jobs-tick", { method: "POST" });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body?.error || "tick failed");
-      toast.success(`Worker rodou: ${body.count ?? 0} jobs processados`);
+      const res = await tick({ data: undefined });
+      toast.success(`Worker rodou: ${res.count ?? 0} jobs processados`);
       qc.invalidateQueries({ queryKey: ["admin-jobs"] });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao rodar worker");

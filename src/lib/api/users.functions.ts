@@ -11,6 +11,7 @@ export const createProfessionalUser = createServerFn({ method: "POST" })
         email: z.string().trim().email("E-mail inválido").max(255),
         password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres").max(72),
         role: z.enum(["admin", "employee"]),
+        permissions: z.record(z.string(), z.boolean()).optional(),
       })
       .parse(input),
   )
@@ -66,6 +67,7 @@ export const createProfessionalUser = createServerFn({ method: "POST" })
       user_id: newUserId,
       company_id: companyId,
       role: data.role,
+      permissions: data.permissions ?? {},
     });
 
     if (roleError) {
@@ -73,29 +75,6 @@ export const createProfessionalUser = createServerFn({ method: "POST" })
       await supabaseAdmin.from("profiles").delete().eq("id", newUserId);
       await supabaseAdmin.auth.admin.deleteUser(newUserId);
       throw new Error(roleError.message);
-    }
-
-    // 5) If role is employee, register a professional record
-    if (data.role === "employee") {
-      const { error: profError } = await supabaseAdmin.from("professionals").insert({
-        company_id: companyId,
-        user_id: newUserId,
-        name: data.name,
-        email: data.email.trim().toLowerCase(),
-        active: true,
-      });
-
-      if (profError) {
-        // Cleanup all
-        await supabaseAdmin
-          .from("user_roles")
-          .delete()
-          .eq("user_id", newUserId)
-          .eq("company_id", companyId);
-        await supabaseAdmin.from("profiles").delete().eq("id", newUserId);
-        await supabaseAdmin.auth.admin.deleteUser(newUserId);
-        throw new Error(profError.message);
-      }
     }
 
     return { ok: true, userId: newUserId };
@@ -167,4 +146,89 @@ export const deleteCompanyMember = createServerFn({ method: "POST" })
     }
 
     return { ok: true };
+  });
+
+export const updateUserPermissions = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) =>
+    z
+      .object({
+        targetUserId: z.string().uuid(),
+        permissions: z.record(z.string(), z.boolean()),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // 1) Verify the current user is owner or admin
+    const { data: currentRoleRow } = await supabase
+      .from("user_roles")
+      .select("role, company_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!currentRoleRow || (currentRoleRow.role !== "owner" && currentRoleRow.role !== "admin")) {
+      throw new Error(
+        "Permissão negada. Apenas administradores e proprietários podem gerenciar usuários.",
+      );
+    }
+
+    const companyId = currentRoleRow.company_id;
+
+    // Verify target belongs to the same company
+    const { data: targetRoleRow } = await supabase
+      .from("user_roles")
+      .select("role, company_id")
+      .eq("user_id", data.targetUserId)
+      .maybeSingle();
+
+    if (!targetRoleRow || targetRoleRow.company_id !== companyId) {
+      throw new Error("O usuário não pertence a sua empresa.");
+    }
+
+    if (targetRoleRow.role === "owner") {
+      throw new Error("As permissões do proprietário não podem ser alteradas.");
+    }
+
+    // 2) Update permissions in user_roles
+    const { error: updateError } = await supabaseAdmin
+      .from("user_roles")
+      .update({
+        permissions: data.permissions,
+      })
+      .eq("user_id", data.targetUserId)
+      .eq("company_id", companyId);
+
+    if (updateError) {
+      throw new Error(`Falha ao atualizar permissões: ${updateError.message}`);
+    }
+
+    return { ok: true };
+  });
+
+export const runAdminJobsTick = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    
+    // Verify platform admin access
+    const { data: adminCheck } = await supabase
+      .from("platform_admins")
+      .select("user_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+      
+    if (!adminCheck) throw new Error("Acesso negado. Apenas administradores da plataforma podem rodar o worker.");
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { runWorker } = await import("@/lib/api/worker.server");
+
+    try {
+      const processed = await runWorker(supabaseAdmin);
+      return { ok: true, count: processed.length, processed };
+    } catch (err) {
+      throw new Error(err instanceof Error ? err.message : String(err));
+    }
   });
