@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentProfile } from "@/lib/hooks/use-current-profile";
@@ -146,6 +146,23 @@ function EnqueueButton({ companyId, onDone }: { companyId: string; onDone: () =>
   );
 }
 
+/* ---------------- Helper ---------------- */
+
+function formatMessageBody(body: string, companySlug: string) {
+  if (!body) return "";
+  let text = body;
+  const linkAgendamento = `${window.location.origin}/agendar/${companySlug}`;
+  text = text.replace(/https:\/\/beauty-flow-retention\.lovable\.app\/agendar\/[a-zA-Z0-9_-]*/gi, linkAgendamento);
+  text = text.replace(/https:\/\/beauty-flow-retention\.lovable\.app/gi, window.location.origin);
+  text = text.replace(/\{\{\s*link_agendamento\s*\}\}/gi, linkAgendamento);
+
+  const hasLink = text.toLowerCase().includes(`agendar/${companySlug.toLowerCase()}`);
+  if (!hasLink && companySlug) {
+    text = text.trim() + `\n\nSe desejar, faça seu agendamento pelo link: ${linkAgendamento}`;
+  }
+  return text;
+}
+
 /* ---------------- Fila ---------------- */
 
 type QueueRow = {
@@ -269,11 +286,9 @@ function Fila({ companyId }: { companyId: string }) {
       return;
     }
     let opened = 0;
+    const slug = profile?.company?.slug ?? "";
     for (const r of rows) {
-      let body = r.rendered_body;
-      if (body.includes("beauty-flow-retention.lovable.app")) {
-        body = body.replace(/https:\/\/beauty-flow-retention\.lovable\.app/g, window.location.origin);
-      }
+      const body = formatMessageBody(r.rendered_body, slug);
       const url = whatsappLink(r.clients!.phone, body);
       if (url) {
         window.open(url, "_blank", "noopener,noreferrer");
@@ -349,7 +364,7 @@ function Fila({ companyId }: { companyId: string }) {
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                    {r.rendered_body.replace(/https:\/\/beauty-flow-retention\.lovable\.app/g, window.location.origin)}
+                    {formatMessageBody(r.rendered_body, profile?.company?.slug ?? "")}
                   </p>
                 </div>
                 <div className="flex items-center gap-1">
@@ -391,8 +406,16 @@ function EditMessageDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [body, setBody] = useState(row.rendered_body);
+  const { data: profile } = useCurrentProfile();
+  const slug = profile?.company?.slug ?? "";
+  const [body, setBody] = useState(() => formatMessageBody(row.rendered_body, slug));
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (slug) {
+      setBody((prev) => formatMessageBody(prev, slug));
+    }
+  }, [slug]);
   async function save() {
     setSaving(true);
     const { error } = await supabase
