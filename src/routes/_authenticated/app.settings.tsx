@@ -18,6 +18,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { formatBRL } from "@/lib/format";
 import {
   Building2, Calendar, CheckCircle2, CreditCard, Globe, Image as ImageIcon, Instagram, KeyRound,
@@ -281,10 +287,12 @@ function UsersTab({ companyId, canManage, qc }: { companyId?: string; canManage:
     setLoading(true);
     try {
       const res = await createProfessionalUser({
-        name: name.trim(),
-        email: email.trim(),
-        password: password,
-        role: role,
+        data: {
+          name: name.trim(),
+          email: email.trim(),
+          password: password,
+          role: role,
+        },
       });
 
       if (!res.ok) {
@@ -322,7 +330,7 @@ function UsersTab({ companyId, canManage, qc }: { companyId?: string; canManage:
     }
     setDeletingId(userIdToDelete);
     try {
-      await deleteCompanyMember({ targetUserId: userIdToDelete });
+      await deleteCompanyMember({ data: { targetUserId: userIdToDelete } });
       toast.success("Usuário excluído com sucesso.");
       qc.invalidateQueries({ queryKey: ["members", companyId] });
     } catch (err: any) {
@@ -424,21 +432,21 @@ function UsersTab({ companyId, canManage, qc }: { companyId?: string; canManage:
                   <p className="text-[10px] text-muted-foreground uppercase">Link de Login</p>
                   <p className="font-mono text-xs truncate">{creds?.link}</p>
                 </div>
-                <Button size="xs" variant="outline" className="h-7 text-xs px-2 shrink-0" onClick={() => copyToClipboard(creds?.link ?? "", "Link de login")}>Copiar</Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs px-2 shrink-0" onClick={() => copyToClipboard(creds?.link ?? "", "Link de login")}>Copiar</Button>
               </div>
               <div className="flex justify-between items-center gap-2 border-t pt-2.5">
                 <div className="min-w-0 flex-1">
                   <p className="text-[10px] text-muted-foreground uppercase">E-mail</p>
                   <p className="font-mono text-xs truncate">{creds?.email}</p>
                 </div>
-                <Button size="xs" variant="outline" className="h-7 text-xs px-2 shrink-0" onClick={() => copyToClipboard(creds?.email ?? "", "E-mail")}>Copiar</Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs px-2 shrink-0" onClick={() => copyToClipboard(creds?.email ?? "", "E-mail")}>Copiar</Button>
               </div>
               <div className="flex justify-between items-center gap-2 border-t pt-2.5">
                 <div className="min-w-0 flex-1">
                   <p className="text-[10px] text-muted-foreground uppercase">Senha de Acesso</p>
                   <p className="font-mono text-xs truncate">{creds?.password}</p>
                 </div>
-                <Button size="xs" variant="outline" className="h-7 text-xs px-2 shrink-0" onClick={() => copyToClipboard(creds?.password ?? "", "Senha")}>Copiar</Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs px-2 shrink-0" onClick={() => copyToClipboard(creds?.password ?? "", "Senha")}>Copiar</Button>
               </div>
             </div>
           </div>
