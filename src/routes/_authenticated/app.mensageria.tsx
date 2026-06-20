@@ -270,7 +270,11 @@ function Fila({ companyId }: { companyId: string }) {
     }
     let opened = 0;
     for (const r of rows) {
-      const url = whatsappLink(r.clients!.phone, r.rendered_body);
+      let body = r.rendered_body;
+      if (body.includes("beauty-flow-retention.lovable.app")) {
+        body = body.replace(/https:\/\/beauty-flow-retention\.lovable\.app/g, window.location.origin);
+      }
+      const url = whatsappLink(r.clients!.phone, body);
       if (url) {
         window.open(url, "_blank", "noopener,noreferrer");
         opened++;
@@ -345,7 +349,7 @@ function Fila({ companyId }: { companyId: string }) {
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                    {r.rendered_body}
+                    {r.rendered_body.replace(/https:\/\/beauty-flow-retention\.lovable\.app/g, window.location.origin)}
                   </p>
                 </div>
                 <div className="flex items-center gap-1">

@@ -229,9 +229,24 @@ function RecorrenciaPage() {
       toast.error("Selecione clientes com WhatsApp.");
       return;
     }
+    const link = profile?.company?.slug ? `${window.location.origin}/agendar/${profile.company.slug}` : "";
     let opened = 0;
     for (const r of rows) {
-      const msg = waTemplate.replace(/\{\{\s*nome\s*\}\}/gi, r.clients!.name.split(" ")[0]);
+      let msg = waTemplate
+        .replace(/\{\{\s*(nome|primeiro_nome)\s*\}\}/gi, r.clients!.name.split(" ")[0])
+        .replace(/\{\{\s*cliente\s*\}\}/gi, r.clients!.name)
+        .replace(/\{\{\s*empresa\s*\}\}/gi, profile?.company?.name ?? "");
+
+      if (link) {
+        if (msg.includes("{{link_agendamento}}")) {
+          msg = msg.replace(/\{\{\s*link_agendamento\s*\}\}/gi, link);
+        } else if (msg.includes("{{link}}")) {
+          msg = msg.replace(/\{\{\s*link\s*\}\}/gi, link);
+        } else {
+          msg = msg + `\n\nAgende seu horário aqui: ${link}`;
+        }
+      }
+
       const url = whatsappLink(r.clients!.phone, msg);
       if (url) {
         window.open(url, "_blank", "noopener,noreferrer");

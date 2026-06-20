@@ -111,6 +111,7 @@ function BookingPage() {
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [confirmation, setConfirmation] = useState<{ when: Date } | null>(null);
@@ -209,7 +210,12 @@ function BookingPage() {
       const phoneNorm = toStoragePhone(phone) ?? phone;
       const { data: client, error: cErr } = await supabase
         .from("clients")
-        .insert({ company_id: company.id, name: name.trim(), phone: phoneNorm })
+        .insert({ 
+          company_id: company.id, 
+          name: name.trim(), 
+          phone: phoneNorm,
+          email: email.trim() || null
+        })
         .select("id")
         .single();
       if (cErr) throw cErr;
@@ -499,6 +505,15 @@ function BookingPage() {
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="(11) 99999-9999"
                   inputMode="tel"
+                />
+              </div>
+              <div>
+                <Label>E-mail (opcional)</Label>
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="seu@email.com"
                 />
               </div>
               <div>
