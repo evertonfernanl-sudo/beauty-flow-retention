@@ -542,7 +542,9 @@ function TemplateDialog({
 }) {
   const [name, setName] = useState(tpl?.name ?? "");
   const [type, setType] = useState(tpl?.type ?? "RETURN");
-  const [body, setBody] = useState(tpl?.body ?? "Olá {{primeiro_nome}}! ");
+  const [body, setBody] = useState(
+    tpl?.body ?? "Olá {{primeiro_nome}}! Como você está? Gostaria de marcar seu retorno? Agende aqui: {{link_agendamento}}"
+  );
   const [active, setActive] = useState(tpl?.active ?? true);
   const [cadence, setCadence] = useState((tpl?.cadence_offsets ?? [-7, -3, 0, 7]).join(","));
   const [saving, setSaving] = useState(false);
@@ -556,12 +558,19 @@ function TemplateDialog({
       .split(",")
       .map((s) => parseInt(s.trim(), 10))
       .filter((n) => !isNaN(n));
+
+    let finalBody = body;
+    if (!finalBody.toLowerCase().includes("{{link_agendamento}}")) {
+      finalBody = finalBody.trim() + "\n\nAgende seu horário aqui: {{link_agendamento}}";
+      setBody(finalBody);
+    }
+
     setSaving(true);
     const payload = {
       company_id: companyId,
       name,
       type: type as any,
-      body,
+      body: finalBody,
       active,
       cadence_offsets: offsets,
       channel: "WHATSAPP" as const,
