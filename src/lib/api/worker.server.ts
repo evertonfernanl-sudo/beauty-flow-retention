@@ -365,6 +365,59 @@ function findServiceCombination(
   return null;
 }
 
+function normalizeAndMapHeaders(rawHeaders: string[]): string[] {
+  const cleanHeaders = rawHeaders.map(h => String(h ?? "").trim());
+  const lowerHeaders = cleanHeaders.map(h => h.toLowerCase());
+  
+  let nameIndex = -1;
+  const nameMatches = ["nome", "name"];
+  const firstNameMatches = ["first name", "given name", "nome próprio", "nome proprio", "cliente", "client"];
+  
+  nameIndex = lowerHeaders.findIndex(h => nameMatches.includes(h));
+  if (nameIndex === -1) {
+    nameIndex = lowerHeaders.findIndex(h => firstNameMatches.includes(h));
+  }
+  
+  return cleanHeaders.map((h, i) => {
+    const cleanLower = h.toLowerCase();
+    
+    if (i === nameIndex) {
+      return "cliente";
+    }
+    
+    if (
+      cleanLower === "phone 1 - value" || 
+      cleanLower === "telefone 1 - valor" || 
+      cleanLower === "phone 1" || 
+      cleanLower === "telefone 1" ||
+      cleanLower === "telefone" ||
+      cleanLower === "phone"
+    ) {
+      return "telefone 1";
+    }
+    
+    if (
+      cleanLower === "phone 2 - value" || 
+      cleanLower === "telefone 2 - valor" || 
+      cleanLower === "phone 2" || 
+      cleanLower === "telefone 2"
+    ) {
+      return "telefone 2";
+    }
+    
+    const descTitles = [
+      "descrição", "descricao", "histórico", "historico", 
+      "lançamento", "lancamento", "memo", "complemento", 
+      "histórico complementar", "historico complementar"
+    ];
+    if (descTitles.includes(cleanLower)) {
+      return "descrição";
+    }
+    
+    return h;
+  });
+}
+
 async function runImportParse(
   admin: Admin,
   job: { payload: Record<string, unknown> | null; company_id: string | null },
@@ -412,16 +465,7 @@ async function runImportParse(
     const parsed = Papa.parse<string[]>(text, { skipEmptyLines: true });
     const data = parsed.data as string[][];
     if (data.length === 0) throw new Error("CSV vazio");
-    headers = data[0].map((h) => {
-      const clean = String(h ?? "").trim();
-      const cleanLower = clean.toLowerCase();
-      if (cleanLower === "first name") return "cliente";
-      if (cleanLower === "phone 1 - value") return "telefone 1";
-      if (cleanLower === "phone 2 - value") return "telefone 2";
-      const descTitles = ["descrição", "descricao", "histórico", "historico", "lançamento", "lancamento", "memo", "complemento", "histórico complementar", "historico complementar"];
-      if (descTitles.includes(cleanLower)) return "descrição";
-      return clean;
-    });
+    headers = normalizeAndMapHeaders(data[0]);
     rows = data.slice(1).map((r) => {
       const o: Record<string, unknown> = {};
       headers.forEach((h, i) => (o[h] = r[i]));
@@ -433,16 +477,7 @@ async function runImportParse(
     const sheet = wb.Sheets[wb.SheetNames[0]];
     const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true, defval: null });
     if (aoa.length === 0) throw new Error("Planilha vazia");
-    headers = (aoa[0] as unknown[]).map((h) => {
-      const clean = String(h ?? "").trim();
-      const cleanLower = clean.toLowerCase();
-      if (cleanLower === "first name") return "cliente";
-      if (cleanLower === "phone 1 - value") return "telefone 1";
-      if (cleanLower === "phone 2 - value") return "telefone 2";
-      const descTitles = ["descrição", "descricao", "histórico", "historico", "lançamento", "lancamento", "memo", "complemento", "histórico complementar", "historico complementar"];
-      if (descTitles.includes(cleanLower)) return "descrição";
-      return clean;
-    });
+    headers = normalizeAndMapHeaders(aoa[0] as string[]);
     rows = aoa.slice(1).map((r) => {
       const o: Record<string, unknown> = {};
       headers.forEach((h, i) => (o[h] = (r as unknown[])[i]));
@@ -456,12 +491,7 @@ async function runImportParse(
     const fullText = Array.isArray(text) ? text.join("\n") : String(text ?? "");
     if (!fullText.trim()) throw new Error("PDF sem texto extraível (pode ser escaneado).");
     const parsed = parsePdfTextToRows(fullText);
-    headers = parsed.headers.map((h) => {
-      const clean = String(h ?? "").trim();
-      const cleanLower = clean.toLowerCase();
-      if (cleanLower === "descricao") return "descrição";
-      return clean;
-    });
+    headers = normalizeAndMapHeaders(parsed.headers);
     rows = parsed.rows.map((r) => {
       const o: Record<string, unknown> = {};
       headers.forEach((h, i) => {
