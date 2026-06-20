@@ -11,12 +11,33 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MessageCircle, Sparkles, RefreshCw, Send, TrendingUp, Eye, Edit3, Plus, BarChart3 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  MessageCircle,
+  Sparkles,
+  RefreshCw,
+  Send,
+  TrendingUp,
+  Eye,
+  Edit3,
+  Plus,
+  BarChart3,
+} from "lucide-react";
 import { formatBRL } from "@/lib/format";
 import { whatsappLink } from "@/lib/phone";
 import { toast } from "sonner";
@@ -42,7 +63,12 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 const PLAN_LIMIT: Record<string, number> = {
-  starter: 500, basic: 500, professional: 5000, pro: 5000, premium: 20000, growth: 20000,
+  starter: 500,
+  basic: 500,
+  professional: 5000,
+  pro: 5000,
+  premium: 20000,
+  growth: 20000,
 };
 
 export function MensageriaPage() {
@@ -65,21 +91,32 @@ export function MensageriaPage() {
           </p>
         </div>
         {companyId && (
-          <EnqueueButton companyId={companyId} onDone={() => qc.invalidateQueries({ queryKey: ["mie"] })} />
+          <EnqueueButton
+            companyId={companyId}
+            onDone={() => qc.invalidateQueries({ queryKey: ["mie"] })}
+          />
         )}
       </header>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)}>
         <TabsList>
-          <TabsTrigger value="fila"><Send className="h-3.5 w-3.5 mr-1.5" /> Fila</TabsTrigger>
-          <TabsTrigger value="templates"><Edit3 className="h-3.5 w-3.5 mr-1.5" /> Templates</TabsTrigger>
-          <TabsTrigger value="dashboard"><BarChart3 className="h-3.5 w-3.5 mr-1.5" /> Dashboard</TabsTrigger>
+          <TabsTrigger value="fila">
+            <Send className="h-3.5 w-3.5 mr-1.5" /> Fila
+          </TabsTrigger>
+          <TabsTrigger value="templates">
+            <Edit3 className="h-3.5 w-3.5 mr-1.5" /> Templates
+          </TabsTrigger>
+          <TabsTrigger value="dashboard">
+            <BarChart3 className="h-3.5 w-3.5 mr-1.5" /> Dashboard
+          </TabsTrigger>
         </TabsList>
       </Tabs>
 
       {tab === "fila" && companyId && <Fila companyId={companyId} />}
       {tab === "templates" && companyId && <Templates companyId={companyId} canEdit={isAdmin} />}
-      {tab === "dashboard" && companyId && <Dashboard companyId={companyId} plan={profile?.company?.plan ?? "starter"} />}
+      {tab === "dashboard" && companyId && (
+        <Dashboard companyId={companyId} plan={profile?.company?.plan ?? "starter"} />
+      )}
     </div>
   );
 }
@@ -89,11 +126,16 @@ export function MensageriaPage() {
 function EnqueueButton({ companyId, onDone }: { companyId: string; onDone: () => void }) {
   const mut = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.rpc("mie_enqueue_from_opportunities", { _company_id: companyId });
+      const { data, error } = await supabase.rpc("mie_enqueue_from_opportunities", {
+        _company_id: companyId,
+      });
       if (error) throw error;
       return data as number;
     },
-    onSuccess: (n) => { toast.success(`${n ?? 0} mensagem(ns) adicionada(s) à fila`); onDone(); },
+    onSuccess: (n) => {
+      toast.success(`${n ?? 0} mensagem(ns) adicionada(s) à fila`);
+      onDone();
+    },
     onError: (e: any) => toast.error(e.message ?? "Erro ao gerar fila"),
   });
   return (
@@ -107,8 +149,14 @@ function EnqueueButton({ companyId, onDone }: { companyId: string; onDone: () =>
 /* ---------------- Fila ---------------- */
 
 type QueueRow = {
-  id: string; client_id: string; type: string; priority: number; offset_days: number;
-  scheduled_at: string; rendered_body: string; status: string;
+  id: string;
+  client_id: string;
+  type: string;
+  priority: number;
+  offset_days: number;
+  scheduled_at: string;
+  rendered_body: string;
+  status: string;
   clients: { id: string; name: string; phone: string | null } | null;
   template_id: string | null;
 };
@@ -123,7 +171,9 @@ function Fila({ companyId }: { companyId: string }) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("message_queue")
-        .select("id, client_id, type, priority, offset_days, scheduled_at, rendered_body, status, template_id, clients(id,name,phone)")
+        .select(
+          "id, client_id, type, priority, offset_days, scheduled_at, rendered_body, status, template_id, clients(id,name,phone)",
+        )
         .eq("company_id", companyId)
         .in("status", ["READY", "PENDING", "SENT"])
         .order("priority", { ascending: false })
@@ -138,7 +188,11 @@ function Fila({ companyId }: { companyId: string }) {
   const allSelected = ready.length > 0 && ready.every((r) => selected.has(r.id));
 
   function toggle(id: string) {
-    setSelected((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setSelected((p) => {
+      const n = new Set(p);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
   }
   function toggleAll() {
     setSelected(allSelected ? new Set() : new Set(ready.map((r) => r.id)));
@@ -147,13 +201,19 @@ function Fila({ companyId }: { companyId: string }) {
   const markSent = useMutation({
     mutationFn: async (ids: string[]) => {
       const now = new Date().toISOString();
-      const { error } = await supabase.from("message_queue")
-        .update({ status: "SENT", sent_at: now }).in("id", ids);
+      const { error } = await supabase
+        .from("message_queue")
+        .update({ status: "SENT", sent_at: now })
+        .in("id", ids);
       if (error) throw error;
       const rows = (list.data ?? []).filter((r) => ids.includes(r.id));
       const logs = rows.map((r) => ({
-        company_id: companyId, queue_id: r.id, client_id: r.client_id,
-        template_id: r.template_id, event: "SENT" as const, channel: "WHATSAPP" as const,
+        company_id: companyId,
+        queue_id: r.id,
+        client_id: r.client_id,
+        template_id: r.template_id,
+        event: "SENT" as const,
+        channel: "WHATSAPP" as const,
         metadata: { type: r.type, offset: r.offset_days },
       }));
       if (logs.length) await supabase.from("message_logs").insert(logs);
@@ -166,19 +226,28 @@ function Fila({ companyId }: { companyId: string }) {
 
   function sendBulk() {
     const rows = ready.filter((r) => selected.has(r.id) && r.clients?.phone);
-    if (rows.length === 0) { toast.error("Selecione clientes com WhatsApp."); return; }
+    if (rows.length === 0) {
+      toast.error("Selecione clientes com WhatsApp.");
+      return;
+    }
     let opened = 0;
     for (const r of rows) {
       const url = whatsappLink(r.clients!.phone, r.rendered_body);
-      if (url) { window.open(url, "_blank", "noopener,noreferrer"); opened++; }
+      if (url) {
+        window.open(url, "_blank", "noopener,noreferrer");
+        opened++;
+      }
     }
     markSent.mutate(rows.map((r) => r.id));
     toast.success(`${opened} conversa(s) aberta(s)`);
   }
 
   function skip(id: string) {
-    supabase.from("message_queue").update({ status: "SKIPPED" }).eq("id", id).then(() =>
-      qc.invalidateQueries({ queryKey: ["mie"] }));
+    supabase
+      .from("message_queue")
+      .update({ status: "SKIPPED" })
+      .eq("id", id)
+      .then(() => qc.invalidateQueries({ queryKey: ["mie"] }));
   }
 
   return (
@@ -195,7 +264,11 @@ function Fila({ companyId }: { companyId: string }) {
       </div>
 
       {list.isLoading ? (
-        <div className="p-4 space-y-3">{[0,1,2].map((i) => <Skeleton key={i} className="h-16 w-full" />)}</div>
+        <div className="p-4 space-y-3">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-16 w-full" />
+          ))}
+        </div>
       ) : (list.data ?? []).length === 0 ? (
         <div className="py-16 text-center text-sm text-muted-foreground">
           Fila vazia. Clique em "Gerar fila do RIE" para criar mensagens a partir das oportunidades.
@@ -208,18 +281,34 @@ function Fila({ companyId }: { companyId: string }) {
             const sent = r.status === "SENT";
             return (
               <li key={r.id} className="flex items-start gap-3 px-4 py-3 hover:bg-muted/20">
-                {due && <Checkbox checked={isSel} onCheckedChange={() => toggle(r.id)} className="mt-1" />}
+                {due && (
+                  <Checkbox checked={isSel} onCheckedChange={() => toggle(r.id)} className="mt-1" />
+                )}
                 {!due && <span className="w-4" />}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-medium truncate">{r.clients?.name ?? "—"}</p>
-                    <Badge variant="outline" className="text-[10px]">{TYPE_LABEL[r.type] ?? r.type}</Badge>
-                    <Badge variant={due ? "default" : sent ? "secondary" : "outline"} className="text-[10px]">
-                      {sent ? "Enviado" : due ? "Pronto" : `Em ${Math.max(0, Math.ceil((new Date(r.scheduled_at).getTime() - Date.now())/86400000))}d`}
+                    <Badge variant="outline" className="text-[10px]">
+                      {TYPE_LABEL[r.type] ?? r.type}
                     </Badge>
-                    <span className="text-[10px] text-muted-foreground">offset {r.offset_days >= 0 ? "+" : ""}{r.offset_days}d</span>
+                    <Badge
+                      variant={due ? "default" : sent ? "secondary" : "outline"}
+                      className="text-[10px]"
+                    >
+                      {sent
+                        ? "Enviado"
+                        : due
+                          ? "Pronto"
+                          : `Em ${Math.max(0, Math.ceil((new Date(r.scheduled_at).getTime() - Date.now()) / 86400000))}d`}
+                    </Badge>
+                    <span className="text-[10px] text-muted-foreground">
+                      offset {r.offset_days >= 0 ? "+" : ""}
+                      {r.offset_days}d
+                    </span>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{r.rendered_body}</p>
+                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                    {r.rendered_body}
+                  </p>
                 </div>
                 <div className="flex items-center gap-1">
                   <Button size="sm" variant="ghost" onClick={() => setEditing(r)}>
@@ -241,31 +330,55 @@ function Fila({ companyId }: { companyId: string }) {
         <EditMessageDialog
           row={editing}
           onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); qc.invalidateQueries({ queryKey: ["mie"] }); }}
+          onSaved={() => {
+            setEditing(null);
+            qc.invalidateQueries({ queryKey: ["mie"] });
+          }}
         />
       )}
     </Card>
   );
 }
 
-function EditMessageDialog({ row, onClose, onSaved }: { row: QueueRow; onClose: () => void; onSaved: () => void }) {
+function EditMessageDialog({
+  row,
+  onClose,
+  onSaved,
+}: {
+  row: QueueRow;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
   const [body, setBody] = useState(row.rendered_body);
   const [saving, setSaving] = useState(false);
   async function save() {
     setSaving(true);
-    const { error } = await supabase.from("message_queue").update({ rendered_body: body }).eq("id", row.id);
+    const { error } = await supabase
+      .from("message_queue")
+      .update({ rendered_body: body })
+      .eq("id", row.id);
     setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Mensagem atualizada"); onSaved();
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Mensagem atualizada");
+    onSaved();
   }
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
-        <DialogHeader><DialogTitle>Editar mensagem · {row.clients?.name}</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Editar mensagem · {row.clients?.name}</DialogTitle>
+        </DialogHeader>
         <Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={8} />
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button onClick={save} disabled={saving}>Salvar</Button>
+          <Button variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button onClick={save} disabled={saving}>
+            Salvar
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -275,8 +388,14 @@ function EditMessageDialog({ row, onClose, onSaved }: { row: QueueRow; onClose: 
 /* ---------------- Templates ---------------- */
 
 type Tpl = {
-  id: string; name: string; type: string; channel: string; body: string;
-  active: boolean; cadence_offsets: number[]; is_default: boolean | null;
+  id: string;
+  name: string;
+  type: string;
+  channel: string;
+  body: string;
+  active: boolean;
+  cadence_offsets: number[];
+  is_default: boolean | null;
 };
 
 function Templates({ companyId, canEdit }: { companyId: string; canEdit: boolean }) {
@@ -307,9 +426,15 @@ function Templates({ companyId, canEdit }: { companyId: string; canEdit: boolean
         )}
       </div>
       {list.isLoading ? (
-        <div className="p-4 space-y-3">{[0,1].map((i) => <Skeleton key={i} className="h-20 w-full" />)}</div>
+        <div className="p-4 space-y-3">
+          {[0, 1].map((i) => (
+            <Skeleton key={i} className="h-20 w-full" />
+          ))}
+        </div>
       ) : (list.data ?? []).length === 0 ? (
-        <div className="py-16 text-center text-sm text-muted-foreground">Nenhum template ainda.</div>
+        <div className="py-16 text-center text-sm text-muted-foreground">
+          Nenhum template ainda.
+        </div>
       ) : (
         <ul className="divide-y">
           {(list.data ?? []).map((t) => (
@@ -317,11 +442,22 @@ function Templates({ companyId, canEdit }: { companyId: string; canEdit: boolean
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-sm font-medium">{t.name}</p>
-                  <Badge variant="outline" className="text-[10px]">{TYPE_LABEL[t.type] ?? t.type}</Badge>
-                  {t.is_default && <Badge variant="secondary" className="text-[10px]">padrão</Badge>}
-                  {!t.active && <Badge variant="destructive" className="text-[10px]">inativo</Badge>}
+                  <Badge variant="outline" className="text-[10px]">
+                    {TYPE_LABEL[t.type] ?? t.type}
+                  </Badge>
+                  {t.is_default && (
+                    <Badge variant="secondary" className="text-[10px]">
+                      padrão
+                    </Badge>
+                  )}
+                  {!t.active && (
+                    <Badge variant="destructive" className="text-[10px]">
+                      inativo
+                    </Badge>
+                  )}
                   <span className="text-[10px] text-muted-foreground">
-                    cadência: {(t.cadence_offsets ?? []).map((o) => (o >= 0 ? `+${o}` : `${o}`)).join(", ")}d
+                    cadência:{" "}
+                    {(t.cadence_offsets ?? []).map((o) => (o >= 0 ? `+${o}` : `${o}`)).join(", ")}d
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{t.body}</p>
@@ -341,15 +477,27 @@ function Templates({ companyId, canEdit }: { companyId: string; canEdit: boolean
           companyId={companyId}
           tpl={editing === "new" ? null : editing}
           onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); qc.invalidateQueries({ queryKey: ["mie", "templates"] }); }}
+          onSaved={() => {
+            setEditing(null);
+            qc.invalidateQueries({ queryKey: ["mie", "templates"] });
+          }}
         />
       )}
     </Card>
   );
 }
 
-function TemplateDialog({ companyId, tpl, onClose, onSaved }:
-  { companyId: string; tpl: Tpl | null; onClose: () => void; onSaved: () => void; }) {
+function TemplateDialog({
+  companyId,
+  tpl,
+  onClose,
+  onSaved,
+}: {
+  companyId: string;
+  tpl: Tpl | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
   const [name, setName] = useState(tpl?.name ?? "");
   const [type, setType] = useState(tpl?.type ?? "RETURN");
   const [body, setBody] = useState(tpl?.body ?? "Olá {{primeiro_nome}}! ");
@@ -358,22 +506,43 @@ function TemplateDialog({ companyId, tpl, onClose, onSaved }:
   const [saving, setSaving] = useState(false);
 
   async function save() {
-    if (!name.trim() || !body.trim()) { toast.error("Nome e mensagem são obrigatórios"); return; }
-    const offsets = cadence.split(",").map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n));
+    if (!name.trim() || !body.trim()) {
+      toast.error("Nome e mensagem são obrigatórios");
+      return;
+    }
+    const offsets = cadence
+      .split(",")
+      .map((s) => parseInt(s.trim(), 10))
+      .filter((n) => !isNaN(n));
     setSaving(true);
-    const payload = { company_id: companyId, name, type: type as any, body, active, cadence_offsets: offsets, channel: "WHATSAPP" as const, category: type.toLowerCase() };
+    const payload = {
+      company_id: companyId,
+      name,
+      type: type as any,
+      body,
+      active,
+      cadence_offsets: offsets,
+      channel: "WHATSAPP" as const,
+      category: type.toLowerCase(),
+    };
     const res = tpl
       ? await supabase.from("message_templates").update(payload).eq("id", tpl.id)
       : await supabase.from("message_templates").insert(payload);
     setSaving(false);
-    if (res.error) { toast.error(res.error.message); return; }
-    toast.success("Salvo"); onSaved();
+    if (res.error) {
+      toast.error(res.error.message);
+      return;
+    }
+    toast.success("Salvo");
+    onSaved();
   }
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg">
-        <DialogHeader><DialogTitle>{tpl ? "Editar template" : "Novo template"}</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>{tpl ? "Editar template" : "Novo template"}</DialogTitle>
+        </DialogHeader>
         <div className="space-y-3">
           <div>
             <Label>Nome</Label>
@@ -382,10 +551,14 @@ function TemplateDialog({ companyId, tpl, onClose, onSaved }:
           <div>
             <Label>Tipo</Label>
             <Select value={type} onValueChange={setType}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 {Object.entries(TYPE_LABEL).map(([v, l]) => (
-                  <SelectItem key={v} value={v}>{l}</SelectItem>
+                  <SelectItem key={v} value={v}>
+                    {l}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -406,8 +579,12 @@ function TemplateDialog({ companyId, tpl, onClose, onSaved }:
           </label>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button onClick={save} disabled={saving}>Salvar</Button>
+          <Button variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button onClick={save} disabled={saving}>
+            Salvar
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -422,7 +599,9 @@ function Dashboard({ companyId, plan }: { companyId: string; plan: string }) {
   const stats = useQuery({
     queryKey: ["mie", "dashboard", companyId],
     queryFn: async () => {
-      const startMonth = new Date(); startMonth.setDate(1); startMonth.setHours(0,0,0,0);
+      const startMonth = new Date();
+      startMonth.setDate(1);
+      startMonth.setHours(0, 0, 0, 0);
       const { data: logs } = await supabase
         .from("message_logs")
         .select("event, template_id, created_at")
@@ -448,9 +627,14 @@ function Dashboard({ companyId, plan }: { companyId: string; plan: string }) {
   const templates = useQuery({
     queryKey: ["mie", "tpl-names", companyId],
     queryFn: async () => {
-      const { data } = await supabase.from("message_templates").select("id,name").eq("company_id", companyId);
+      const { data } = await supabase
+        .from("message_templates")
+        .select("id,name")
+        .eq("company_id", companyId);
       const m: Record<string, string> = {};
-      (data ?? []).forEach((t: any) => { m[t.id] = t.name; });
+      (data ?? []).forEach((t: any) => {
+        m[t.id] = t.name;
+      });
       return m;
     },
   });
@@ -464,7 +648,12 @@ function Dashboard({ companyId, plan }: { companyId: string; plan: string }) {
     if (l.event === "CONVERTED") byTpl[l.template_id].conv++;
   });
   const ranking = Object.entries(byTpl)
-    .map(([id, v]) => ({ id, name: templates.data?.[id] ?? id, ...v, rate: v.sent ? (v.conv / v.sent) * 100 : 0 }))
+    .map(([id, v]) => ({
+      id,
+      name: templates.data?.[id] ?? id,
+      ...v,
+      rate: v.sent ? (v.conv / v.sent) * 100 : 0,
+    }))
     .sort((a, b) => b.rate - a.rate)
     .slice(0, 5);
 
@@ -474,7 +663,12 @@ function Dashboard({ companyId, plan }: { companyId: string; plan: string }) {
         <Stat label="Enviadas (mês)" value={String(sent)} sub={`limite ${limit}`} icon={Send} />
         <Stat label="Convertidas" value={String(converted)} icon={TrendingUp} />
         <Stat label="Taxa de conversão" value={`${convRate.toFixed(1)}%`} icon={Eye} highlight />
-        <Stat label="Receita recuperada" value={formatBRL(recovered)} icon={MessageCircle} highlight />
+        <Stat
+          label="Receita recuperada"
+          value={formatBRL(recovered)}
+          icon={MessageCircle}
+          highlight
+        />
       </section>
 
       <Card className="shadow-soft">
@@ -482,16 +676,22 @@ function Dashboard({ companyId, plan }: { companyId: string; plan: string }) {
           <p className="text-xs font-medium">Ranking de templates (Template Score)</p>
         </div>
         {ranking.length === 0 ? (
-          <div className="py-10 text-center text-sm text-muted-foreground">Sem dados suficientes ainda.</div>
+          <div className="py-10 text-center text-sm text-muted-foreground">
+            Sem dados suficientes ainda.
+          </div>
         ) : (
           <ul className="divide-y">
             {ranking.map((r) => (
               <li key={r.id} className="flex items-center justify-between px-4 py-3">
                 <div>
                   <p className="text-sm font-medium">{r.name}</p>
-                  <p className="text-[11px] text-muted-foreground">{r.sent} enviadas · {r.conv} convertidas</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {r.sent} enviadas · {r.conv} convertidas
+                  </p>
                 </div>
-                <span className="text-lg font-semibold text-primary tabular-nums">{r.rate.toFixed(1)}%</span>
+                <span className="text-lg font-semibold text-primary tabular-nums">
+                  {r.rate.toFixed(1)}%
+                </span>
               </li>
             ))}
           </ul>
@@ -501,12 +701,30 @@ function Dashboard({ companyId, plan }: { companyId: string; plan: string }) {
   );
 }
 
-function Stat({ label, value, sub, icon: Icon, highlight }: { label: string; value: string; sub?: string; icon: any; highlight?: boolean }) {
+function Stat({
+  label,
+  value,
+  sub,
+  icon: Icon,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  icon: any;
+  highlight?: boolean;
+}) {
   return (
-    <Card className={`p-4 shadow-soft ${highlight ? "border-primary/30 bg-gradient-to-br from-card to-accent/30" : ""}`}>
+    <Card
+      className={`p-4 shadow-soft ${highlight ? "border-primary/30 bg-gradient-to-br from-card to-accent/30" : ""}`}
+    >
       <div className="flex items-start justify-between">
-        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
-        <span className={`grid h-7 w-7 place-items-center rounded-lg ${highlight ? "gradient-primary text-primary-foreground" : "bg-secondary text-primary"}`}>
+        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+          {label}
+        </p>
+        <span
+          className={`grid h-7 w-7 place-items-center rounded-lg ${highlight ? "gradient-primary text-primary-foreground" : "bg-secondary text-primary"}`}
+        >
           <Icon className="h-3.5 w-3.5" />
         </span>
       </div>

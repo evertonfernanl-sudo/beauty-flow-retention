@@ -14,7 +14,6 @@ const ENTRIES = [
   { path: "/termos", priority: "0.3", changefreq: "yearly" as const },
 ];
 
-
 export const Route = createFileRoute("/sitemap.xml")({
   server: {
     handlers: {

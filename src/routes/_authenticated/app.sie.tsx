@@ -6,7 +6,16 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Upload, Loader2, FileSpreadsheet, RefreshCw, Sparkles, Check, AlertTriangle, Lock } from "lucide-react";
+import {
+  Upload,
+  Loader2,
+  FileSpreadsheet,
+  RefreshCw,
+  Sparkles,
+  Check,
+  AlertTriangle,
+  Lock,
+} from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { registerImport, applyImportRow, applyImportBatch } from "@/lib/api/sie.functions";
@@ -18,7 +27,6 @@ export const Route = createFileRoute("/_authenticated/app/sie")({
   head: () => ({ meta: [{ title: "Importar Dados · BeautyFlow" }] }),
   component: SiePage,
 });
-
 
 type ImportRow = {
   id: string;
@@ -52,7 +60,11 @@ function SiePage() {
     queryKey: ["sie-imports", companyId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("imports").select("*").eq("company_id", companyId!).order("created_at", { ascending: false }).limit(30);
+        .from("imports")
+        .select("*")
+        .eq("company_id", companyId!)
+        .order("created_at", { ascending: false })
+        .limit(30);
       if (error) throw error;
       return (data ?? []) as ImportRow[];
     },
@@ -74,7 +86,9 @@ function SiePage() {
     setUploading(true);
     try {
       const path = `${companyId}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-      const { error: upErr } = await supabase.storage.from("imports").upload(path, file, { upsert: false });
+      const { error: upErr } = await supabase.storage
+        .from("imports")
+        .upload(path, file, { upsert: false });
       if (upErr) throw upErr;
       const res = await register({
         data: { filename: file.name, storagePath: path, size: file.size, source },
@@ -93,7 +107,6 @@ function SiePage() {
       if (fileRef.current) fileRef.current.value = "";
     }
   }
-
 
   if (!feature.loading && !feature.enabled) {
     return (
@@ -114,17 +127,26 @@ function SiePage() {
           <Sparkles className="h-6 w-6 text-primary" /> Importar Dados
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Envie CSV, XLSX ou PDF (texto nativo). A plataforma detecta o formato, identifica clientes, recria atendimentos e aprende seus padrões a cada importação.
+          Envie CSV, XLSX ou PDF (texto nativo). A plataforma detecta o formato, identifica
+          clientes, recria atendimentos e aprende seus padrões a cada importação.
         </p>
       </div>
 
       <Card className="p-5">
         <input
-          ref={fileRef} type="file" accept=".csv,.xlsx,.xls,.pdf" className="hidden"
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) onPick(f); }}
+          ref={fileRef}
+          type="file"
+          accept=".csv,.xlsx,.xls,.pdf"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) onPick(f);
+          }}
         />
         <div
-          onDragOver={(e) => { e.preventDefault(); }}
+          onDragOver={(e) => {
+            e.preventDefault();
+          }}
           onDrop={(e) => {
             e.preventDefault();
             const f = e.dataTransfer.files?.[0];
@@ -135,18 +157,28 @@ function SiePage() {
           <div className="flex items-center gap-3">
             <FileSpreadsheet className="h-8 w-8 text-primary" />
             <div>
-              <div className="font-medium">Arraste um arquivo ou clique para escolher (até 20 MB)</div>
+              <div className="font-medium">
+                Arraste um arquivo ou clique para escolher (até 20 MB)
+              </div>
               <div className="text-xs text-muted-foreground">
-                Aceita <strong>CSV</strong>, <strong>XLSX</strong> e <strong>PDF nativo</strong>. Detecta clientes, agendamentos e financeiro automaticamente.
+                Aceita <strong>CSV</strong>, <strong>XLSX</strong> e <strong>PDF nativo</strong>.
+                Detecta clientes, agendamentos e financeiro automaticamente.
               </div>
             </div>
           </div>
           <Button onClick={() => fileRef.current?.click()} disabled={uploading}>
-            {uploading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Enviando…</> : <><Upload className="h-4 w-4 mr-2" /> Escolher arquivo</>}
+            {uploading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Enviando…
+              </>
+            ) : (
+              <>
+                <Upload className="h-4 w-4 mr-2" /> Escolher arquivo
+              </>
+            )}
           </Button>
         </div>
       </Card>
-
 
       <Card className="p-4">
         <div className="flex items-center justify-between mb-3">
@@ -170,7 +202,8 @@ function SiePage() {
                   <div className="min-w-0">
                     <div className="font-medium truncate">{imp.filename}</div>
                     <div className="text-xs text-muted-foreground">
-                      {new Date(imp.created_at).toLocaleString()} · {imp.source.toUpperCase()} · {imp.rows_total} linhas
+                      {new Date(imp.created_at).toLocaleString()} · {imp.source.toUpperCase()} ·{" "}
+                      {imp.rows_total} linhas
                     </div>
                   </div>
                   <StatusBadge status={imp.status} />
@@ -202,7 +235,10 @@ function SiePage() {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; v: "default" | "secondary" | "destructive" | "outline" }> = {
+  const map: Record<
+    string,
+    { label: string; v: "default" | "secondary" | "destructive" | "outline" }
+  > = {
     uploaded: { label: "Enviado", v: "outline" },
     processing: { label: "Processando", v: "secondary" },
     completed: { label: "Concluído", v: "default" },
@@ -213,9 +249,17 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 type Row = {
-  id: string; row_index: number; client_name: string | null; client_phone: string | null;
-  description: string | null; amount: number | null; occurred_at: string | null;
-  payment_method: string | null; confidence: number; status: string; notes: string | null;
+  id: string;
+  row_index: number;
+  client_name: string | null;
+  client_phone: string | null;
+  description: string | null;
+  amount: number | null;
+  occurred_at: string | null;
+  payment_method: string | null;
+  confidence: number;
+  status: string;
+  notes: string | null;
 };
 
 function ImportReview({ importId, status }: { importId: string; status: string }) {
@@ -224,6 +268,27 @@ function ImportReview({ importId, status }: { importId: string; status: string }
   const applyBatch = useServerFn(applyImportBatch);
   const [busy, setBusy] = useState<string | null>(null);
 
+  const rows = useQuery({
+    queryKey: ["sie-rows", importId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("import_rows")
+        .select(
+          "id,row_index,client_name,client_phone,description,amount,occurred_at,payment_method,confidence,status,notes",
+        )
+        .eq("import_id", importId)
+        .order("confidence", { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      return (data ?? []) as Row[];
+    },
+    refetchInterval: 4_000,
+  });
+
+  useEffect(() => {
+    qc.invalidateQueries({ queryKey: ["sie-imports"] });
+  }, [rows.data, qc]);
+
   if (status === "uploaded" || status === "processing") {
     return (
       <div className="mt-3 border-t pt-6 pb-8 flex flex-col items-center justify-center text-center space-y-3 bg-muted/20 rounded-lg">
@@ -231,27 +296,13 @@ function ImportReview({ importId, status }: { importId: string; status: string }
         <div>
           <p className="text-sm font-medium">Análise em andamento...</p>
           <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
-            Estamos extraindo as linhas e identificando os dados do arquivo de forma inteligente. Esta tela se atualizará sozinha em instantes.
+            Estamos extraindo as linhas e identificando os dados do arquivo de forma inteligente.
+            Esta tela se atualizará sozinha em instantes.
           </p>
         </div>
       </div>
     );
   }
-
-  const rows = useQuery({
-    queryKey: ["sie-rows", importId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("import_rows")
-        .select("id,row_index,client_name,client_phone,description,amount,occurred_at,payment_method,confidence,status,notes")
-        .eq("import_id", importId).order("confidence", { ascending: false }).limit(200);
-      if (error) throw error;
-      return (data ?? []) as Row[];
-    },
-    refetchInterval: 4_000,
-  });
-
-  useEffect(() => { qc.invalidateQueries({ queryKey: ["sie-imports"] }); }, [rows.data, qc]);
 
   async function approve(id: string) {
     setBusy(id);
@@ -259,7 +310,11 @@ function ImportReview({ importId, status }: { importId: string; status: string }
       await apply({ data: { rowId: id, createAppointment: true } });
       toast.success("Linha enfileirada para aplicação.");
       qc.invalidateQueries({ queryKey: ["sie-rows", importId] });
-    } catch (e) { toast.error((e as Error).message); } finally { setBusy(null); }
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function approveAll() {
@@ -267,7 +322,9 @@ function ImportReview({ importId, status }: { importId: string; status: string }
       const res = await applyBatch({ data: { importId, minConfidence: 85 } });
       toast.success(`${res.queued} linhas enfileiradas (≥85% de confiança).`);
       qc.invalidateQueries({ queryKey: ["sie-rows", importId] });
-    } catch (e) { toast.error((e as Error).message); }
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
   }
 
   return (
@@ -297,16 +354,27 @@ function ImportReview({ importId, status }: { importId: string; status: string }
               <tr key={r.id} className="border-t">
                 <td className="p-1">{r.client_name || "—"}</td>
                 <td className="p-1">{r.client_phone ? formatPhoneBR(r.client_phone) : "—"}</td>
-                <td className="p-1 max-w-[200px] truncate" title={r.description ?? ""}>{r.description ?? "—"}</td>
-                <td className="p-1 text-right tabular-nums">{r.amount != null ? `R$ ${Number(r.amount).toFixed(2)}` : "—"}</td>
+                <td className="p-1 max-w-[200px] truncate" title={r.description ?? ""}>
+                  {r.description ?? "—"}
+                </td>
+                <td className="p-1 text-right tabular-nums">
+                  {r.amount != null ? `R$ ${Number(r.amount).toFixed(2)}` : "—"}
+                </td>
                 <td className="p-1">{r.occurred_at ?? "—"}</td>
                 <td className="p-1 text-right tabular-nums">
                   <ConfidenceChip value={r.confidence} />
                 </td>
-                <td className="p-1"><Badge variant="outline">{r.status}</Badge></td>
+                <td className="p-1">
+                  <Badge variant="outline">{r.status}</Badge>
+                </td>
                 <td className="p-1 text-right">
                   {r.status !== "applied" && (
-                    <Button size="sm" variant="ghost" disabled={busy === r.id} onClick={() => approve(r.id)}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy === r.id}
+                      onClick={() => approve(r.id)}
+                    >
                       {busy === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Aplicar"}
                     </Button>
                   )}

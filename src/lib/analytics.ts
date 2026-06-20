@@ -18,8 +18,7 @@ type Props = Record<string, unknown>;
 
 const POSTHOG_KEY = import.meta.env.VITE_POSTHOG_KEY as string | undefined;
 const POSTHOG_HOST =
-  (import.meta.env.VITE_POSTHOG_HOST as string | undefined) ??
-  "https://us.i.posthog.com";
+  (import.meta.env.VITE_POSTHOG_HOST as string | undefined) ?? "https://us.i.posthog.com";
 const GA_ID = import.meta.env.VITE_GA_MEASUREMENT_ID as string | undefined;
 const META_PIXEL_ID = import.meta.env.VITE_META_PIXEL_ID as string | undefined;
 const CLARITY_ID = import.meta.env.VITE_CLARITY_PROJECT_ID as string | undefined;
@@ -28,7 +27,11 @@ let initialized = false;
 
 declare global {
   interface Window {
-    posthog?: { capture: (e: string, p?: Props) => void; identify: (id: string, p?: Props) => void; reset: () => void };
+    posthog?: {
+      capture: (e: string, p?: Props) => void;
+      identify: (id: string, p?: Props) => void;
+      reset: () => void;
+    };
     gtag?: (...args: unknown[]) => void;
     dataLayer?: unknown[];
     fbq?: (...args: unknown[]) => void;

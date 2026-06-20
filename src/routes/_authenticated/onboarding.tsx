@@ -19,8 +19,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Sparkles, Check, Loader2, ArrowRight, ArrowLeft,
-  Scissors, ShoppingBag, Dumbbell, Plus, Trash2,
+  Sparkles,
+  Check,
+  Loader2,
+  ArrowRight,
+  ArrowLeft,
+  Scissors,
+  ShoppingBag,
+  Dumbbell,
+  Plus,
+  Trash2,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/onboarding")({
@@ -34,9 +42,24 @@ type Step = 1 | 2 | 3 | 4 | 5 | 6;
 const TOTAL_STEPS = 6;
 
 const VERTICALS: { id: Vertical; label: string; sub: string; Icon: typeof Scissors }[] = [
-  { id: "BEAUTY", label: "Beleza & Estética", sub: "Sobrancelhas, lash, manicure, barbearia, clínica", Icon: Scissors },
-  { id: "SALES",  label: "Vendas & Revenda",  sub: "Cosméticos, perfumaria, skincare, suplementos",   Icon: ShoppingBag },
-  { id: "GYM",    label: "Academia & Estúdio", sub: "Academia, pilates, funcional, dança",            Icon: Dumbbell },
+  {
+    id: "BEAUTY",
+    label: "Beleza & Estética",
+    sub: "Sobrancelhas, lash, manicure, barbearia, clínica",
+    Icon: Scissors,
+  },
+  {
+    id: "SALES",
+    label: "Vendas & Revenda",
+    sub: "Cosméticos, perfumaria, skincare, suplementos",
+    Icon: ShoppingBag,
+  },
+  {
+    id: "GYM",
+    label: "Academia & Estúdio",
+    sub: "Academia, pilates, funcional, dança",
+    Icon: Dumbbell,
+  },
 ];
 
 const companySchema = z.object({
@@ -51,11 +74,11 @@ function Onboarding() {
   const profile = profileQuery.data;
 
   const createCompany = useServerFn(createCompanyForCurrentUser);
-  const setVertical   = useServerFn(setCompanyVertical);
-  const seed          = useServerFn(seedDefaultServices);
-  const addPros       = useServerFn(addProfessionals);
-  const setWhats      = useServerFn(updateWhatsappTemplate);
-  const complete      = useServerFn(completeOnboarding);
+  const setVertical = useServerFn(setCompanyVertical);
+  const seed = useServerFn(seedDefaultServices);
+  const addPros = useServerFn(addProfessionals);
+  const setWhats = useServerFn(updateWhatsappTemplate);
+  const complete = useServerFn(completeOnboarding);
 
   const [step, setStep] = useState<Step>(1);
   const [vertical, setVerticalState] = useState<Vertical>("BEAUTY");
@@ -64,7 +87,9 @@ function Onboarding() {
     { name: "", specialty: "", phone: "" },
   ]);
   const [waPhone, setWaPhone] = useState("");
-  const [template, setTemplate] = useState("Olá {{nome}}! Já faz um tempinho que você não aparece. Vamos marcar seu próximo horário?");
+  const [template, setTemplate] = useState(
+    "Olá {{nome}}! Já faz um tempinho que você não aparece. Vamos marcar seu próximo horário?",
+  );
 
   useEffect(() => {
     if (profile?.company?.onboarding_completed) {
@@ -80,7 +105,11 @@ function Onboarding() {
 
   const form = useForm<z.infer<typeof companySchema>>({
     resolver: zodResolver(companySchema),
-    defaultValues: { name: "", phone: "", ownerName: profile?.profile?.name ?? profile?.email?.split("@")[0] ?? "" },
+    defaultValues: {
+      name: "",
+      phone: "",
+      ownerName: profile?.profile?.name ?? profile?.email?.split("@")[0] ?? "",
+    },
   });
 
   useEffect(() => {
@@ -97,7 +126,9 @@ function Onboarding() {
       setStep(2);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao criar empresa");
-    } finally { setSubmitting(false); }
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function submitVertical() {
@@ -108,7 +139,9 @@ function Onboarding() {
       setStep(3);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro");
-    } finally { setSubmitting(false); }
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function submitSeed() {
@@ -118,7 +151,9 @@ function Onboarding() {
       setStep(4);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao adicionar ofertas");
-    } finally { setSubmitting(false); }
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function submitPros() {
@@ -131,7 +166,9 @@ function Onboarding() {
       setStep(5);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro");
-    } finally { setSubmitting(false); }
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function submitWhats() {
@@ -141,7 +178,9 @@ function Onboarding() {
       setStep(6);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro");
-    } finally { setSubmitting(false); }
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function submitFinish() {
@@ -153,10 +192,13 @@ function Onboarding() {
       navigate({ to: "/app" });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro");
-    } finally { setSubmitting(false); }
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  const offeringLabel = vertical === "BEAUTY" ? "serviços" : vertical === "SALES" ? "produtos" : "planos";
+  const offeringLabel =
+    vertical === "BEAUTY" ? "serviços" : vertical === "SALES" ? "produtos" : "planos";
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 gradient-warm">
@@ -166,7 +208,9 @@ function Onboarding() {
             <Sparkles className="h-4 w-4" />
           </span>
           BeautyFlow
-          <span className="ml-auto text-xs text-muted-foreground">Passo {step} de {TOTAL_STEPS}</span>
+          <span className="ml-auto text-xs text-muted-foreground">
+            Passo {step} de {TOTAL_STEPS}
+          </span>
         </div>
 
         <StepBar current={step} total={TOTAL_STEPS} />
@@ -194,7 +238,13 @@ function Onboarding() {
                 <Input id="phone" placeholder="(11) 99999-9999" {...form.register("phone")} />
               </div>
               <Button type="submit" className="w-full" disabled={submitting}>
-                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : (<>Continuar <ArrowRight className="ml-1 h-4 w-4" /></>)}
+                {submitting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    Continuar <ArrowRight className="ml-1 h-4 w-4" />
+                  </>
+                )}
               </Button>
             </form>
           )}
@@ -203,7 +253,9 @@ function Onboarding() {
             <div className="space-y-4">
               <header>
                 <h2 className="text-xl font-semibold">Qual o seu segmento?</h2>
-                <p className="text-sm text-muted-foreground">Isso ajusta tudo: ofertas, recorrência e relatórios.</p>
+                <p className="text-sm text-muted-foreground">
+                  Isso ajusta tudo: ofertas, recorrência e relatórios.
+                </p>
               </header>
               <div className="grid gap-3">
                 {VERTICALS.map(({ id, label, sub, Icon }) => {
@@ -214,10 +266,14 @@ function Onboarding() {
                       type="button"
                       onClick={() => setVerticalState(id)}
                       className={`flex items-start gap-3 rounded-xl border p-4 text-left transition ${
-                        active ? "border-primary bg-primary/5 ring-2 ring-primary/30" : "hover:bg-muted/50"
+                        active
+                          ? "border-primary bg-primary/5 ring-2 ring-primary/30"
+                          : "hover:bg-muted/50"
                       }`}
                     >
-                      <span className={`inline-flex h-10 w-10 items-center justify-center rounded-lg ${active ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
+                      <span
+                        className={`inline-flex h-10 w-10 items-center justify-center rounded-lg ${active ? "bg-primary text-primary-foreground" : "bg-muted"}`}
+                      >
                         <Icon className="h-5 w-5" />
                       </span>
                       <div className="flex-1">
@@ -256,19 +312,34 @@ function Onboarding() {
               </header>
               <div className="space-y-3">
                 {pros.map((p, i) => (
-                  <div key={i} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-[1fr_1fr_auto]">
+                  <div
+                    key={i}
+                    className="grid gap-2 rounded-lg border p-3 sm:grid-cols-[1fr_1fr_auto]"
+                  >
                     <Input
                       placeholder="Nome"
                       value={p.name}
-                      onChange={(e) => setPros((prev) => prev.map((x, idx) => idx === i ? { ...x, name: e.target.value } : x))}
+                      onChange={(e) =>
+                        setPros((prev) =>
+                          prev.map((x, idx) => (idx === i ? { ...x, name: e.target.value } : x)),
+                        )
+                      }
                     />
                     <Input
                       placeholder="Especialidade"
                       value={p.specialty}
-                      onChange={(e) => setPros((prev) => prev.map((x, idx) => idx === i ? { ...x, specialty: e.target.value } : x))}
+                      onChange={(e) =>
+                        setPros((prev) =>
+                          prev.map((x, idx) =>
+                            idx === i ? { ...x, specialty: e.target.value } : x,
+                          ),
+                        )
+                      }
                     />
                     <Button
-                      type="button" variant="ghost" size="icon"
+                      type="button"
+                      variant="ghost"
+                      size="icon"
                       onClick={() => setPros((prev) => prev.filter((_, idx) => idx !== i))}
                       disabled={pros.length === 1}
                     >
@@ -277,13 +348,22 @@ function Onboarding() {
                   </div>
                 ))}
                 <Button
-                  type="button" variant="outline" size="sm"
-                  onClick={() => setPros((prev) => [...prev, { name: "", specialty: "", phone: "" }])}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setPros((prev) => [...prev, { name: "", specialty: "", phone: "" }])
+                  }
                 >
                   <Plus className="mr-1 h-4 w-4" /> Adicionar profissional
                 </Button>
               </div>
-              <NavRow onBack={() => setStep(3)} onNext={submitPros} submitting={submitting} nextLabel="Continuar" />
+              <NavRow
+                onBack={() => setStep(3)}
+                onNext={submitPros}
+                submitting={submitting}
+                nextLabel="Continuar"
+              />
             </div>
           )}
 
@@ -298,13 +378,20 @@ function Onboarding() {
               <div className="space-y-2">
                 <Label htmlFor="waPhone">Seu WhatsApp</Label>
                 <Input
-                  id="waPhone" placeholder="(11) 99999-9999"
-                  value={waPhone} onChange={(e) => setWaPhone(e.target.value)}
+                  id="waPhone"
+                  placeholder="(11) 99999-9999"
+                  value={waPhone}
+                  onChange={(e) => setWaPhone(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="tmpl">Mensagem padrão de retorno</Label>
-                <Textarea id="tmpl" rows={4} value={template} onChange={(e) => setTemplate(e.target.value)} />
+                <Textarea
+                  id="tmpl"
+                  rows={4}
+                  value={template}
+                  onChange={(e) => setTemplate(e.target.value)}
+                />
                 <p className="text-xs text-muted-foreground">
                   Use <code>{"{{nome}}"}</code> para inserir o nome do cliente.
                 </p>
@@ -322,10 +409,18 @@ function Onboarding() {
                 </p>
               </header>
               <ul className="space-y-2 text-sm">
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-primary" /> Empresa criada</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-primary" /> Segmento definido</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-primary" /> {offeringLabel} adicionados</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-primary" /> WhatsApp configurado</li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-primary" /> Empresa criada
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-primary" /> Segmento definido
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-primary" /> {offeringLabel} adicionados
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-primary" /> WhatsApp configurado
+                </li>
               </ul>
               <Button onClick={submitFinish} className="w-full" disabled={submitting}>
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Ir para o painel"}
@@ -342,22 +437,39 @@ function StepBar({ current, total }: { current: number; total: number }) {
   return (
     <div className="flex items-center gap-1">
       {Array.from({ length: total }, (_, i) => i + 1).map((n) => (
-        <div key={n} className={`h-1.5 flex-1 rounded-full ${n <= current ? "bg-primary" : "bg-border"}`} />
+        <div
+          key={n}
+          className={`h-1.5 flex-1 rounded-full ${n <= current ? "bg-primary" : "bg-border"}`}
+        />
       ))}
     </div>
   );
 }
 
 function NavRow({
-  onBack, onNext, submitting, nextLabel = "Continuar",
-}: { onBack: () => void; onNext: () => void; submitting: boolean; nextLabel?: string }) {
+  onBack,
+  onNext,
+  submitting,
+  nextLabel = "Continuar",
+}: {
+  onBack: () => void;
+  onNext: () => void;
+  submitting: boolean;
+  nextLabel?: string;
+}) {
   return (
     <div className="flex gap-2 pt-2">
       <Button type="button" variant="outline" onClick={onBack} disabled={submitting}>
         <ArrowLeft className="mr-1 h-4 w-4" /> Voltar
       </Button>
       <Button type="button" className="flex-1" onClick={onNext} disabled={submitting}>
-        {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : (<>{nextLabel} <ArrowRight className="ml-1 h-4 w-4" /></>)}
+        {submitting ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <>
+            {nextLabel} <ArrowRight className="ml-1 h-4 w-4" />
+          </>
+        )}
       </Button>
     </div>
   );
@@ -365,9 +477,15 @@ function NavRow({
 
 function SeedPreview({ vertical }: { vertical: Vertical }) {
   const items: Record<Vertical, string[]> = {
-    BEAUTY: ["Design de Sobrancelhas", "Design com Henna", "Lash Volume Brasileiro", "Manicure", "Pedicure"],
-    SALES:  ["Perfume 100ml", "Hidratante Corporal", "Sérum Facial", "Kit Skincare", "Batom Matte"],
-    GYM:    ["Plano Mensal", "Plano Trimestral", "Plano Semestral", "Plano Anual"],
+    BEAUTY: [
+      "Design de Sobrancelhas",
+      "Design com Henna",
+      "Lash Volume Brasileiro",
+      "Manicure",
+      "Pedicure",
+    ],
+    SALES: ["Perfume 100ml", "Hidratante Corporal", "Sérum Facial", "Kit Skincare", "Batom Matte"],
+    GYM: ["Plano Mensal", "Plano Trimestral", "Plano Semestral", "Plano Anual"],
   };
   return (
     <ul className="space-y-2 text-sm">

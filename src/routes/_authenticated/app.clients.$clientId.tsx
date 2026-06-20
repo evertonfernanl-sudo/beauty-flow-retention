@@ -11,14 +11,33 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import {
-  ArrowLeft, Cake, Calendar, DollarSign, Edit3, MessageCircle, Phone,
-  Plus, Sparkles, TrendingDown, Clock, AlertCircle,
+  ArrowLeft,
+  Cake,
+  Calendar,
+  DollarSign,
+  Edit3,
+  MessageCircle,
+  Phone,
+  Plus,
+  Sparkles,
+  TrendingDown,
+  Clock,
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatBRL } from "@/lib/format";
@@ -104,7 +123,8 @@ function ClientProfilePage() {
   const c = clientQ.data;
   const isLost = c?.status === "LOST";
   const isBirthdayMonth = c?.birthday && new Date(c.birthday).getMonth() === new Date().getMonth();
-  const ticketAvg = c && c.appointments_count > 0 ? Number(c.total_spent) / c.appointments_count : 0;
+  const ticketAvg =
+    c && c.appointments_count > 0 ? Number(c.total_spent) / c.appointments_count : 0;
   const daysSince = c?.last_visit
     ? Math.floor((Date.now() - new Date(c.last_visit).getTime()) / 86400000)
     : null;
@@ -121,19 +141,22 @@ function ClientProfilePage() {
   }, [c, isLost]);
 
   if (clientQ.isLoading) return <p className="text-sm text-muted-foreground">Carregando…</p>;
-  if (!c) return (
-    <div className="space-y-4">
-      <Button variant="ghost" size="sm" onClick={() => navigate({ to: "/app/clients" })}>
-        <ArrowLeft className="h-4 w-4 mr-1" /> Voltar
-      </Button>
-      <p>Cliente não encontrada.</p>
-    </div>
-  );
+  if (!c)
+    return (
+      <div className="space-y-4">
+        <Button variant="ghost" size="sm" onClick={() => navigate({ to: "/app/clients" })}>
+          <ArrowLeft className="h-4 w-4 mr-1" /> Voltar
+        </Button>
+        <p>Cliente não encontrada.</p>
+      </div>
+    );
 
   return (
     <div className="space-y-6 pb-24 md:pb-0">
       <Button variant="ghost" size="sm" asChild className="-ml-2">
-        <Link to="/app/clients"><ArrowLeft className="h-4 w-4 mr-1" /> Clientes</Link>
+        <Link to="/app/clients">
+          <ArrowLeft className="h-4 w-4 mr-1" /> Clientes
+        </Link>
       </Button>
 
       {/* Header */}
@@ -144,15 +167,29 @@ function ClientProfilePage() {
               <h1 className="text-2xl font-semibold tracking-tight">{c.name}</h1>
               <StatusBadge status={c.status} />
               {isBirthdayMonth && (
-                <Badge variant="outline" className="gap-1"><Cake className="h-3 w-3" /> Aniversariante do mês</Badge>
+                <Badge variant="outline" className="gap-1">
+                  <Cake className="h-3 w-3" /> Aniversariante do mês
+                </Badge>
               )}
               {isLost && (
-                <Badge variant="destructive" className="gap-1"><TrendingDown className="h-3 w-3" /> Cliente perdida</Badge>
+                <Badge variant="destructive" className="gap-1">
+                  <TrendingDown className="h-3 w-3" /> Cliente perdida
+                </Badge>
               )}
             </div>
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-              {c.phone && <span className="inline-flex items-center gap-1"><Phone className="h-3 w-3" />{c.phone}</span>}
-              {c.phone2 && <span className="inline-flex items-center gap-1"><Phone className="h-3 w-3" />{c.phone2}</span>}
+              {c.phone && (
+                <span className="inline-flex items-center gap-1">
+                  <Phone className="h-3 w-3" />
+                  {c.phone}
+                </span>
+              )}
+              {c.phone2 && (
+                <span className="inline-flex items-center gap-1">
+                  <Phone className="h-3 w-3" />
+                  {c.phone2}
+                </span>
+              )}
               {c.email && <span>{c.email}</span>}
               {c.instagram && <span>{c.instagram}</span>}
               {c.profession && <span>{c.profession}</span>}
@@ -168,18 +205,37 @@ function ClientProfilePage() {
               </Button>
             )}
             <Button asChild>
-              <Link to="/app/agenda"><Plus className="h-4 w-4 mr-1" /> Novo agendamento</Link>
+              <Link to="/app/agenda">
+                <Plus className="h-4 w-4 mr-1" /> Novo agendamento
+              </Link>
             </Button>
-            {canEdit && <EditClientButton client={c} onSaved={() => queryClient.invalidateQueries({ queryKey: ["client", clientId] })} />}
+            {canEdit && (
+              <EditClientButton
+                client={c}
+                onSaved={() => queryClient.invalidateQueries({ queryKey: ["client", clientId] })}
+              />
+            )}
           </div>
         </div>
       </Card>
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Kpi icon={<DollarSign className="h-4 w-4" />} label="Total gasto" value={formatBRL(Number(c.total_spent))} />
-        <Kpi icon={<Sparkles className="h-4 w-4" />} label="Atendimentos" value={String(c.appointments_count)} />
-        <Kpi icon={<TrendingDown className="h-4 w-4" />} label="Ticket médio" value={formatBRL(ticketAvg)} />
+        <Kpi
+          icon={<DollarSign className="h-4 w-4" />}
+          label="Total gasto"
+          value={formatBRL(Number(c.total_spent))}
+        />
+        <Kpi
+          icon={<Sparkles className="h-4 w-4" />}
+          label="Atendimentos"
+          value={String(c.appointments_count)}
+        />
+        <Kpi
+          icon={<TrendingDown className="h-4 w-4" />}
+          label="Ticket médio"
+          value={formatBRL(ticketAvg)}
+        />
         <Kpi
           icon={<Clock className="h-4 w-4" />}
           label="Dias sem retornar"
@@ -193,7 +249,9 @@ function ClientProfilePage() {
         <Card className="p-4 border-primary/30 bg-primary/5">
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-primary">Próximo retorno</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-primary">
+                Próximo retorno
+              </p>
               <p className="mt-1 font-medium">
                 {new Date(returnQ.data.expected_return_date).toLocaleDateString("pt-BR")} ·{" "}
                 {(returnQ.data as any).services?.name}
@@ -237,16 +295,24 @@ function ClientProfilePage() {
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="text-center w-14 shrink-0">
                         <p className="text-xs font-semibold">
-                          {new Date(a.start_datetime).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                          {new Date(a.start_datetime).toLocaleDateString("pt-BR", {
+                            day: "2-digit",
+                            month: "2-digit",
+                          })}
                         </p>
                         <p className="text-[10px] text-muted-foreground">
-                          {new Date(a.start_datetime).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                          {new Date(a.start_datetime).toLocaleTimeString("pt-BR", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
                         </p>
                       </div>
                       <div className="min-w-0">
                         <p className="font-medium truncate">{a.services?.name}</p>
                         <p className="text-xs text-muted-foreground truncate">
-                          {a.cancellation_reason ? `Cancelado: ${a.cancellation_reason}` : (a.notes ?? formatBRL(Number(a.price)))}
+                          {a.cancellation_reason
+                            ? `Cancelado: ${a.cancellation_reason}`
+                            : (a.notes ?? formatBRL(Number(a.price)))}
                         </p>
                       </div>
                     </div>
@@ -259,8 +325,14 @@ function ClientProfilePage() {
         </TabsContent>
 
         <TabsContent value="contacts" className="mt-4 space-y-3">
-          <RegisterContact clientId={clientId} companyId={companyId} userId={profile?.userId}
-            onSaved={() => queryClient.invalidateQueries({ queryKey: ["client-contacts", clientId] })} />
+          <RegisterContact
+            clientId={clientId}
+            companyId={companyId}
+            userId={profile?.userId}
+            onSaved={() =>
+              queryClient.invalidateQueries({ queryKey: ["client-contacts", clientId] })
+            }
+          />
           <Card className="p-4">
             {contactsQ.isLoading ? (
               <p className="text-sm text-muted-foreground">Carregando…</p>
@@ -272,9 +344,14 @@ function ClientProfilePage() {
                   <li key={ct.id} className="py-3 flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-medium">
-                        {channelLabel(ct.channel)} {ct.result && <span className="text-muted-foreground">· {resultLabel(ct.result)}</span>}
+                        {channelLabel(ct.channel)}{" "}
+                        {ct.result && (
+                          <span className="text-muted-foreground">· {resultLabel(ct.result)}</span>
+                        )}
                       </p>
-                      {ct.notes && <p className="text-xs text-muted-foreground truncate">{ct.notes}</p>}
+                      {ct.notes && (
+                        <p className="text-xs text-muted-foreground truncate">{ct.notes}</p>
+                      )}
                     </div>
                     <p className="text-xs text-muted-foreground shrink-0">
                       {new Date(ct.contacted_at).toLocaleDateString("pt-BR")}
@@ -287,15 +364,20 @@ function ClientProfilePage() {
         </TabsContent>
 
         <TabsContent value="notes" className="mt-4">
-          <NotesEditor clientId={clientId} initial={c.notes ?? ""}
-            onSaved={() => queryClient.invalidateQueries({ queryKey: ["client", clientId] })} />
+          <NotesEditor
+            clientId={clientId}
+            initial={c.notes ?? ""}
+            onSaved={() => queryClient.invalidateQueries({ queryKey: ["client", clientId] })}
+          />
         </TabsContent>
 
         <TabsContent value="financial" className="mt-4">
           <Card className="p-6 text-center">
             <DollarSign className="h-6 w-6 mx-auto text-primary" />
             <p className="mt-2 text-2xl font-semibold">{formatBRL(Number(c.total_spent))}</p>
-            <p className="text-sm text-muted-foreground">Receita acumulada gerada por esta cliente</p>
+            <p className="text-sm text-muted-foreground">
+              Receita acumulada gerada por esta cliente
+            </p>
           </Card>
         </TabsContent>
       </Tabs>
@@ -304,22 +386,47 @@ function ClientProfilePage() {
       <div className="md:hidden fixed bottom-16 inset-x-0 z-30 border-t bg-background/95 backdrop-blur px-3 py-2 flex gap-2">
         {waLink && (
           <Button asChild variant="secondary" className="flex-1">
-            <a href={waLink} target="_blank" rel="noopener noreferrer"><MessageCircle className="h-4 w-4 mr-1" />WhatsApp</a>
+            <a href={waLink} target="_blank" rel="noopener noreferrer">
+              <MessageCircle className="h-4 w-4 mr-1" />
+              WhatsApp
+            </a>
           </Button>
         )}
         <Button asChild className="flex-1">
-          <Link to="/app/agenda"><Plus className="h-4 w-4 mr-1" />Agendar</Link>
+          <Link to="/app/agenda">
+            <Plus className="h-4 w-4 mr-1" />
+            Agendar
+          </Link>
         </Button>
-        {canEdit && <EditClientButton client={c} onSaved={() => queryClient.invalidateQueries({ queryKey: ["client", clientId] })} compact />}
+        {canEdit && (
+          <EditClientButton
+            client={c}
+            onSaved={() => queryClient.invalidateQueries({ queryKey: ["client", clientId] })}
+            compact
+          />
+        )}
       </div>
     </div>
   );
 }
 
-function Kpi({ icon, label, value, highlight }: { icon: React.ReactNode; label: string; value: string; highlight?: boolean }) {
+function Kpi({
+  icon,
+  label,
+  value,
+  highlight,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  highlight?: boolean;
+}) {
   return (
     <Card className={`p-4 ${highlight ? "border-destructive/40 bg-destructive/5" : ""}`}>
-      <div className="flex items-center gap-2 text-muted-foreground text-xs">{icon}<span>{label}</span></div>
+      <div className="flex items-center gap-2 text-muted-foreground text-xs">
+        {icon}
+        <span>{label}</span>
+      </div>
       <p className={`mt-1 text-xl font-semibold ${highlight ? "text-destructive" : ""}`}>{value}</p>
     </Card>
   );
@@ -336,7 +443,10 @@ function EmptyState({ text }: { text: string }) {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
-    ACTIVE: { label: "Ativa", cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400" },
+    ACTIVE: {
+      label: "Ativa",
+      cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400",
+    },
     INACTIVE: { label: "Inativa", cls: "bg-muted text-muted-foreground" },
     LOST: { label: "Perdida", cls: "bg-destructive/15 text-destructive" },
   };
@@ -346,21 +456,49 @@ function StatusBadge({ status }: { status: string }) {
 
 function AppointmentStatusPill({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
-    SCHEDULED: { label: "Agendado", cls: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300" },
-    CONFIRMED: { label: "Confirmado", cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300" },
+    SCHEDULED: {
+      label: "Agendado",
+      cls: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
+    },
+    CONFIRMED: {
+      label: "Confirmado",
+      cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+    },
     COMPLETED: { label: "Concluído", cls: "bg-primary/15 text-primary" },
     CANCELLED: { label: "Cancelado", cls: "bg-destructive/15 text-destructive" },
-    NO_SHOW: { label: "Faltou", cls: "bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300" },
+    NO_SHOW: {
+      label: "Faltou",
+      cls: "bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300",
+    },
   };
   const m = map[status] ?? map.SCHEDULED;
   return <span className={`text-[10px] rounded-full px-2 py-0.5 ${m.cls}`}>{m.label}</span>;
 }
 
 function channelLabel(c: string) {
-  return ({ WHATSAPP: "WhatsApp", PHONE: "Telefone", INSTAGRAM: "Instagram", IN_PERSON: "Presencial", EMAIL: "E-mail" } as Record<string, string>)[c] ?? c;
+  return (
+    (
+      {
+        WHATSAPP: "WhatsApp",
+        PHONE: "Telefone",
+        INSTAGRAM: "Instagram",
+        IN_PERSON: "Presencial",
+        EMAIL: "E-mail",
+      } as Record<string, string>
+    )[c] ?? c
+  );
 }
 function resultLabel(r: string) {
-  return ({ ANSWERED: "Respondeu", NO_ANSWER: "Não respondeu", SCHEDULED: "Agendou", REFUSED: "Recusou" } as Record<string, string>)[r] ?? r;
+  return (
+    (
+      {
+        ANSWERED: "Respondeu",
+        NO_ANSWER: "Não respondeu",
+        SCHEDULED: "Agendou",
+        REFUSED: "Recusou",
+      } as Record<string, string>
+    )[r] ?? r
+  );
 }
 
 // --- Subcomponents ---
@@ -375,7 +513,15 @@ const editSchema = z.object({
   profession: z.string().trim().max(80).optional().or(z.literal("")),
 });
 
-function EditClientButton({ client, onSaved, compact }: { client: any; onSaved: () => void; compact?: boolean }) {
+function EditClientButton({
+  client,
+  onSaved,
+  compact,
+}: {
+  client: any;
+  onSaved: () => void;
+  compact?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const form = useForm<z.infer<typeof editSchema>>({
     resolver: zodResolver(editSchema),
@@ -390,15 +536,18 @@ function EditClientButton({ client, onSaved, compact }: { client: any; onSaved: 
     },
   });
   async function onSave(v: z.infer<typeof editSchema>) {
-    const { error } = await supabase.from("clients").update({
-      name: v.name,
-      phone: v.phone || null,
-      phone2: v.phone2 || null,
-      email: v.email || null,
-      birthday: v.birthday || null,
-      instagram: v.instagram || null,
-      profession: v.profession || null,
-    }).eq("id", client.id);
+    const { error } = await supabase
+      .from("clients")
+      .update({
+        name: v.name,
+        phone: v.phone || null,
+        phone2: v.phone2 || null,
+        email: v.email || null,
+        birthday: v.birthday || null,
+        instagram: v.instagram || null,
+        profession: v.profession || null,
+      })
+      .eq("id", client.id);
     if (error) {
       if (error.code === "23505") toast.error("Telefone já cadastrado em outra cliente.");
       else toast.error(error.message);
@@ -412,40 +561,79 @@ function EditClientButton({ client, onSaved, compact }: { client: any; onSaved: 
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" size={compact ? "icon" : "default"}>
-          <Edit3 className="h-4 w-4" />{!compact && <span className="ml-1">Editar</span>}
+          <Edit3 className="h-4 w-4" />
+          {!compact && <span className="ml-1">Editar</span>}
         </Button>
       </DialogTrigger>
       <DialogContent>
-        <DialogHeader><DialogTitle>Editar cliente</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Editar cliente</DialogTitle>
+        </DialogHeader>
         <form onSubmit={form.handleSubmit(onSave)} className="space-y-3">
-          <div className="space-y-2"><Label>Nome</Label><Input {...form.register("name")} /></div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2"><Label>WhatsApp</Label><Input {...form.register("phone")} /></div>
-            <div className="space-y-2"><Label>Telefone 2</Label><Input {...form.register("phone2")} /></div>
+          <div className="space-y-2">
+            <Label>Nome</Label>
+            <Input {...form.register("name")} />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2"><Label>Aniversário</Label><Input type="date" {...form.register("birthday")} /></div>
-            <div className="space-y-2"><Label>Instagram</Label><Input {...form.register("instagram")} /></div>
+            <div className="space-y-2">
+              <Label>WhatsApp</Label>
+              <Input {...form.register("phone")} />
+            </div>
+            <div className="space-y-2">
+              <Label>Telefone 2</Label>
+              <Input {...form.register("phone2")} />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2"><Label>Profissão</Label><Input {...form.register("profession")} /></div>
-            <div className="space-y-2"><Label>E-mail</Label><Input type="email" {...form.register("email")} /></div>
+            <div className="space-y-2">
+              <Label>Aniversário</Label>
+              <Input type="date" {...form.register("birthday")} />
+            </div>
+            <div className="space-y-2">
+              <Label>Instagram</Label>
+              <Input {...form.register("instagram")} />
+            </div>
           </div>
-          <DialogFooter><Button type="submit" disabled={form.formState.isSubmitting}>Salvar</Button></DialogFooter>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Profissão</Label>
+              <Input {...form.register("profession")} />
+            </div>
+            <div className="space-y-2">
+              <Label>E-mail</Label>
+              <Input type="email" {...form.register("email")} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={form.formState.isSubmitting}>
+              Salvar
+            </Button>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
   );
 }
 
-function NotesEditor({ clientId, initial, onSaved }: { clientId: string; initial: string; onSaved: () => void }) {
+function NotesEditor({
+  clientId,
+  initial,
+  onSaved,
+}: {
+  clientId: string;
+  initial: string;
+  onSaved: () => void;
+}) {
   const [val, setVal] = useState(initial);
   const [saving, setSaving] = useState(false);
   async function save() {
     setSaving(true);
     const { error } = await supabase.from("clients").update({ notes: val }).eq("id", clientId);
     setSaving(false);
-    if (error) { toast.error(error.message); return; }
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     toast.success("Observações salvas");
     onSaved();
   }
@@ -454,15 +642,32 @@ function NotesEditor({ clientId, initial, onSaved }: { clientId: string; initial
       <p className="text-sm text-muted-foreground">
         Anote preferências, alergias e informações importantes desta cliente.
       </p>
-      <Textarea rows={6} value={val} onChange={(e) => setVal(e.target.value)} placeholder="Ex.: alergia a henna, prefere atendimento às quintas..." />
+      <Textarea
+        rows={6}
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        placeholder="Ex.: alergia a henna, prefere atendimento às quintas..."
+      />
       <div className="flex justify-end">
-        <Button onClick={save} disabled={saving}>Salvar observações</Button>
+        <Button onClick={save} disabled={saving}>
+          Salvar observações
+        </Button>
       </div>
     </Card>
   );
 }
 
-function RegisterContact({ clientId, companyId, userId, onSaved }: { clientId: string; companyId?: string; userId?: string; onSaved: () => void }) {
+function RegisterContact({
+  clientId,
+  companyId,
+  userId,
+  onSaved,
+}: {
+  clientId: string;
+  companyId?: string;
+  userId?: string;
+  onSaved: () => void;
+}) {
   const [channel, setChannel] = useState<string>("WHATSAPP");
   const [result, setResult] = useState<string>("ANSWERED");
   const [notes, setNotes] = useState("");
@@ -472,11 +677,18 @@ function RegisterContact({ clientId, companyId, userId, onSaved }: { clientId: s
     if (!companyId) return;
     setSaving(true);
     const { error } = await supabase.from("client_contacts").insert({
-      company_id: companyId, client_id: clientId, user_id: userId ?? null,
-      channel: channel as any, result: result as any, notes: notes || null,
+      company_id: companyId,
+      client_id: clientId,
+      user_id: userId ?? null,
+      channel: channel as any,
+      result: result as any,
+      notes: notes || null,
     });
     setSaving(false);
-    if (error) { toast.error(error.message); return; }
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     toast.success("Contato registrado");
     setNotes("");
     onSaved();
@@ -489,7 +701,9 @@ function RegisterContact({ clientId, companyId, userId, onSaved }: { clientId: s
         <div className="space-y-2">
           <Label>Canal</Label>
           <Select value={channel} onValueChange={setChannel}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
               <SelectItem value="PHONE">Telefone</SelectItem>
@@ -502,7 +716,9 @@ function RegisterContact({ clientId, companyId, userId, onSaved }: { clientId: s
         <div className="space-y-2">
           <Label>Resultado</Label>
           <Select value={result} onValueChange={setResult}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="ANSWERED">Respondeu</SelectItem>
               <SelectItem value="NO_ANSWER">Não respondeu</SelectItem>
@@ -512,9 +728,17 @@ function RegisterContact({ clientId, companyId, userId, onSaved }: { clientId: s
           </Select>
         </div>
       </div>
-      <Textarea rows={2} placeholder="Observações (opcional)" value={notes} onChange={(e) => setNotes(e.target.value)} />
+      <Textarea
+        rows={2}
+        placeholder="Observações (opcional)"
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+      />
       <div className="flex justify-end">
-        <Button size="sm" onClick={save} disabled={saving}><Plus className="h-4 w-4 mr-1" />Registrar</Button>
+        <Button size="sm" onClick={save} disabled={saving}>
+          <Plus className="h-4 w-4 mr-1" />
+          Registrar
+        </Button>
       </div>
     </Card>
   );

@@ -14,9 +14,7 @@ const EXT_BY_MIME: Record<string, string> = {
   "application/pdf": "pdf",
 };
 
-export type UploadValidationResult =
-  | { ok: true; ext: string }
-  | { ok: false; error: string };
+export type UploadValidationResult = { ok: true; ext: string } | { ok: false; error: string };
 
 export function validateUpload(
   file: File,
@@ -24,13 +22,8 @@ export function validateUpload(
 ): UploadValidationResult {
   const kind = opts.kind ?? "any";
   const allowed =
-    kind === "image"
-      ? ALLOWED_IMAGE_MIME
-      : kind === "doc"
-        ? ALLOWED_DOC_MIME
-        : ALLOWED_ALL_MIME;
-  const maxBytes =
-    opts.maxBytes ?? (kind === "doc" ? MAX_DOC_BYTES : MAX_IMAGE_BYTES);
+    kind === "image" ? ALLOWED_IMAGE_MIME : kind === "doc" ? ALLOWED_DOC_MIME : ALLOWED_ALL_MIME;
+  const maxBytes = opts.maxBytes ?? (kind === "doc" ? MAX_DOC_BYTES : MAX_IMAGE_BYTES);
 
   if (!file) return { ok: false, error: "Arquivo ausente" };
   if (!(allowed as readonly string[]).includes(file.type)) {

@@ -10,7 +10,18 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
-import { MessageCircle, Sparkles, Search, AlertCircle, Clock, TrendingDown, XCircle, RefreshCw, MessageSquare, Send } from "lucide-react";
+import {
+  MessageCircle,
+  Sparkles,
+  Search,
+  AlertCircle,
+  Clock,
+  TrendingDown,
+  XCircle,
+  RefreshCw,
+  MessageSquare,
+  Send,
+} from "lucide-react";
 import { formatBRL } from "@/lib/format";
 import { whatsappLink } from "@/lib/phone";
 import { toast } from "sonner";
@@ -37,36 +48,76 @@ type Row = {
 };
 
 type ReturnClass = "ATTENTION" | "AT_RISK" | "LATE" | "LOST" | "ON_TIME";
-const TAB_DEFS: { key: TabKey; label: string; icon: typeof Clock; classes: ReturnClass[]; verticals: ("BEAUTY"|"SALES"|"GYM")[] }[] = [
-  { key: "retorno",   label: "Retorno",    icon: Clock,        classes: ["ATTENTION", "LATE"], verticals: ["BEAUTY"] },
-  { key: "recompra",  label: "Recompra",   icon: RefreshCw,    classes: ["ATTENTION", "LATE"], verticals: ["SALES"] },
-  { key: "renovacao", label: "Renovações", icon: Sparkles,     classes: ["ATTENTION", "LATE"], verticals: ["GYM"] },
-  { key: "risco",     label: "Em Risco",   icon: AlertCircle,  classes: ["AT_RISK"],            verticals: ["BEAUTY","SALES","GYM"] },
-  { key: "perdidos",  label: "Perdidos",   icon: XCircle,      classes: ["LOST"],               verticals: ["BEAUTY","SALES","GYM"] },
+const TAB_DEFS: {
+  key: TabKey;
+  label: string;
+  icon: typeof Clock;
+  classes: ReturnClass[];
+  verticals: ("BEAUTY" | "SALES" | "GYM")[];
+}[] = [
+  {
+    key: "retorno",
+    label: "Retorno",
+    icon: Clock,
+    classes: ["ATTENTION", "LATE"],
+    verticals: ["BEAUTY"],
+  },
+  {
+    key: "recompra",
+    label: "Recompra",
+    icon: RefreshCw,
+    classes: ["ATTENTION", "LATE"],
+    verticals: ["SALES"],
+  },
+  {
+    key: "renovacao",
+    label: "Renovações",
+    icon: Sparkles,
+    classes: ["ATTENTION", "LATE"],
+    verticals: ["GYM"],
+  },
+  {
+    key: "risco",
+    label: "Em Risco",
+    icon: AlertCircle,
+    classes: ["AT_RISK"],
+    verticals: ["BEAUTY", "SALES", "GYM"],
+  },
+  {
+    key: "perdidos",
+    label: "Perdidos",
+    icon: XCircle,
+    classes: ["LOST"],
+    verticals: ["BEAUTY", "SALES", "GYM"],
+  },
 ];
 
 function RecorrenciaPage() {
   const { data: profile } = useCurrentProfile();
   const companyId = profile?.company?.id;
-  const vertical = (profile?.company?.vertical as "BEAUTY"|"SALES"|"GYM") ?? "BEAUTY";
-  const waTemplate = profile?.company?.whatsapp_template ?? "Olá {{nome}}! Vamos marcar seu próximo horário?";
+  const vertical = (profile?.company?.vertical as "BEAUTY" | "SALES" | "GYM") ?? "BEAUTY";
+  const waTemplate =
+    profile?.company?.whatsapp_template ?? "Olá {{nome}}! Vamos marcar seu próximo horário?";
   const qc = useQueryClient();
 
-  const tabs = useMemo(
-    () => TAB_DEFS.filter((t) => t.verticals.includes(vertical)),
-    [vertical],
-  );
-  const primaryKey: TabKey = vertical === "SALES" ? "recompra" : vertical === "GYM" ? "renovacao" : "retorno";
+  const tabs = useMemo(() => TAB_DEFS.filter((t) => t.verticals.includes(vertical)), [vertical]);
+  const primaryKey: TabKey =
+    vertical === "SALES" ? "recompra" : vertical === "GYM" ? "renovacao" : "retorno";
   const [tab, setTab] = useState<TabKey>(primaryKey);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const routerSearch = useRouterState({ select: (s) => s.location.search }) as any;
-  const initialMainTab = 
-    routerSearch.tab === "comunicacao" ? "comunicacao" :
-    routerSearch.tab === "mensageria" ? "mensageria" : "oportunidades";
+  const initialMainTab =
+    routerSearch.tab === "comunicacao"
+      ? "comunicacao"
+      : routerSearch.tab === "mensageria"
+        ? "mensageria"
+        : "oportunidades";
 
-  const [mainTab, setMainTab] = useState<"oportunidades" | "comunicacao" | "mensageria">(initialMainTab);
+  const [mainTab, setMainTab] = useState<"oportunidades" | "comunicacao" | "mensageria">(
+    initialMainTab,
+  );
 
   useEffect(() => {
     if (routerSearch.tab === "comunicacao") {
@@ -78,7 +129,9 @@ function RecorrenciaPage() {
     }
   }, [routerSearch.tab]);
 
-  useEffect(() => { setSelected(new Set()); }, [tab]);
+  useEffect(() => {
+    setSelected(new Set());
+  }, [tab]);
 
   useEffect(() => {
     if (!companyId) return;
@@ -98,7 +151,9 @@ function RecorrenciaPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("recovery_opportunities")
-        .select("id, client_id, expected_return_date, potential_value, classification, days_late, status, clients(id, name, phone), services(name)")
+        .select(
+          "id, client_id, expected_return_date, potential_value, classification, days_late, status, clients(id, name, phone), services(name)",
+        )
         .eq("company_id", companyId!)
         .in("classification", classes)
         .in("status", ["OPEN", "IN_CONTACT"])
@@ -122,7 +177,8 @@ function RecorrenciaPage() {
   function toggle(id: string) {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }
@@ -154,35 +210,47 @@ function RecorrenciaPage() {
       {/* Side Panel / Navigation Panel */}
       <aside className="flex flex-row lg:flex-col overflow-x-auto lg:overflow-x-visible gap-1 pb-4 lg:pb-0 border-b lg:border-b-0 lg:border-r border-border lg:pr-6 shrink-0 lg:sticky lg:top-20">
         <div className="hidden lg:block mb-4 px-3">
-          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Painel de Comunicação</p>
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+            Painel de Comunicação
+          </p>
         </div>
-        
+
         <Button
           variant={mainTab === "oportunidades" ? "secondary" : "ghost"}
           className={`justify-start gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-colors w-auto lg:w-full shrink-0 ${
-            mainTab === "oportunidades" ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold" : "text-muted-foreground hover:bg-muted/50"
+            mainTab === "oportunidades"
+              ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
+              : "text-muted-foreground hover:bg-muted/50"
           }`}
           onClick={() => setMainTab("oportunidades")}
         >
-          <Sparkles className={`h-4 w-4 shrink-0 ${mainTab === "oportunidades" ? "text-primary" : ""}`} />
+          <Sparkles
+            className={`h-4 w-4 shrink-0 ${mainTab === "oportunidades" ? "text-primary" : ""}`}
+          />
           <span>Ações de hoje</span>
         </Button>
 
         <Button
           variant={mainTab === "comunicacao" ? "secondary" : "ghost"}
           className={`justify-start gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-colors w-auto lg:w-full shrink-0 ${
-            mainTab === "comunicacao" ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold" : "text-muted-foreground hover:bg-muted/50"
+            mainTab === "comunicacao"
+              ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
+              : "text-muted-foreground hover:bg-muted/50"
           }`}
           onClick={() => setMainTab("comunicacao")}
         >
-          <MessageSquare className={`h-4 w-4 shrink-0 ${mainTab === "comunicacao" ? "text-primary" : ""}`} />
+          <MessageSquare
+            className={`h-4 w-4 shrink-0 ${mainTab === "comunicacao" ? "text-primary" : ""}`}
+          />
           <span>Comunicação</span>
         </Button>
 
         <Button
           variant={mainTab === "mensageria" ? "secondary" : "ghost"}
           className={`justify-start gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-colors w-auto lg:w-full shrink-0 ${
-            mainTab === "mensageria" ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold" : "text-muted-foreground hover:bg-muted/50"
+            mainTab === "mensageria"
+              ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
+              : "text-muted-foreground hover:bg-muted/50"
           }`}
           onClick={() => setMainTab("mensageria")}
         >
@@ -199,11 +267,16 @@ function RecorrenciaPage() {
               <div className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-primary uppercase tracking-wider">
                 <Sparkles className="h-3 w-3" /> Motor de Recorrência
               </div>
-              <h1 className="text-2xl lg:text-3xl font-semibold tracking-tight mt-1">Ações de hoje</h1>
+              <h1 className="text-2xl lg:text-3xl font-semibold tracking-tight mt-1">
+                Ações de hoje
+              </h1>
               <p className="text-sm text-muted-foreground mt-1">
-                {vertical === "SALES" ? "Clientes prontos para recomprar" :
-                 vertical === "GYM"   ? "Alunos prontos para renovar" :
-                                        "Clientes prontos para voltar"}.
+                {vertical === "SALES"
+                  ? "Clientes prontos para recomprar"
+                  : vertical === "GYM"
+                    ? "Alunos prontos para renovar"
+                    : "Clientes prontos para voltar"}
+                .
               </p>
             </header>
 
@@ -219,15 +292,33 @@ function RecorrenciaPage() {
               </Tabs>
               <div className="relative w-full sm:w-64">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                <Input placeholder="Buscar cliente…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
+                <Input
+                  placeholder="Buscar cliente…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9 h-9"
+                />
               </div>
             </div>
 
             <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Stat label="Oportunidades" value={list.isLoading ? "—" : String(filtered.length)} icon={TrendingDown} />
-              <Stat label="Receita recuperável" value={list.isLoading ? "—" : formatBRL(totalValue)} icon={Sparkles} highlight />
+              <Stat
+                label="Oportunidades"
+                value={list.isLoading ? "—" : String(filtered.length)}
+                icon={TrendingDown}
+              />
+              <Stat
+                label="Receita recuperável"
+                value={list.isLoading ? "—" : formatBRL(totalValue)}
+                icon={Sparkles}
+                highlight
+              />
               <Stat label="Selecionados" value={String(selected.size)} icon={MessageCircle} />
-              <Stat label="Ticket médio" value={filtered.length ? formatBRL(totalValue / filtered.length) : "R$ 0,00"} icon={RefreshCw} />
+              <Stat
+                label="Ticket médio"
+                value={filtered.length ? formatBRL(totalValue / filtered.length) : "R$ 0,00"}
+                icon={RefreshCw}
+              />
             </section>
 
             <Card className="overflow-hidden shadow-soft">
@@ -244,7 +335,9 @@ function RecorrenciaPage() {
 
               {list.isLoading ? (
                 <div className="p-4 space-y-3">
-                  {[0,1,2,3].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
+                  {[0, 1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-14 w-full" />
+                  ))}
                 </div>
               ) : filtered.length === 0 ? (
                 <div className="py-16 text-center text-sm text-muted-foreground">
@@ -254,27 +347,54 @@ function RecorrenciaPage() {
                 <ul className="divide-y">
                   {filtered.map((r) => {
                     const isSel = selected.has(r.id);
-                    const wa = whatsappLink(r.clients?.phone ?? null, waTemplate.replace(/\{\{\s*nome\s*\}\}/gi, r.clients?.name?.split(" ")[0] ?? ""));
+                    const wa = whatsappLink(
+                      r.clients?.phone ?? null,
+                      waTemplate.replace(
+                        /\{\{\s*nome\s*\}\}/gi,
+                        r.clients?.name?.split(" ")[0] ?? "",
+                      ),
+                    );
                     return (
-                      <li key={r.id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20">
+                      <li
+                        key={r.id}
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20"
+                      >
                         <Checkbox checked={isSel} onCheckedChange={() => toggle(r.id)} />
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium truncate">{r.clients?.name ?? "—"}</p>
                           <p className="text-xs text-muted-foreground truncate">
-                            {r.services?.name ?? "—"} · esperado {new Date(r.expected_return_date).toLocaleDateString("pt-BR")}
+                            {r.services?.name ?? "—"} · esperado{" "}
+                            {new Date(r.expected_return_date).toLocaleDateString("pt-BR")}
                           </p>
                         </div>
-                        <Badge variant={r.classification === "LOST" ? "destructive" : r.classification === "AT_RISK" ? "secondary" : "default"} className="hidden sm:inline-flex">
-                          {r.classification === "LATE" ? `${r.days_late}d atraso` :
-                           r.classification === "AT_RISK" ? "em risco" :
-                           r.classification === "LOST" ? "perdida" : "atenção"}
+                        <Badge
+                          variant={
+                            r.classification === "LOST"
+                              ? "destructive"
+                              : r.classification === "AT_RISK"
+                                ? "secondary"
+                                : "default"
+                          }
+                          className="hidden sm:inline-flex"
+                        >
+                          {r.classification === "LATE"
+                            ? `${r.days_late}d atraso`
+                            : r.classification === "AT_RISK"
+                              ? "em risco"
+                              : r.classification === "LOST"
+                                ? "perdida"
+                                : "atenção"}
                         </Badge>
                         <span className="text-sm font-semibold text-primary tabular-nums w-24 text-right">
                           {formatBRL(Number(r.potential_value ?? 0))}
                         </span>
                         {wa ? (
-                          <a href={wa} target="_blank" rel="noopener noreferrer"
-                             className="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground hover:opacity-90">
+                          <a
+                            href={wa}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground hover:opacity-90"
+                          >
                             <MessageCircle className="h-3 w-3" /> WhatsApp
                           </a>
                         ) : (
@@ -289,25 +409,36 @@ function RecorrenciaPage() {
           </div>
         )}
 
-        {mainTab === "comunicacao" && (
-          <ComunicacaoPage />
-        )}
+        {mainTab === "comunicacao" && <ComunicacaoPage />}
 
-        {mainTab === "mensageria" && (
-          <MensageriaPage />
-        )}
+        {mainTab === "mensageria" && <MensageriaPage />}
       </div>
     </div>
   );
 }
 
-
-function Stat({ label, value, icon: Icon, highlight }: { label: string; value: string; icon: typeof Clock; highlight?: boolean }) {
+function Stat({
+  label,
+  value,
+  icon: Icon,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  icon: typeof Clock;
+  highlight?: boolean;
+}) {
   return (
-    <Card className={`p-4 shadow-soft ${highlight ? "border-primary/30 bg-gradient-to-br from-card to-accent/30" : ""}`}>
+    <Card
+      className={`p-4 shadow-soft ${highlight ? "border-primary/30 bg-gradient-to-br from-card to-accent/30" : ""}`}
+    >
       <div className="flex items-start justify-between">
-        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
-        <span className={`grid h-7 w-7 place-items-center rounded-lg ${highlight ? "gradient-primary text-primary-foreground" : "bg-secondary text-primary"}`}>
+        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+          {label}
+        </p>
+        <span
+          className={`grid h-7 w-7 place-items-center rounded-lg ${highlight ? "gradient-primary text-primary-foreground" : "bg-secondary text-primary"}`}
+        >
           <Icon className="h-3.5 w-3.5" />
         </span>
       </div>

@@ -14,8 +14,21 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -26,9 +39,37 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { formatBRL } from "@/lib/format";
 import {
-  Building2, Calendar, CheckCircle2, CreditCard, Globe, Image as ImageIcon, Instagram, KeyRound,
-  Lock, LogOut, Mail, MessageCircle, Phone, Plug, Plus, Receipt, Send, Settings, ShieldCheck,
-  Sparkles, Trash2, Upload, UserCog, Users, XCircle, Scissors, Trophy, Repeat, TrendingUp, MoreVertical, Loader2,
+  Building2,
+  Calendar,
+  CheckCircle2,
+  CreditCard,
+  Globe,
+  Image as ImageIcon,
+  Instagram,
+  KeyRound,
+  Lock,
+  LogOut,
+  Mail,
+  MessageCircle,
+  Phone,
+  Plug,
+  Plus,
+  Receipt,
+  Send,
+  Settings,
+  ShieldCheck,
+  Sparkles,
+  Trash2,
+  Upload,
+  UserCog,
+  Users,
+  XCircle,
+  Scissors,
+  Trophy,
+  Repeat,
+  TrendingUp,
+  MoreVertical,
+  Loader2,
 } from "lucide-react";
 import { createProfessionalUser, deleteCompanyMember } from "@/lib/api/users.functions";
 
@@ -44,25 +85,44 @@ export const Route = createFileRoute("/_authenticated/app/settings")({
 
 type Day = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 const DAYS: { key: Day; label: string }[] = [
-  { key: "mon", label: "Segunda" }, { key: "tue", label: "Terça" }, { key: "wed", label: "Quarta" },
-  { key: "thu", label: "Quinta" }, { key: "fri", label: "Sexta" }, { key: "sat", label: "Sábado" },
+  { key: "mon", label: "Segunda" },
+  { key: "tue", label: "Terça" },
+  { key: "wed", label: "Quarta" },
+  { key: "thu", label: "Quinta" },
+  { key: "fri", label: "Sexta" },
+  { key: "sat", label: "Sábado" },
   { key: "sun", label: "Domingo" },
 ];
 
 const INTEGRATIONS = [
-  { id: "whatsapp",        name: "WhatsApp",        icon: MessageCircle, desc: "Mensagens e lembretes automáticos." },
-  { id: "google_calendar", name: "Google Calendar", icon: Calendar,      desc: "Sincronize sua agenda." },
-  { id: "instagram",       name: "Instagram",       icon: Instagram,     desc: "Conecte sua conta para divulgação." },
-  { id: "facebook",        name: "Facebook",        icon: Globe,         desc: "Integração com sua página." },
-  { id: "pix",             name: "PIX",             icon: CreditCard,    desc: "Receba pagamentos via PIX." },
+  {
+    id: "whatsapp",
+    name: "WhatsApp",
+    icon: MessageCircle,
+    desc: "Mensagens e lembretes automáticos.",
+  },
+  {
+    id: "google_calendar",
+    name: "Google Calendar",
+    icon: Calendar,
+    desc: "Sincronize sua agenda.",
+  },
+  {
+    id: "instagram",
+    name: "Instagram",
+    icon: Instagram,
+    desc: "Conecte sua conta para divulgação.",
+  },
+  { id: "facebook", name: "Facebook", icon: Globe, desc: "Integração com sua página." },
+  { id: "pix", name: "PIX", icon: CreditCard, desc: "Receba pagamentos via PIX." },
 ];
 
 function SettingsPage() {
   const { data: profile } = useCurrentProfile();
   const qc = useQueryClient();
   const companyId = profile?.company?.id;
-  const isOwner   = profile?.role === "owner";
-  const isAdmin   = profile?.role === "owner" || profile?.role === "admin";
+  const isOwner = profile?.role === "owner";
+  const isAdmin = profile?.role === "owner" || profile?.role === "admin";
 
   const { tab } = Route.useSearch();
   const navigate = Route.useNavigate();
@@ -81,24 +141,56 @@ function SettingsPage() {
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-5">
         <TabsList className="w-full overflow-x-auto justify-start no-scrollbar">
-          <TabsTrigger value="company"><Building2 className="h-3.5 w-3.5 mr-1.5" /> Empresa</TabsTrigger>
-          <TabsTrigger value="services"><Scissors className="h-3.5 w-3.5 mr-1.5" /> Serviços</TabsTrigger>
-          <TabsTrigger value="users"><Users className="h-3.5 w-3.5 mr-1.5" /> Usuários</TabsTrigger>
-          <TabsTrigger value="plan"><Sparkles className="h-3.5 w-3.5 mr-1.5" /> Plano</TabsTrigger>
-          <TabsTrigger value="billing"><Receipt className="h-3.5 w-3.5 mr-1.5" /> Assinatura</TabsTrigger>
-          <TabsTrigger value="integrations"><Plug className="h-3.5 w-3.5 mr-1.5" /> Integrações</TabsTrigger>
-          <TabsTrigger value="preferences"><Settings className="h-3.5 w-3.5 mr-1.5" /> Preferências</TabsTrigger>
-          <TabsTrigger value="security"><ShieldCheck className="h-3.5 w-3.5 mr-1.5" /> Segurança</TabsTrigger>
+          <TabsTrigger value="company">
+            <Building2 className="h-3.5 w-3.5 mr-1.5" /> Empresa
+          </TabsTrigger>
+          <TabsTrigger value="services">
+            <Scissors className="h-3.5 w-3.5 mr-1.5" /> Serviços
+          </TabsTrigger>
+          <TabsTrigger value="users">
+            <Users className="h-3.5 w-3.5 mr-1.5" /> Usuários
+          </TabsTrigger>
+          <TabsTrigger value="plan">
+            <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Plano
+          </TabsTrigger>
+          <TabsTrigger value="billing">
+            <Receipt className="h-3.5 w-3.5 mr-1.5" /> Assinatura
+          </TabsTrigger>
+          <TabsTrigger value="integrations">
+            <Plug className="h-3.5 w-3.5 mr-1.5" /> Integrações
+          </TabsTrigger>
+          <TabsTrigger value="preferences">
+            <Settings className="h-3.5 w-3.5 mr-1.5" /> Preferências
+          </TabsTrigger>
+          <TabsTrigger value="security">
+            <ShieldCheck className="h-3.5 w-3.5 mr-1.5" /> Segurança
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="company"><CompanyTab companyId={companyId} canEdit={isAdmin} qc={qc} /></TabsContent>
-        <TabsContent value="services"><ServicesTab companyId={companyId} qc={qc} /></TabsContent>
-        <TabsContent value="users"><UsersTab companyId={companyId} canManage={isAdmin} qc={qc} /></TabsContent>
-        <TabsContent value="plan"><PlanTab companyId={companyId} isOwner={isOwner} qc={qc} /></TabsContent>
-        <TabsContent value="billing"><BillingTab companyId={companyId} /></TabsContent>
-        <TabsContent value="integrations"><IntegrationsTab companyId={companyId} canManage={isAdmin} qc={qc} /></TabsContent>
-        <TabsContent value="preferences"><PreferencesTab companyId={companyId} qc={qc} /></TabsContent>
-        <TabsContent value="security"><SecurityTab /></TabsContent>
+        <TabsContent value="company">
+          <CompanyTab companyId={companyId} canEdit={isAdmin} qc={qc} />
+        </TabsContent>
+        <TabsContent value="services">
+          <ServicesTab companyId={companyId} qc={qc} />
+        </TabsContent>
+        <TabsContent value="users">
+          <UsersTab companyId={companyId} canManage={isAdmin} qc={qc} />
+        </TabsContent>
+        <TabsContent value="plan">
+          <PlanTab companyId={companyId} isOwner={isOwner} qc={qc} />
+        </TabsContent>
+        <TabsContent value="billing">
+          <BillingTab companyId={companyId} />
+        </TabsContent>
+        <TabsContent value="integrations">
+          <IntegrationsTab companyId={companyId} canManage={isAdmin} qc={qc} />
+        </TabsContent>
+        <TabsContent value="preferences">
+          <PreferencesTab companyId={companyId} qc={qc} />
+        </TabsContent>
+        <TabsContent value="security">
+          <SecurityTab />
+        </TabsContent>
       </Tabs>
     </div>
   );
@@ -121,7 +213,11 @@ function CompanyTab({ companyId, canEdit, qc }: { companyId?: string; canEdit: b
     enabled: !!companyId,
     queryKey: ["company-full", companyId],
     queryFn: async () => {
-      const { data } = await supabase.from("companies").select("*").eq("id", companyId!).maybeSingle();
+      const { data } = await supabase
+        .from("companies")
+        .select("*")
+        .eq("id", companyId!)
+        .maybeSingle();
       return data;
     },
   });
@@ -129,31 +225,48 @@ function CompanyTab({ companyId, canEdit, qc }: { companyId?: string; canEdit: b
   const form = useForm<z.infer<typeof companySchema>>({
     resolver: zodResolver(companySchema),
     values: {
-      name: company?.name ?? "", email: company?.email ?? "", phone: company?.phone ?? "",
-      whatsapp: (company as any)?.whatsapp ?? "", instagram: (company as any)?.instagram ?? "",
-      address: (company as any)?.address ?? "", city: (company as any)?.city ?? "", state: (company as any)?.state ?? "",
+      name: company?.name ?? "",
+      email: company?.email ?? "",
+      phone: company?.phone ?? "",
+      whatsapp: (company as any)?.whatsapp ?? "",
+      instagram: (company as any)?.instagram ?? "",
+      address: (company as any)?.address ?? "",
+      city: (company as any)?.city ?? "",
+      state: (company as any)?.state ?? "",
     },
   });
 
   const [hours, setHours] = useState<Record<Day, { open: string; close: string; closed: boolean }>>(
     (company as any)?.business_hours ?? {
-      mon: { open: "09:00", close: "18:00", closed: false }, tue: { open: "09:00", close: "18:00", closed: false },
-      wed: { open: "09:00", close: "18:00", closed: false }, thu: { open: "09:00", close: "18:00", closed: false },
-      fri: { open: "09:00", close: "18:00", closed: false }, sat: { open: "09:00", close: "14:00", closed: false },
-      sun: { open: "09:00", close: "18:00", closed: true  },
-    }
+      mon: { open: "09:00", close: "18:00", closed: false },
+      tue: { open: "09:00", close: "18:00", closed: false },
+      wed: { open: "09:00", close: "18:00", closed: false },
+      thu: { open: "09:00", close: "18:00", closed: false },
+      fri: { open: "09:00", close: "18:00", closed: false },
+      sat: { open: "09:00", close: "14:00", closed: false },
+      sun: { open: "09:00", close: "18:00", closed: true },
+    },
   );
-  useEffect(() => { if ((company as any)?.business_hours) setHours((company as any).business_hours); }, [company]);
+  useEffect(() => {
+    if ((company as any)?.business_hours) setHours((company as any).business_hours);
+  }, [company]);
 
   async function onSave(values: z.infer<typeof companySchema>) {
     if (!companyId) return;
-    const { error } = await supabase.from("companies").update({
-      name: values.name,
-      email: values.email || null, phone: values.phone || null,
-      whatsapp: values.whatsapp || null, instagram: values.instagram || null,
-      address: values.address || null, city: values.city || null, state: values.state || null,
-      business_hours: hours,
-    } as any).eq("id", companyId);
+    const { error } = await supabase
+      .from("companies")
+      .update({
+        name: values.name,
+        email: values.email || null,
+        phone: values.phone || null,
+        whatsapp: values.whatsapp || null,
+        instagram: values.instagram || null,
+        address: values.address || null,
+        city: values.city || null,
+        state: values.state || null,
+        business_hours: hours,
+      } as any)
+      .eq("id", companyId);
     if (error) return toast.error(error.message);
     toast.success("Empresa atualizada");
     qc.invalidateQueries({ queryKey: ["company-full", companyId] });
@@ -162,14 +275,22 @@ function CompanyTab({ companyId, canEdit, qc }: { companyId?: string; canEdit: b
 
   async function uploadLogo(file: File) {
     if (!companyId) return;
-    if (!/(png|jpe?g|webp)/i.test(file.type)) return toast.error("Formato inválido. Use PNG, JPG ou WEBP.");
+    if (!/(png|jpe?g|webp)/i.test(file.type))
+      return toast.error("Formato inválido. Use PNG, JPG ou WEBP.");
     if (file.size > 2 * 1024 * 1024) return toast.error("Arquivo muito grande (máx 2MB).");
     const ext = file.name.split(".").pop();
     const path = `${companyId}/logo-${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from("company-assets").upload(path, file, { upsert: true });
+    const { error } = await supabase.storage
+      .from("company-assets")
+      .upload(path, file, { upsert: true });
     if (error) return toast.error(error.message);
-    const { data: signed } = await supabase.storage.from("company-assets").createSignedUrl(path, 60 * 60 * 24 * 365);
-    await supabase.from("companies").update({ logo_url: signed?.signedUrl ?? path }).eq("id", companyId);
+    const { data: signed } = await supabase.storage
+      .from("company-assets")
+      .createSignedUrl(path, 60 * 60 * 24 * 365);
+    await supabase
+      .from("companies")
+      .update({ logo_url: signed?.signedUrl ?? path })
+      .eq("id", companyId);
     toast.success("Logo atualizado");
     qc.invalidateQueries({ queryKey: ["company-full", companyId] });
   }
@@ -180,17 +301,30 @@ function CompanyTab({ companyId, canEdit, qc }: { companyId?: string; canEdit: b
       <div className="flex items-center gap-4">
         <div className="h-20 w-20 rounded-xl border bg-muted/30 grid place-items-center overflow-hidden">
           {(company as any)?.logo_url ? (
-            <img src={(company as any).logo_url} alt="Logo" className="h-full w-full object-cover" />
-          ) : <ImageIcon className="h-8 w-8 text-muted-foreground" />}
+            <img
+              src={(company as any).logo_url}
+              alt="Logo"
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <ImageIcon className="h-8 w-8 text-muted-foreground" />
+          )}
         </div>
         <div className="flex-1">
           <h3 className="font-semibold text-sm">Logo da empresa</h3>
           <p className="text-xs text-muted-foreground mb-2">PNG, JPG ou WEBP até 2MB.</p>
           <label className="inline-flex">
-            <input type="file" hidden accept=".png,.jpg,.jpeg,.webp" disabled={!canEdit}
-              onChange={(e) => e.target.files?.[0] && uploadLogo(e.target.files[0])} />
+            <input
+              type="file"
+              hidden
+              accept=".png,.jpg,.jpeg,.webp"
+              disabled={!canEdit}
+              onChange={(e) => e.target.files?.[0] && uploadLogo(e.target.files[0])}
+            />
             <Button type="button" variant="outline" size="sm" disabled={!canEdit} asChild>
-              <span><Upload className="h-3.5 w-3.5 mr-1.5" /> Fazer upload</span>
+              <span>
+                <Upload className="h-3.5 w-3.5 mr-1.5" /> Fazer upload
+              </span>
             </Button>
           </label>
         </div>
@@ -198,34 +332,69 @@ function CompanyTab({ companyId, canEdit, qc }: { companyId?: string; canEdit: b
 
       <form onSubmit={form.handleSubmit(onSave)} className="space-y-4">
         <div className="grid sm:grid-cols-2 gap-3">
-          <Field label="Nome" error={form.formState.errors.name?.message}><Input {...form.register("name")} disabled={!canEdit} /></Field>
-          <Field label="E-mail"><Input type="email" {...form.register("email")} disabled={!canEdit} /></Field>
-          <Field label="Telefone"><Input {...form.register("phone")} disabled={!canEdit} /></Field>
-          <Field label="WhatsApp"><Input {...form.register("whatsapp")} placeholder="+55..." disabled={!canEdit} /></Field>
-          <Field label="Instagram"><Input {...form.register("instagram")} placeholder="@suaempresa" disabled={!canEdit} /></Field>
-          <Field label="Endereço"><Input {...form.register("address")} disabled={!canEdit} /></Field>
-          <Field label="Cidade"><Input {...form.register("city")} disabled={!canEdit} /></Field>
-          <Field label="Estado"><Input {...form.register("state")} disabled={!canEdit} /></Field>
+          <Field label="Nome" error={form.formState.errors.name?.message}>
+            <Input {...form.register("name")} disabled={!canEdit} />
+          </Field>
+          <Field label="E-mail">
+            <Input type="email" {...form.register("email")} disabled={!canEdit} />
+          </Field>
+          <Field label="Telefone">
+            <Input {...form.register("phone")} disabled={!canEdit} />
+          </Field>
+          <Field label="WhatsApp">
+            <Input {...form.register("whatsapp")} placeholder="+55..." disabled={!canEdit} />
+          </Field>
+          <Field label="Instagram">
+            <Input {...form.register("instagram")} placeholder="@suaempresa" disabled={!canEdit} />
+          </Field>
+          <Field label="Endereço">
+            <Input {...form.register("address")} disabled={!canEdit} />
+          </Field>
+          <Field label="Cidade">
+            <Input {...form.register("city")} disabled={!canEdit} />
+          </Field>
+          <Field label="Estado">
+            <Input {...form.register("state")} disabled={!canEdit} />
+          </Field>
         </div>
 
         {/* Business hours */}
         <div className="space-y-2">
           <h3 className="font-semibold text-sm pt-2">Horário de funcionamento</h3>
           <div className="space-y-2">
-            {DAYS.map(d => (
+            {DAYS.map((d) => (
               <div key={d.key} className="flex items-center gap-3 py-1.5 border-b last:border-0">
                 <span className="text-sm w-24 font-medium">{d.label}</span>
-                <Switch checked={!hours[d.key]?.closed} disabled={!canEdit}
-                  onCheckedChange={(v) => setHours(h => ({ ...h, [d.key]: { ...h[d.key], closed: !v } }))} />
+                <Switch
+                  checked={!hours[d.key]?.closed}
+                  disabled={!canEdit}
+                  onCheckedChange={(v) =>
+                    setHours((h) => ({ ...h, [d.key]: { ...h[d.key], closed: !v } }))
+                  }
+                />
                 {hours[d.key]?.closed ? (
                   <span className="text-xs text-muted-foreground">Fechado</span>
                 ) : (
                   <>
-                    <Input type="time" className="w-28 h-8" value={hours[d.key]?.open} disabled={!canEdit}
-                      onChange={(e) => setHours(h => ({ ...h, [d.key]: { ...h[d.key], open: e.target.value } }))} />
+                    <Input
+                      type="time"
+                      className="w-28 h-8"
+                      value={hours[d.key]?.open}
+                      disabled={!canEdit}
+                      onChange={(e) =>
+                        setHours((h) => ({ ...h, [d.key]: { ...h[d.key], open: e.target.value } }))
+                      }
+                    />
                     <span className="text-xs text-muted-foreground">até</span>
-                    <Input type="time" className="w-28 h-8" value={hours[d.key]?.close} disabled={!canEdit}
-                      onChange={(e) => setHours(h => ({ ...h, [d.key]: { ...h[d.key], close: e.target.value } }))} />
+                    <Input
+                      type="time"
+                      className="w-28 h-8"
+                      value={hours[d.key]?.close}
+                      disabled={!canEdit}
+                      onChange={(e) =>
+                        setHours((h) => ({ ...h, [d.key]: { ...h[d.key], close: e.target.value } }))
+                      }
+                    />
                   </>
                 )}
               </div>
@@ -235,7 +404,9 @@ function CompanyTab({ companyId, canEdit, qc }: { companyId?: string; canEdit: b
 
         {canEdit && (
           <div className="flex justify-end">
-            <Button type="submit" disabled={form.formState.isSubmitting}>Salvar alterações</Button>
+            <Button type="submit" disabled={form.formState.isSubmitting}>
+              Salvar alterações
+            </Button>
           </div>
         )}
       </form>
@@ -244,7 +415,15 @@ function CompanyTab({ companyId, canEdit, qc }: { companyId?: string; canEdit: b
 }
 
 // ========================== USERS ==========================
-function UsersTab({ companyId, canManage, qc }: { companyId?: string; canManage: boolean; qc: any }) {
+function UsersTab({
+  companyId,
+  canManage,
+  qc,
+}: {
+  companyId?: string;
+  canManage: boolean;
+  qc: any;
+}) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -255,7 +434,12 @@ function UsersTab({ companyId, canManage, qc }: { companyId?: string; canManage:
 
   // Credentials dialog state
   const [credsModalOpen, setCredsModalOpen] = useState(false);
-  const [creds, setCreds] = useState<{ name: string; email: string; password: string; link: string } | null>(null);
+  const [creds, setCreds] = useState<{
+    name: string;
+    email: string;
+    password: string;
+    link: string;
+  } | null>(null);
 
   const { data: currentProfile } = useCurrentProfile();
 
@@ -263,11 +447,17 @@ function UsersTab({ companyId, canManage, qc }: { companyId?: string; canManage:
     enabled: !!companyId,
     queryKey: ["members", companyId],
     queryFn: async () => {
-      const { data: roles } = await supabase.from("user_roles").select("user_id, role").eq("company_id", companyId!);
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("user_id, role")
+        .eq("company_id", companyId!);
       if (!roles?.length) return [];
-      const ids = roles.map(r => r.user_id);
-      const { data: profs } = await supabase.from("profiles").select("id, name, email").in("id", ids);
-      return roles.map(r => ({ ...r, profile: profs?.find(p => p.id === r.user_id) }));
+      const ids = roles.map((r) => r.user_id);
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id, name, email")
+        .in("id", ids);
+      return roles.map((r) => ({ ...r, profile: profs?.find((p) => p.id === r.user_id) }));
     },
   });
 
@@ -325,7 +515,11 @@ function UsersTab({ companyId, canManage, qc }: { companyId?: string; canManage:
   }
 
   async function handleDeleteUser(userIdToDelete: string) {
-    if (!confirm("Tem certeza que deseja excluir a conta deste profissional? Todo o acesso dele será removido imediatamente e de forma definitiva.")) {
+    if (
+      !confirm(
+        "Tem certeza que deseja excluir a conta deste profissional? Todo o acesso dele será removido imediatamente e de forma definitiva.",
+      )
+    ) {
       return;
     }
     setDeletingId(userIdToDelete);
@@ -346,36 +540,74 @@ function UsersTab({ companyId, canManage, qc }: { companyId?: string; canManage:
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="font-semibold text-[15px]">Membros da equipe</h2>
-            <p className="text-xs text-muted-foreground">Gerencie o acesso dos profissionais ao BeautyFlow.</p>
+            <p className="text-xs text-muted-foreground">
+              Gerencie o acesso dos profissionais ao BeautyFlow.
+            </p>
           </div>
           {canManage && (
             <Dialog open={open} onOpenChange={setOpen}>
-              <DialogTrigger asChild><Button size="sm"><Plus className="h-3.5 w-3.5 mr-1.5" /> Criar Usuário</Button></DialogTrigger>
+              <DialogTrigger asChild>
+                <Button size="sm">
+                  <Plus className="h-3.5 w-3.5 mr-1.5" /> Criar Usuário
+                </Button>
+              </DialogTrigger>
               <DialogContent>
-                <DialogHeader><DialogTitle>Criar usuário do profissional</DialogTitle></DialogHeader>
+                <DialogHeader>
+                  <DialogTitle>Criar usuário do profissional</DialogTitle>
+                </DialogHeader>
                 <form onSubmit={handleCreateUser} className="space-y-3 pt-2">
                   <Field label="Nome completo *">
-                    <Input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Patrícia Silva" required />
+                    <Input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Ex: Patrícia Silva"
+                      required
+                    />
                   </Field>
                   <Field label="E-mail de login *">
-                    <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Ex: patricia@salao.com" required />
+                    <Input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="Ex: patricia@salao.com"
+                      required
+                    />
                   </Field>
                   <Field label="Senha de acesso *">
-                    <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mínimo 6 caracteres" required />
+                    <Input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Mínimo 6 caracteres"
+                      required
+                    />
                   </Field>
                   <Field label="Perfil / Permissões *">
                     <Select value={role} onValueChange={(v) => setRole(v as any)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="employee">Profissional (employee) · Apenas própria agenda</SelectItem>
-                        <SelectItem value="admin">Administrador (admin) · Operação completa</SelectItem>
+                        <SelectItem value="employee">
+                          Profissional (employee) · Apenas própria agenda
+                        </SelectItem>
+                        <SelectItem value="admin">
+                          Administrador (admin) · Operação completa
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </Field>
                   <DialogFooter className="pt-2">
-                    <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
+                    <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                      Cancelar
+                    </Button>
                     <Button type="submit" disabled={loading}>
-                      {loading ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1.5" />}
+                      {loading ? (
+                        <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                      ) : (
+                        <Plus className="h-3.5 w-3.5 mr-1.5" />
+                      )}
                       Criar Acesso
                     </Button>
                   </DialogFooter>
@@ -384,7 +616,9 @@ function UsersTab({ companyId, canManage, qc }: { companyId?: string; canManage:
             </Dialog>
           )}
         </div>
-        {!members.data?.length ? <Empty text="Nenhum membro cadastrado." /> : (
+        {!members.data?.length ? (
+          <Empty text="Nenhum membro cadastrado." />
+        ) : (
           <ul className="divide-y">
             {members.data.map((m: any) => (
               <li key={m.user_id} className="py-3 flex items-center gap-3">
@@ -393,9 +627,16 @@ function UsersTab({ companyId, canManage, qc }: { companyId?: string; canManage:
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{m.profile?.name ?? "—"}</p>
-                  <p className="text-xs text-muted-foreground truncate">{m.profile?.email ?? "—"}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {m.profile?.email ?? "—"}
+                  </p>
                 </div>
-                <Badge variant={m.role === "owner" ? "default" : "secondary"} className="capitalize mr-2">{m.role}</Badge>
+                <Badge
+                  variant={m.role === "owner" ? "default" : "secondary"}
+                  className="capitalize mr-2"
+                >
+                  {m.role}
+                </Badge>
                 {canManage && m.user_id !== currentProfile?.userId && m.role !== "owner" && (
                   <Button
                     size="icon"
@@ -405,7 +646,11 @@ function UsersTab({ companyId, canManage, qc }: { companyId?: string; canManage:
                     onClick={() => handleDeleteUser(m.user_id)}
                     title="Excluir profissional e remover acesso"
                   >
-                    {deletingId === m.user_id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    {deletingId === m.user_id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
                   </Button>
                 )}
               </li>
@@ -424,7 +669,8 @@ function UsersTab({ companyId, canManage, qc }: { companyId?: string; canManage:
           </DialogHeader>
           <div className="space-y-4 py-3">
             <p className="text-sm text-muted-foreground">
-              O profissional {creds?.name} foi cadastrado. Copie as credenciais abaixo e envie para ele realizar o login por senha:
+              O profissional {creds?.name} foi cadastrado. Copie as credenciais abaixo e envie para
+              ele realizar o login por senha:
             </p>
             <div className="space-y-3 rounded-lg bg-muted/50 p-4 text-sm font-medium">
               <div className="flex justify-between items-center gap-2">
@@ -432,26 +678,49 @@ function UsersTab({ companyId, canManage, qc }: { companyId?: string; canManage:
                   <p className="text-[10px] text-muted-foreground uppercase">Link de Login</p>
                   <p className="font-mono text-xs truncate">{creds?.link}</p>
                 </div>
-                <Button size="sm" variant="outline" className="h-7 text-xs px-2 shrink-0" onClick={() => copyToClipboard(creds?.link ?? "", "Link de login")}>Copiar</Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs px-2 shrink-0"
+                  onClick={() => copyToClipboard(creds?.link ?? "", "Link de login")}
+                >
+                  Copiar
+                </Button>
               </div>
               <div className="flex justify-between items-center gap-2 border-t pt-2.5">
                 <div className="min-w-0 flex-1">
                   <p className="text-[10px] text-muted-foreground uppercase">E-mail</p>
                   <p className="font-mono text-xs truncate">{creds?.email}</p>
                 </div>
-                <Button size="sm" variant="outline" className="h-7 text-xs px-2 shrink-0" onClick={() => copyToClipboard(creds?.email ?? "", "E-mail")}>Copiar</Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs px-2 shrink-0"
+                  onClick={() => copyToClipboard(creds?.email ?? "", "E-mail")}
+                >
+                  Copiar
+                </Button>
               </div>
               <div className="flex justify-between items-center gap-2 border-t pt-2.5">
                 <div className="min-w-0 flex-1">
                   <p className="text-[10px] text-muted-foreground uppercase">Senha de Acesso</p>
                   <p className="font-mono text-xs truncate">{creds?.password}</p>
                 </div>
-                <Button size="sm" variant="outline" className="h-7 text-xs px-2 shrink-0" onClick={() => copyToClipboard(creds?.password ?? "", "Senha")}>Copiar</Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs px-2 shrink-0"
+                  onClick={() => copyToClipboard(creds?.password ?? "", "Senha")}
+                >
+                  Copiar
+                </Button>
               </div>
             </div>
           </div>
           <DialogFooter>
-            <Button className="w-full" onClick={() => setCredsModalOpen(false)}>Fechar e Concluir</Button>
+            <Button className="w-full" onClick={() => setCredsModalOpen(false)}>
+              Fechar e Concluir
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -473,7 +742,11 @@ function PlanTab({ companyId, isOwner, qc }: { companyId?: string; isOwner: bool
     enabled: !!companyId,
     queryKey: ["subscription", companyId],
     queryFn: async () => {
-      const { data } = await supabase.from("subscriptions").select("*").eq("company_id", companyId!).maybeSingle();
+      const { data } = await supabase
+        .from("subscriptions")
+        .select("*")
+        .eq("company_id", companyId!)
+        .maybeSingle();
       return data;
     },
   });
@@ -482,13 +755,18 @@ function PlanTab({ companyId, isOwner, qc }: { companyId?: string; isOwner: bool
     enabled: !!companyId,
     queryKey: ["clients-count", companyId],
     queryFn: async () => {
-      const { count } = await supabase.from("clients").select("id", { count: "exact", head: true }).eq("company_id", companyId!);
+      const { count } = await supabase
+        .from("clients")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", companyId!);
       return count ?? 0;
     },
   });
 
   const currentPlan = (plans.data ?? []).find((p: any) => p.id === sub.data?.plan_id);
-  const usagePct = currentPlan?.max_clients ? Math.min(100, ((clientsCount.data ?? 0) / currentPlan.max_clients) * 100) : 0;
+  const usagePct = currentPlan?.max_clients
+    ? Math.min(100, ((clientsCount.data ?? 0) / currentPlan.max_clients) * 100)
+    : 0;
 
   async function upgrade(_planId: string) {
     // Plan changes must go through a verified server-side billing flow.
@@ -502,23 +780,39 @@ function PlanTab({ companyId, isOwner, qc }: { companyId?: string; isOwner: bool
       <Card className="p-5 shadow-soft bg-gradient-to-br from-card to-accent/20 border-primary/20">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">Seu plano atual</p>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">
+              Seu plano atual
+            </p>
             <p className="text-2xl font-bold mt-1">{currentPlan?.name ?? "—"}</p>
             <p className="text-sm text-muted-foreground">
-              {sub.data?.status === "TRIAL" ? `Trial até ${new Date(sub.data.trial_ends_at ?? sub.data.current_period_end).toLocaleDateString("pt-BR")}` :
-               sub.data ? `Próxima cobrança: ${new Date(sub.data.current_period_end).toLocaleDateString("pt-BR")}` : "—"}
+              {sub.data?.status === "TRIAL"
+                ? `Trial até ${new Date(sub.data.trial_ends_at ?? sub.data.current_period_end).toLocaleDateString("pt-BR")}`
+                : sub.data
+                  ? `Próxima cobrança: ${new Date(sub.data.current_period_end).toLocaleDateString("pt-BR")}`
+                  : "—"}
             </p>
           </div>
-          <Badge variant={sub.data?.status === "ACTIVE" ? "default" : "secondary"} className="uppercase">{sub.data?.status ?? "—"}</Badge>
+          <Badge
+            variant={sub.data?.status === "ACTIVE" ? "default" : "secondary"}
+            className="uppercase"
+          >
+            {sub.data?.status ?? "—"}
+          </Badge>
         </div>
         {currentPlan?.max_clients && (
           <div className="mt-4">
             <div className="flex justify-between text-xs mb-1">
               <span className="text-muted-foreground">Clientes</span>
-              <span className="tabular-nums">{clientsCount.data ?? 0} / {currentPlan.max_clients}</span>
+              <span className="tabular-nums">
+                {clientsCount.data ?? 0} / {currentPlan.max_clients}
+              </span>
             </div>
             <Progress value={usagePct} className="h-1.5" />
-            {usagePct >= 85 && <p className="text-xs text-warning mt-2">Você utilizou {Math.round(usagePct)}% do seu plano.</p>}
+            {usagePct >= 85 && (
+              <p className="text-xs text-warning mt-2">
+                Você utilizou {Math.round(usagePct)}% do seu plano.
+              </p>
+            )}
           </div>
         )}
       </Card>
@@ -528,11 +822,17 @@ function PlanTab({ companyId, isOwner, qc }: { companyId?: string; isOwner: bool
           const features = p.features as Record<string, boolean>;
           const isCurrent = p.id === sub.data?.plan_id;
           return (
-            <Card key={p.id} className={`p-5 shadow-soft flex flex-col ${isCurrent ? "border-2 border-primary" : ""}`}>
+            <Card
+              key={p.id}
+              className={`p-5 shadow-soft flex flex-col ${isCurrent ? "border-2 border-primary" : ""}`}
+            >
               {isCurrent && <Badge className="self-start mb-2">Plano atual</Badge>}
               <h3 className="font-semibold text-lg">{p.name}</h3>
               <p className="text-xs text-muted-foreground mb-3">{p.description}</p>
-              <p className="text-3xl font-bold tabular-nums">{formatBRL(Number(p.monthly_price))}<span className="text-sm font-normal text-muted-foreground">/mês</span></p>
+              <p className="text-3xl font-bold tabular-nums">
+                {formatBRL(Number(p.monthly_price))}
+                <span className="text-sm font-normal text-muted-foreground">/mês</span>
+              </p>
               <ul className="mt-4 space-y-1.5 text-sm flex-1">
                 <Feature ok>Até {p.max_clients ?? "∞"} clientes</Feature>
                 <Feature ok>Até {p.max_users ?? "∞"} usuários</Feature>
@@ -543,7 +843,11 @@ function PlanTab({ companyId, isOwner, qc }: { companyId?: string; isOwner: bool
                 <Feature ok={features?.integrations}>Integrações</Feature>
                 <Feature ok={features?.ai}>IA (BeautyFlow Insights)</Feature>
               </ul>
-              <Button className="mt-4" disabled={isCurrent || !isOwner} onClick={() => upgrade(p.id)}>
+              <Button
+                className="mt-4"
+                disabled={isCurrent || !isOwner}
+                onClick={() => upgrade(p.id)}
+              >
                 {isCurrent ? "Plano atual" : "Fazer upgrade"}
               </Button>
             </Card>
@@ -560,7 +864,11 @@ function BillingTab({ companyId }: { companyId?: string }) {
     enabled: !!companyId,
     queryKey: ["subscription", companyId],
     queryFn: async () => {
-      const { data } = await supabase.from("subscriptions").select("*, plans(name)").eq("company_id", companyId!).maybeSingle();
+      const { data } = await supabase
+        .from("subscriptions")
+        .select("*, plans(name)")
+        .eq("company_id", companyId!)
+        .maybeSingle();
       return data;
     },
   });
@@ -569,15 +877,20 @@ function BillingTab({ companyId }: { companyId?: string }) {
     enabled: !!companyId,
     queryKey: ["invoices", companyId],
     queryFn: async () => {
-      const { data } = await supabase.from("invoices").select("*").eq("company_id", companyId!)
-        .order("created_at", { ascending: false }).limit(50);
+      const { data } = await supabase
+        .from("invoices")
+        .select("*")
+        .eq("company_id", companyId!)
+        .order("created_at", { ascending: false })
+        .limit(50);
       return data ?? [];
     },
   });
 
   const isTrial = sub.data?.status === "TRIAL";
   const trialDaysLeft = sub.data?.trial_ends_at
-    ? Math.max(0, Math.ceil((new Date(sub.data.trial_ends_at).getTime() - Date.now()) / 86400000)) : 0;
+    ? Math.max(0, Math.ceil((new Date(sub.data.trial_ends_at).getTime() - Date.now()) / 86400000))
+    : 0;
 
   return (
     <div className="space-y-5">
@@ -586,10 +899,25 @@ function BillingTab({ companyId }: { companyId?: string }) {
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
           <Info label="Plano" value={(sub.data as any)?.plans?.name ?? "—"} />
           <Info label="Valor" value={formatBRL(Number(sub.data?.amount ?? 0)) + "/mês"} />
-          <Info label="Próxima cobrança" value={sub.data?.current_period_end ? new Date(sub.data.current_period_end).toLocaleDateString("pt-BR") : "—"} />
-          <Info label="Status" value={
-            <Badge variant={sub.data?.status === "ACTIVE" ? "default" : "secondary"} className="uppercase">{sub.data?.status ?? "—"}</Badge>
-          } />
+          <Info
+            label="Próxima cobrança"
+            value={
+              sub.data?.current_period_end
+                ? new Date(sub.data.current_period_end).toLocaleDateString("pt-BR")
+                : "—"
+            }
+          />
+          <Info
+            label="Status"
+            value={
+              <Badge
+                variant={sub.data?.status === "ACTIVE" ? "default" : "secondary"}
+                className="uppercase"
+              >
+                {sub.data?.status ?? "—"}
+              </Badge>
+            }
+          />
         </div>
         {isTrial && (
           <div className="mt-4 p-3 rounded-lg bg-warning/10 border border-warning/30">
@@ -603,7 +931,9 @@ function BillingTab({ companyId }: { companyId?: string }) {
 
       <Card className="p-5 shadow-soft">
         <h2 className="font-semibold text-[15px] mb-3">Histórico de faturas</h2>
-        {!invoices.data?.length ? <Empty text="Sem faturas ainda. Suas cobranças aparecerão aqui." /> : (
+        {!invoices.data?.length ? (
+          <Empty text="Sem faturas ainda. Suas cobranças aparecerão aqui." />
+        ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-xs text-muted-foreground uppercase tracking-wider">
@@ -618,10 +948,24 @@ function BillingTab({ companyId }: { companyId?: string }) {
                 {invoices.data.map((inv: any) => (
                   <tr key={inv.id} className="border-b last:border-0">
                     <td className="py-2 px-2 font-mono text-xs">{inv.number}</td>
-                    <td className="py-2 px-2">{new Date(inv.due_date).toLocaleDateString("pt-BR")}</td>
-                    <td className="py-2 px-2 text-right tabular-nums">{formatBRL(Number(inv.amount))}</td>
+                    <td className="py-2 px-2">
+                      {new Date(inv.due_date).toLocaleDateString("pt-BR")}
+                    </td>
+                    <td className="py-2 px-2 text-right tabular-nums">
+                      {formatBRL(Number(inv.amount))}
+                    </td>
                     <td className="py-2 px-2 text-right">
-                      <Badge variant={inv.status === "PAID" ? "default" : inv.status === "PAST_DUE" ? "destructive" : "secondary"}>{inv.status}</Badge>
+                      <Badge
+                        variant={
+                          inv.status === "PAID"
+                            ? "default"
+                            : inv.status === "PAST_DUE"
+                              ? "destructive"
+                              : "secondary"
+                        }
+                      >
+                        {inv.status}
+                      </Badge>
                     </td>
                   </tr>
                 ))}
@@ -635,7 +979,15 @@ function BillingTab({ companyId }: { companyId?: string }) {
 }
 
 // ========================== INTEGRATIONS ==========================
-function IntegrationsTab({ companyId, canManage, qc }: { companyId?: string; canManage: boolean; qc: any }) {
+function IntegrationsTab({
+  companyId,
+  canManage,
+  qc,
+}: {
+  companyId?: string;
+  canManage: boolean;
+  qc: any;
+}) {
   const list = useQuery({
     enabled: !!companyId,
     queryKey: ["integrations", companyId],
@@ -648,30 +1000,41 @@ function IntegrationsTab({ companyId, canManage, qc }: { companyId?: string; can
   async function toggle(provider: string, currentlyConnected: boolean) {
     if (!companyId) return;
     const newStatus = currentlyConnected ? "DISCONNECTED" : "CONNECTED";
-    await supabase.from("integrations").upsert({
-      company_id: companyId, provider, status: newStatus,
-      connected_at: currentlyConnected ? null : new Date().toISOString(),
-    } as any, { onConflict: "company_id,provider" });
+    await supabase.from("integrations").upsert(
+      {
+        company_id: companyId,
+        provider,
+        status: newStatus,
+        connected_at: currentlyConnected ? null : new Date().toISOString(),
+      } as any,
+      { onConflict: "company_id,provider" },
+    );
     toast.success(currentlyConnected ? "Integração desconectada" : "Integração conectada");
     qc.invalidateQueries({ queryKey: ["integrations", companyId] });
   }
 
   return (
     <div className="grid gap-3 md:grid-cols-2">
-      {INTEGRATIONS.map(I => {
+      {INTEGRATIONS.map((I) => {
         const row = list.data?.find((r: any) => r.provider === I.id);
         const connected = row?.status === "CONNECTED";
         return (
           <Card key={I.id} className="p-4 shadow-soft flex items-center gap-3">
-            <div className={`grid h-10 w-10 place-items-center rounded-lg ${connected ? "bg-success/15 text-success" : "bg-secondary text-muted-foreground"}`}>
+            <div
+              className={`grid h-10 w-10 place-items-center rounded-lg ${connected ? "bg-success/15 text-success" : "bg-secondary text-muted-foreground"}`}
+            >
               <I.icon className="h-5 w-5" />
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-medium text-sm">{I.name}</p>
               <p className="text-xs text-muted-foreground">{I.desc}</p>
             </div>
-            <Button size="sm" variant={connected ? "outline" : "default"} disabled={!canManage}
-              onClick={() => toggle(I.id, connected)}>
+            <Button
+              size="sm"
+              variant={connected ? "outline" : "default"}
+              disabled={!canManage}
+              onClick={() => toggle(I.id, connected)}
+            >
               {connected ? "Desconectar" : "Conectar"}
             </Button>
           </Card>
@@ -686,15 +1049,27 @@ function PreferencesTab({ companyId, qc }: { companyId?: string; qc: any }) {
   const { data: company } = useQuery({
     enabled: !!companyId,
     queryKey: ["company-full", companyId],
-    queryFn: async () => (await supabase.from("companies").select("preferences").eq("id", companyId!).maybeSingle()).data,
+    queryFn: async () =>
+      (await supabase.from("companies").select("preferences").eq("id", companyId!).maybeSingle())
+        .data,
   });
-  const prefs = (company as any)?.preferences ?? { language: "pt-BR", timezone: "America/Sao_Paulo", currency: "BRL", date_format: "DD/MM/YYYY" };
+  const prefs = (company as any)?.preferences ?? {
+    language: "pt-BR",
+    timezone: "America/Sao_Paulo",
+    currency: "BRL",
+    date_format: "DD/MM/YYYY",
+  };
   const [local, setLocal] = useState(prefs);
-  useEffect(() => { if (prefs) setLocal(prefs); }, [company]);
+  useEffect(() => {
+    if (prefs) setLocal(prefs);
+  }, [company]);
 
   async function save() {
     if (!companyId) return;
-    const { error } = await supabase.from("companies").update({ preferences: local } as any).eq("id", companyId);
+    const { error } = await supabase
+      .from("companies")
+      .update({ preferences: local } as any)
+      .eq("id", companyId);
     if (error) return toast.error(error.message);
     toast.success("Preferências salvas");
     qc.invalidateQueries({ queryKey: ["company-full", companyId] });
@@ -706,7 +1081,9 @@ function PreferencesTab({ companyId, qc }: { companyId?: string; qc: any }) {
       <div className="grid sm:grid-cols-2 gap-3">
         <Field label="Idioma">
           <Select value={local.language} onValueChange={(v) => setLocal({ ...local, language: v })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="pt-BR">Português (Brasil)</SelectItem>
               <SelectItem value="en-US">English (US)</SelectItem>
@@ -716,7 +1093,9 @@ function PreferencesTab({ companyId, qc }: { companyId?: string; qc: any }) {
         </Field>
         <Field label="Fuso horário">
           <Select value={local.timezone} onValueChange={(v) => setLocal({ ...local, timezone: v })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="America/Sao_Paulo">São Paulo (GMT-3)</SelectItem>
               <SelectItem value="America/Manaus">Manaus (GMT-4)</SelectItem>
@@ -726,7 +1105,9 @@ function PreferencesTab({ companyId, qc }: { companyId?: string; qc: any }) {
         </Field>
         <Field label="Moeda">
           <Select value={local.currency} onValueChange={(v) => setLocal({ ...local, currency: v })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="BRL">Real (R$)</SelectItem>
               <SelectItem value="USD">Dólar (US$)</SelectItem>
@@ -735,8 +1116,13 @@ function PreferencesTab({ companyId, qc }: { companyId?: string; qc: any }) {
           </Select>
         </Field>
         <Field label="Formato de data">
-          <Select value={local.date_format} onValueChange={(v) => setLocal({ ...local, date_format: v })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+          <Select
+            value={local.date_format}
+            onValueChange={(v) => setLocal({ ...local, date_format: v })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="DD/MM/YYYY">DD/MM/AAAA</SelectItem>
               <SelectItem value="MM/DD/YYYY">MM/DD/AAAA</SelectItem>
@@ -745,22 +1131,26 @@ function PreferencesTab({ companyId, qc }: { companyId?: string; qc: any }) {
           </Select>
         </Field>
       </div>
-      <div className="flex justify-end"><Button onClick={save}>Salvar preferências</Button></div>
+      <div className="flex justify-end">
+        <Button onClick={save}>Salvar preferências</Button>
+      </div>
     </Card>
   );
 }
 
 // ========================== SECURITY ==========================
 function SecurityTab() {
-  const [pwd, setPwd] = useState(""); const [pwd2, setPwd2] = useState("");
+  const [pwd, setPwd] = useState("");
+  const [pwd2, setPwd2] = useState("");
 
   async function changePassword() {
     if (pwd.length < 8) return toast.error("Senha deve ter pelo menos 8 caracteres.");
-    if (pwd !== pwd2)    return toast.error("Senhas não conferem.");
+    if (pwd !== pwd2) return toast.error("Senhas não conferem.");
     const { error } = await supabase.auth.updateUser({ password: pwd });
     if (error) return toast.error(error.message);
     toast.success("Senha alterada com sucesso.");
-    setPwd(""); setPwd2("");
+    setPwd("");
+    setPwd2("");
   }
 
   async function signOutAll() {
@@ -772,23 +1162,46 @@ function SecurityTab() {
   return (
     <div className="space-y-5">
       <Card className="p-6 shadow-soft space-y-4">
-        <div className="flex items-center gap-2"><KeyRound className="h-4 w-4 text-primary" /><h2 className="font-semibold text-[15px]">Alterar senha</h2></div>
-        <Field label="Nova senha"><Input type="password" value={pwd} onChange={(e) => setPwd(e.target.value)} /></Field>
-        <Field label="Confirmar nova senha"><Input type="password" value={pwd2} onChange={(e) => setPwd2(e.target.value)} /></Field>
-        <div className="flex justify-end"><Button onClick={changePassword}><Lock className="h-3.5 w-3.5 mr-1.5" /> Alterar senha</Button></div>
+        <div className="flex items-center gap-2">
+          <KeyRound className="h-4 w-4 text-primary" />
+          <h2 className="font-semibold text-[15px]">Alterar senha</h2>
+        </div>
+        <Field label="Nova senha">
+          <Input type="password" value={pwd} onChange={(e) => setPwd(e.target.value)} />
+        </Field>
+        <Field label="Confirmar nova senha">
+          <Input type="password" value={pwd2} onChange={(e) => setPwd2(e.target.value)} />
+        </Field>
+        <div className="flex justify-end">
+          <Button onClick={changePassword}>
+            <Lock className="h-3.5 w-3.5 mr-1.5" /> Alterar senha
+          </Button>
+        </div>
       </Card>
 
       <Card className="p-6 shadow-soft space-y-3">
-        <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-primary" /><h2 className="font-semibold text-[15px]">Sessões ativas</h2></div>
-        <p className="text-sm text-muted-foreground">Encerre todas as sessões em outros dispositivos.</p>
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-primary" />
+          <h2 className="font-semibold text-[15px]">Sessões ativas</h2>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Encerre todas as sessões em outros dispositivos.
+        </p>
         <div className="flex justify-end">
-          <Button variant="outline" onClick={signOutAll}><LogOut className="h-3.5 w-3.5 mr-1.5" /> Sair de todos os dispositivos</Button>
+          <Button variant="outline" onClick={signOutAll}>
+            <LogOut className="h-3.5 w-3.5 mr-1.5" /> Sair de todos os dispositivos
+          </Button>
         </div>
       </Card>
 
       <Card className="p-6 shadow-soft">
-        <div className="flex items-center gap-2 mb-2"><UserCog className="h-4 w-4 text-muted-foreground" /><h2 className="font-semibold text-[15px]">Autenticação em 2 fatores</h2></div>
-        <p className="text-sm text-muted-foreground">Em breve. Adicione uma camada extra de segurança à sua conta.</p>
+        <div className="flex items-center gap-2 mb-2">
+          <UserCog className="h-4 w-4 text-muted-foreground" />
+          <h2 className="font-semibold text-[15px]">Autenticação em 2 fatores</h2>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Em breve. Adicione uma camada extra de segurança à sua conta.
+        </p>
       </Card>
     </div>
   );
@@ -815,7 +1228,11 @@ function Info({ label, value }: { label: string; value: any }) {
 function Feature({ ok, children }: { ok?: boolean; children: any }) {
   return (
     <li className="flex items-center gap-2">
-      {ok ? <CheckCircle2 className="h-4 w-4 text-success shrink-0" /> : <XCircle className="h-4 w-4 text-muted-foreground/50 shrink-0" />}
+      {ok ? (
+        <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
+      ) : (
+        <XCircle className="h-4 w-4 text-muted-foreground/50 shrink-0" />
+      )}
       <span className={ok ? "" : "text-muted-foreground line-through"}>{children}</span>
     </li>
   );
@@ -826,13 +1243,26 @@ function Empty({ text }: { text: string }) {
 
 // ========================== SERVICES TAB ==========================
 const CATEGORIES = [
-  "Sobrancelhas", "Lash", "Cabelo", "Barba", "Massagem",
-  "Depilação", "Estética", "Unhas", "Outros",
+  "Sobrancelhas",
+  "Lash",
+  "Cabelo",
+  "Barba",
+  "Massagem",
+  "Depilação",
+  "Estética",
+  "Unhas",
+  "Outros",
 ];
 
 const COLORS = [
-  "#EC4899", "#A855F7", "#3B82F6", "#10B981",
-  "#F59E0B", "#EF4444", "#6B7280", "#14B8A6",
+  "#EC4899",
+  "#A855F7",
+  "#3B82F6",
+  "#10B981",
+  "#F59E0B",
+  "#EF4444",
+  "#6B7280",
+  "#14B8A6",
 ];
 
 const servicesSchema = z.object({
@@ -855,7 +1285,10 @@ function ServicesTab({ companyId, qc }: { companyId?: string; qc: any }) {
     queryKey: ["services", companyId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("services").select("*").eq("company_id", companyId!).order("name");
+        .from("services")
+        .select("*")
+        .eq("company_id", companyId!)
+        .order("name");
       if (error) throw error;
       return data;
     },
@@ -865,29 +1298,48 @@ function ServicesTab({ companyId, qc }: { companyId?: string; qc: any }) {
     enabled: !!companyId,
     queryKey: ["service_metrics", companyId],
     queryFn: async () => {
-      const { data } = await supabase.from("service_metrics").select("*").eq("company_id", companyId!);
+      const { data } = await supabase
+        .from("service_metrics")
+        .select("*")
+        .eq("company_id", companyId!);
       return data ?? [];
     },
   });
 
   const top = useMemo(() => {
     const m = (metrics.data ?? []) as any[];
-    const bySold = [...m].sort((a, b) => Number(b.total_completed ?? 0) - Number(a.total_completed ?? 0))[0];
-    const byRev = [...m].sort((a, b) => Number(b.total_revenue ?? 0) - Number(a.total_revenue ?? 0))[0];
-    const byRec = [...m].sort((a, b) => Number(b.recurrence_ratio ?? 0) - Number(a.recurrence_ratio ?? 0))[0];
+    const bySold = [...m].sort(
+      (a, b) => Number(b.total_completed ?? 0) - Number(a.total_completed ?? 0),
+    )[0];
+    const byRev = [...m].sort(
+      (a, b) => Number(b.total_revenue ?? 0) - Number(a.total_revenue ?? 0),
+    )[0];
+    const byRec = [...m].sort(
+      (a, b) => Number(b.recurrence_ratio ?? 0) - Number(a.recurrence_ratio ?? 0),
+    )[0];
     return { bySold, byRev, byRec };
   }, [metrics.data]);
 
-  function openCreate() { setEditing(null); setOpen(true); }
-  function openEdit(s: any) { setEditing(s); setOpen(true); }
+  function openCreate() {
+    setEditing(null);
+    setOpen(true);
+  }
+  function openEdit(s: any) {
+    setEditing(s);
+    setOpen(true);
+  }
 
   async function duplicateService(s: any) {
     if (!companyId) return;
     const { error } = await supabase.from("services").insert({
       company_id: companyId,
       name: `${s.name} (cópia)`,
-      price: s.price, duration_minutes: s.duration_minutes, return_days: s.return_days,
-      category: s.category, color: s.color, description: s.description,
+      price: s.price,
+      duration_minutes: s.duration_minutes,
+      return_days: s.return_days,
+      category: s.category,
+      color: s.color,
+      description: s.description,
     });
     if (error) return toast.error(error.message);
     toast.success("Serviço duplicado");
@@ -913,16 +1365,37 @@ function ServicesTab({ companyId, qc }: { companyId?: string; qc: any }) {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="font-semibold text-lg tracking-tight">Serviços</h2>
-          <p className="text-sm text-muted-foreground">A base de todo agendamento. O retorno ideal define quando contatar o cliente novamente.</p>
+          <p className="text-sm text-muted-foreground">
+            A base de todo agendamento. O retorno ideal define quando contatar o cliente novamente.
+          </p>
         </div>
-        <Button onClick={openCreate} size="sm"><Plus className="h-4 w-4 mr-1" /> Novo serviço</Button>
+        <Button onClick={openCreate} size="sm">
+          <Plus className="h-4 w-4 mr-1" /> Novo serviço
+        </Button>
       </header>
 
       {/* Top metrics */}
       <section className="grid gap-3 sm:grid-cols-3">
-        <ServicesMetricCard icon={Trophy}     label="Mais vendido"      title={top.bySold?.name ?? null} hint={top.bySold ? `${Number(top.bySold.total_completed ?? 0)} atendimentos` : "—"} />
-        <ServicesMetricCard icon={TrendingUp} label="Maior faturamento" title={top.byRev?.name ?? null}  hint={top.byRev ? formatBRL(Number(top.byRev.total_revenue ?? 0)) : "—"} />
-        <ServicesMetricCard icon={Repeat}     label="Maior recorrência" title={top.byRec?.name ?? null}  hint={top.byRec ? `${Number(top.byRec.recurrence_ratio ?? 0).toFixed(1)}× por cliente` : "—"} />
+        <ServicesMetricCard
+          icon={Trophy}
+          label="Mais vendido"
+          title={top.bySold?.name ?? null}
+          hint={top.bySold ? `${Number(top.bySold.total_completed ?? 0)} atendimentos` : "—"}
+        />
+        <ServicesMetricCard
+          icon={TrendingUp}
+          label="Maior faturamento"
+          title={top.byRev?.name ?? null}
+          hint={top.byRev ? formatBRL(Number(top.byRev.total_revenue ?? 0)) : "—"}
+        />
+        <ServicesMetricCard
+          icon={Repeat}
+          label="Maior recorrência"
+          title={top.byRec?.name ?? null}
+          hint={
+            top.byRec ? `${Number(top.byRec.recurrence_ratio ?? 0).toFixed(1)}× por cliente` : "—"
+          }
+        />
       </section>
 
       <Card className="p-4 shadow-soft">
@@ -934,18 +1407,31 @@ function ServicesTab({ companyId, qc }: { companyId?: string; qc: any }) {
               <Scissors className="h-5 w-5" />
             </div>
             <p className="mt-3 font-medium">Nenhum serviço cadastrado</p>
-            <Button className="mt-3" onClick={openCreate}>Criar primeiro serviço</Button>
+            <Button className="mt-3" onClick={openCreate}>
+              Criar primeiro serviço
+            </Button>
           </div>
         ) : (
           <ul className="divide-y">
             {list.data.map((s: any) => (
               <li key={s.id} className="py-3 flex items-center gap-3">
-                <span className="h-9 w-1.5 rounded-full shrink-0" style={{ background: s.color ?? "hsl(var(--primary))" }} />
+                <span
+                  className="h-9 w-1.5 rounded-full shrink-0"
+                  style={{ background: s.color ?? "hsl(var(--primary))" }}
+                />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-medium truncate text-sm">{s.name}</p>
-                    {s.category && <Badge variant="secondary" className="text-[9px] px-1.5 py-0.5">{s.category}</Badge>}
-                    {!s.active && <Badge variant="outline" className="text-[9px] px-1.5 py-0.5">Inativo</Badge>}
+                    {s.category && (
+                      <Badge variant="secondary" className="text-[9px] px-1.5 py-0.5">
+                        {s.category}
+                      </Badge>
+                    )}
+                    {!s.active && (
+                      <Badge variant="outline" className="text-[9px] px-1.5 py-0.5">
+                        Inativo
+                      </Badge>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {s.duration_minutes}min · retorno em {s.return_days} dias
@@ -955,15 +1441,24 @@ function ServicesTab({ companyId, qc }: { companyId?: string; qc: any }) {
                 <Switch checked={s.active} onCheckedChange={(v) => toggleActive(s.id, v)} />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => openEdit(s)}>Editar</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => duplicateService(s)}>Duplicar</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => duplicateService(s)}>
+                      Duplicar
+                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => toggleActive(s.id, !s.active)}>
                       {s.active ? "Desativar" : "Ativar"}
                     </DropdownMenuItem>
-                    <DropdownMenuItem className="text-destructive" onClick={() => removeService(s.id)}>Excluir</DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="text-destructive"
+                      onClick={() => removeService(s.id)}
+                    >
+                      Excluir
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </li>
@@ -983,12 +1478,26 @@ function ServicesTab({ companyId, qc }: { companyId?: string; qc: any }) {
   );
 }
 
-function ServicesMetricCard({ icon: Icon, label, title, hint }: { icon: any; label: string; title?: string | null; hint: string }) {
+function ServicesMetricCard({
+  icon: Icon,
+  label,
+  title,
+  hint,
+}: {
+  icon: any;
+  label: string;
+  title?: string | null;
+  hint: string;
+}) {
   return (
     <Card className="p-4 shadow-soft">
       <div className="flex items-start justify-between">
-        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
-        <span className="grid h-8 w-8 place-items-center rounded-lg bg-secondary text-primary"><Icon className="h-3.5 w-3.5" /></span>
+        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+          {label}
+        </p>
+        <span className="grid h-8 w-8 place-items-center rounded-lg bg-secondary text-primary">
+          <Icon className="h-3.5 w-3.5" />
+        </span>
       </div>
       <p className="mt-2 font-semibold truncate text-sm">{title ?? "—"}</p>
       <p className="text-xs text-muted-foreground">{hint}</p>
@@ -997,15 +1506,39 @@ function ServicesMetricCard({ icon: Icon, label, title, hint }: { icon: any; lab
 }
 
 function ServiceDialog({
-  open, onOpenChange, editing, companyId, onSaved,
-}: { open: boolean; onOpenChange: (v: boolean) => void; editing: any; companyId?: string; onSaved: () => void }) {
+  open,
+  onOpenChange,
+  editing,
+  companyId,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  editing: any;
+  companyId?: string;
+  onSaved: () => void;
+}) {
   const form = useForm<ServicesFormVals>({
     resolver: zodResolver(servicesSchema),
-    values: editing ? {
-      name: editing.name, price: Number(editing.price), duration_minutes: editing.duration_minutes,
-      return_days: editing.return_days, category: editing.category ?? "", color: editing.color ?? "",
-      description: editing.description ?? "",
-    } : { name: "", price: 0, duration_minutes: 60, return_days: 30, category: "", color: COLORS[0], description: "" },
+    values: editing
+      ? {
+          name: editing.name,
+          price: Number(editing.price),
+          duration_minutes: editing.duration_minutes,
+          return_days: editing.return_days,
+          category: editing.category ?? "",
+          color: editing.color ?? "",
+          description: editing.description ?? "",
+        }
+      : {
+          name: "",
+          price: 0,
+          duration_minutes: 60,
+          return_days: 30,
+          category: "",
+          color: COLORS[0],
+          description: "",
+        },
   });
 
   async function onSubmit(v: ServicesFormVals) {
@@ -1030,40 +1563,70 @@ function ServiceDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogHeader><DialogTitle>{editing ? "Editar serviço" : "Novo serviço"}</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>{editing ? "Editar serviço" : "Novo serviço"}</DialogTitle>
+        </DialogHeader>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-2">
             <Label>Nome *</Label>
             <Input {...form.register("name")} placeholder="Ex: Design de Sobrancelhas" />
           </div>
           <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-2"><Label>Preço (R$) *</Label><Input type="number" step="0.01" {...form.register("price")} /></div>
-            <div className="space-y-2"><Label>Duração (min) *</Label><Input type="number" {...form.register("duration_minutes")} /></div>
-            <div className="space-y-2"><Label>Retorno (dias) *</Label><Input type="number" {...form.register("return_days")} /></div>
+            <div className="space-y-2">
+              <Label>Preço (R$) *</Label>
+              <Input type="number" step="0.01" {...form.register("price")} />
+            </div>
+            <div className="space-y-2">
+              <Label>Duração (min) *</Label>
+              <Input type="number" {...form.register("duration_minutes")} />
+            </div>
+            <div className="space-y-2">
+              <Label>Retorno (dias) *</Label>
+              <Input type="number" {...form.register("return_days")} />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>Categoria</Label>
-              <Controller control={form.control} name="category" render={({ field }) => (
-                <Select value={field.value || undefined} onValueChange={field.onChange}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>
-                    {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              )} />
+              <Controller
+                control={form.control}
+                name="category"
+                render={({ field }) => (
+                  <Select value={field.value || undefined} onValueChange={field.onChange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CATEGORIES.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
             </div>
             <div className="space-y-2">
               <Label>Cor</Label>
-              <Controller control={form.control} name="color" render={({ field }) => (
-                <div className="flex gap-1.5 pt-1">
-                  {COLORS.map((c) => (
-                    <button key={c} type="button" onClick={() => field.onChange(c)}
-                      className={`h-7 w-7 rounded-full border-2 ${field.value === c ? "border-foreground" : "border-transparent"}`}
-                      style={{ background: c }} aria-label={c}/>
-                  ))}
-                </div>
-              )} />
+              <Controller
+                control={form.control}
+                name="color"
+                render={({ field }) => (
+                  <div className="flex gap-1.5 pt-1">
+                    {COLORS.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => field.onChange(c)}
+                        className={`h-7 w-7 rounded-full border-2 ${field.value === c ? "border-foreground" : "border-transparent"}`}
+                        style={{ background: c }}
+                        aria-label={c}
+                      />
+                    ))}
+                  </div>
+                )}
+              />
             </div>
           </div>
           <div className="space-y-2">
@@ -1071,8 +1634,12 @@ function ServiceDialog({
             <Textarea {...form.register("description")} rows={2} />
           </div>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button type="submit" disabled={form.formState.isSubmitting}>Salvar</Button>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={form.formState.isSubmitting}>
+              Salvar
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

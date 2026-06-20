@@ -104,7 +104,9 @@ function AppShell() {
           </span>
           <div className="leading-tight">
             <p className="text-[15px] font-semibold tracking-tight">BeautyFlow</p>
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">retenção · receita</p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+              retenção · receita
+            </p>
           </div>
         </div>
 
@@ -196,14 +198,21 @@ function AppShell() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel className="font-normal">
-                  <p className="text-sm font-medium truncate">{profile.profile?.name ?? "Sua conta"}</p>
+                  <p className="text-sm font-medium truncate">
+                    {profile.profile?.name ?? "Sua conta"}
+                  </p>
                   <p className="text-xs text-muted-foreground truncate">{profile.email}</p>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link to="/app/settings"><Settings className="h-4 w-4 mr-2" /> Configurações</Link>
+                  <Link to="/app/settings">
+                    <Settings className="h-4 w-4 mr-2" /> Configurações
+                  </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
+                <DropdownMenuItem
+                  onClick={handleSignOut}
+                  className="text-destructive focus:text-destructive"
+                >
                   <LogOut className="h-4 w-4 mr-2" /> Sair
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -252,7 +261,10 @@ function AppShell() {
                 </Link>
               ))}
               <button
-                onClick={() => { setMoreOpen(false); handleSignOut(); }}
+                onClick={() => {
+                  setMoreOpen(false);
+                  handleSignOut();
+                }}
                 className="flex flex-col items-center gap-2 rounded-xl border p-4 text-xs font-medium hover:bg-accent/50"
               >
                 <span className="grid h-10 w-10 place-items-center rounded-lg bg-destructive/10 text-destructive">

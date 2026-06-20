@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { type ReactNode } from "react";
 import { CookieConsent } from "@/components/CookieConsent";
 
-
 export function MarketingHeader() {
   return (
     <header className="sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur">
@@ -16,14 +15,24 @@ export function MarketingHeader() {
           BeautyFlow
         </Link>
         <nav className="hidden items-center gap-6 text-sm text-muted-foreground md:flex">
-          <Link to="/funcionalidades" className="hover:text-foreground transition-colors">Funcionalidades</Link>
-          <Link to="/planos" className="hover:text-foreground transition-colors">Planos</Link>
-          <Link to="/blog" className="hover:text-foreground transition-colors">Blog</Link>
-          <Link to="/contato" className="hover:text-foreground transition-colors">Contato</Link>
+          <Link to="/funcionalidades" className="hover:text-foreground transition-colors">
+            Funcionalidades
+          </Link>
+          <Link to="/planos" className="hover:text-foreground transition-colors">
+            Planos
+          </Link>
+          <Link to="/blog" className="hover:text-foreground transition-colors">
+            Blog
+          </Link>
+          <Link to="/contato" className="hover:text-foreground transition-colors">
+            Contato
+          </Link>
         </nav>
         <div className="flex items-center gap-2">
           <Link to="/auth" className="hidden sm:block">
-            <Button variant="ghost" size="sm">Entrar</Button>
+            <Button variant="ghost" size="sm">
+              Entrar
+            </Button>
           </Link>
           <Link to="/auth">
             <Button size="sm" className="shadow-soft">
@@ -52,32 +61,70 @@ export function MarketingFooter() {
             Recupere clientes e aumente seu faturamento.
           </p>
           <div className="mt-4 flex gap-2 text-muted-foreground">
-            <a href="#" aria-label="Instagram" className="hover:text-foreground"><Instagram className="h-4 w-4" /></a>
-            <a href="#" aria-label="Facebook" className="hover:text-foreground"><Facebook className="h-4 w-4" /></a>
-            <a href="#" aria-label="Email" className="hover:text-foreground"><Mail className="h-4 w-4" /></a>
+            <a href="#" aria-label="Instagram" className="hover:text-foreground">
+              <Instagram className="h-4 w-4" />
+            </a>
+            <a href="#" aria-label="Facebook" className="hover:text-foreground">
+              <Facebook className="h-4 w-4" />
+            </a>
+            <a href="#" aria-label="Email" className="hover:text-foreground">
+              <Mail className="h-4 w-4" />
+            </a>
           </div>
         </div>
         <div>
           <h4 className="text-sm font-semibold">Produto</h4>
           <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-            <li><Link to="/funcionalidades" className="hover:text-foreground">Funcionalidades</Link></li>
-            <li><Link to="/planos" className="hover:text-foreground">Planos</Link></li>
-            <li><Link to="/auth" className="hover:text-foreground">Login</Link></li>
-            <li><Link to="/auth" className="hover:text-foreground">Cadastro</Link></li>
+            <li>
+              <Link to="/funcionalidades" className="hover:text-foreground">
+                Funcionalidades
+              </Link>
+            </li>
+            <li>
+              <Link to="/planos" className="hover:text-foreground">
+                Planos
+              </Link>
+            </li>
+            <li>
+              <Link to="/auth" className="hover:text-foreground">
+                Login
+              </Link>
+            </li>
+            <li>
+              <Link to="/auth" className="hover:text-foreground">
+                Cadastro
+              </Link>
+            </li>
           </ul>
         </div>
         <div>
           <h4 className="text-sm font-semibold">Conteúdo</h4>
           <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-            <li><Link to="/blog" className="hover:text-foreground">Blog</Link></li>
-            <li><Link to="/contato" className="hover:text-foreground">Contato</Link></li>
+            <li>
+              <Link to="/blog" className="hover:text-foreground">
+                Blog
+              </Link>
+            </li>
+            <li>
+              <Link to="/contato" className="hover:text-foreground">
+                Contato
+              </Link>
+            </li>
           </ul>
         </div>
         <div>
           <h4 className="text-sm font-semibold">Legal</h4>
           <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-            <li><Link to="/privacidade" className="hover:text-foreground">Política de Privacidade</Link></li>
-            <li><Link to="/termos" className="hover:text-foreground">Termos de Uso</Link></li>
+            <li>
+              <Link to="/privacidade" className="hover:text-foreground">
+                Política de Privacidade
+              </Link>
+            </li>
+            <li>
+              <Link to="/termos" className="hover:text-foreground">
+                Termos de Uso
+              </Link>
+            </li>
           </ul>
         </div>
       </div>
@@ -98,4 +145,3 @@ export function MarketingShell({ children }: { children: ReactNode }) {
     </div>
   );
 }
-

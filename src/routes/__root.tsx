@@ -91,12 +91,35 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:title", content: "BeautyFlow — Recupere clientes e aumente seu faturamento" },
-      { name: "description", content: "BeautyFlow is a SaaS app for beauty professionals to retain clients and boost revenue." },
-      { property: "og:description", content: "BeautyFlow is a SaaS app for beauty professionals to retain clients and boost revenue." },
-      { name: "twitter:description", content: "BeautyFlow is a SaaS app for beauty professionals to retain clients and boost revenue." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/fbb57ba1-6811-473a-aae7-b223c1cfc121/id-preview-a9ac4ca9--be9bc890-0124-48c9-b39c-6a9482323021.lovable.app-1781643840102.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/fbb57ba1-6811-473a-aae7-b223c1cfc121/id-preview-a9ac4ca9--be9bc890-0124-48c9-b39c-6a9482323021.lovable.app-1781643840102.png" },
+      {
+        name: "twitter:title",
+        content: "BeautyFlow — Recupere clientes e aumente seu faturamento",
+      },
+      {
+        name: "description",
+        content:
+          "BeautyFlow is a SaaS app for beauty professionals to retain clients and boost revenue.",
+      },
+      {
+        property: "og:description",
+        content:
+          "BeautyFlow is a SaaS app for beauty professionals to retain clients and boost revenue.",
+      },
+      {
+        name: "twitter:description",
+        content:
+          "BeautyFlow is a SaaS app for beauty professionals to retain clients and boost revenue.",
+      },
+      {
+        property: "og:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/fbb57ba1-6811-473a-aae7-b223c1cfc121/id-preview-a9ac4ca9--be9bc890-0124-48c9-b39c-6a9482323021.lovable.app-1781643840102.png",
+      },
+      {
+        name: "twitter:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/fbb57ba1-6811-473a-aae7-b223c1cfc121/id-preview-a9ac4ca9--be9bc890-0124-48c9-b39c-6a9482323021.lovable.app-1781643840102.png",
+      },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
@@ -156,4 +179,3 @@ function RootComponent() {
     </QueryClientProvider>
   );
 }
-

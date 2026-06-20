@@ -74,7 +74,8 @@ function AuthPage() {
             Pare de perder clientes por falta de acompanhamento.
           </p>
           <p className="mt-4 text-muted-foreground max-w-md">
-            O BeautyFlow te avisa quem está atrasado para voltar e quanto você pode faturar essa semana.
+            O BeautyFlow te avisa quem está atrasado para voltar e quanto você pode faturar essa
+            semana.
           </p>
         </div>
         <p className="text-xs text-muted-foreground">© {new Date().getFullYear()} BeautyFlow</p>
@@ -98,7 +99,9 @@ function AuthPage() {
           </Tabs>
 
           <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
             <div className="relative flex justify-center text-xs">
               <span className="bg-background px-2 text-muted-foreground">ou</span>
             </div>
@@ -130,7 +133,11 @@ function SignInForm({ onSuccess }: { onSuccess: () => void }) {
     const { error } = await supabase.auth.signInWithPassword(values);
     setLoading(false);
     if (error) {
-      toast.error(error.message === "Invalid login credentials" ? "E-mail ou senha incorretos" : error.message);
+      toast.error(
+        error.message === "Invalid login credentials"
+          ? "E-mail ou senha incorretos"
+          : error.message,
+      );
       return;
     }
     toast.success("Bem-vinda de volta!");
@@ -148,7 +155,12 @@ function SignInForm({ onSuccess }: { onSuccess: () => void }) {
       </div>
       <div className="space-y-2">
         <Label htmlFor="signin-password">Senha</Label>
-        <Input id="signin-password" type="password" autoComplete="current-password" {...form.register("password")} />
+        <Input
+          id="signin-password"
+          type="password"
+          autoComplete="current-password"
+          {...form.register("password")}
+        />
         {form.formState.errors.password && (
           <p className="text-xs text-destructive">{form.formState.errors.password.message}</p>
         )}
@@ -204,7 +216,12 @@ function SignUpForm({ onSuccess }: { onSuccess: () => void }) {
       </div>
       <div className="space-y-2">
         <Label htmlFor="signup-password">Senha</Label>
-        <Input id="signup-password" type="password" autoComplete="new-password" {...form.register("password")} />
+        <Input
+          id="signup-password"
+          type="password"
+          autoComplete="new-password"
+          {...form.register("password")}
+        />
         {form.formState.errors.password && (
           <p className="text-xs text-destructive">{form.formState.errors.password.message}</p>
         )}

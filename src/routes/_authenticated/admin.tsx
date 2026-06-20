@@ -146,9 +146,7 @@ function AdminPanel() {
         <div className="container flex items-center justify-between py-4">
           <div>
             <h1 className="text-xl font-bold">Painel SaaS Admin</h1>
-            <p className="text-xs text-muted-foreground">
-              Visão geral da plataforma BeautyFlow
-            </p>
+            <p className="text-xs text-muted-foreground">Visão geral da plataforma BeautyFlow</p>
           </div>
           <Link to="/app">
             <Button variant="ghost" size="sm">
@@ -160,10 +158,27 @@ function AdminPanel() {
 
       <main className="container space-y-6 py-6">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="Empresas" value={totalCompanies.toString()} icon={<Building2 className="h-4 w-4" />} />
-          <StatCard label="MRR" value={fmtBRL(mrr)} icon={<DollarSign className="h-4 w-4" />} accent />
-          <StatCard label="Em Trial" value={trialSubs.length.toString()} icon={<TrendingUp className="h-4 w-4" />} />
-          <StatCard label="Cancelados" value={churned.toString()} icon={<Users className="h-4 w-4" />} />
+          <StatCard
+            label="Empresas"
+            value={totalCompanies.toString()}
+            icon={<Building2 className="h-4 w-4" />}
+          />
+          <StatCard
+            label="MRR"
+            value={fmtBRL(mrr)}
+            icon={<DollarSign className="h-4 w-4" />}
+            accent
+          />
+          <StatCard
+            label="Em Trial"
+            value={trialSubs.length.toString()}
+            icon={<TrendingUp className="h-4 w-4" />}
+          />
+          <StatCard
+            label="Cancelados"
+            value={churned.toString()}
+            icon={<Users className="h-4 w-4" />}
+          />
         </div>
 
         <Tabs defaultValue="companies">
@@ -253,15 +268,51 @@ function AdminPanel() {
   );
 }
 
-const FEATURE_LIST: Array<{ key: string; label: string; description: string; defaultOn: boolean }> = [
-  { key: "smart_import", label: "Smart Import", description: "Importação inteligente com IA", defaultOn: true },
-  { key: "ai_assist", label: "Assistente IA", description: "Sugestões e análises com IA", defaultOn: true },
-  { key: "campaigns_bulk", label: "Campanhas em massa", description: "Envio em lote pela aba Comunicação", defaultOn: true },
-  { key: "whatsapp_api", label: "WhatsApp API", description: "Conector oficial (Meta/Evolution)", defaultOn: false },
-  { key: "marketplace", label: "Marketplace", description: "Vitrine pública de serviços", defaultOn: false },
-  { key: "white_label", label: "White Label", description: "Marca personalizada", defaultOn: false },
-  { key: "public_api", label: "API Pública", description: "Acesso programático externo", defaultOn: false },
-];
+const FEATURE_LIST: Array<{ key: string; label: string; description: string; defaultOn: boolean }> =
+  [
+    {
+      key: "smart_import",
+      label: "Smart Import",
+      description: "Importação inteligente com IA",
+      defaultOn: true,
+    },
+    {
+      key: "ai_assist",
+      label: "Assistente IA",
+      description: "Sugestões e análises com IA",
+      defaultOn: true,
+    },
+    {
+      key: "campaigns_bulk",
+      label: "Campanhas em massa",
+      description: "Envio em lote pela aba Comunicação",
+      defaultOn: true,
+    },
+    {
+      key: "whatsapp_api",
+      label: "WhatsApp API",
+      description: "Conector oficial (Meta/Evolution)",
+      defaultOn: false,
+    },
+    {
+      key: "marketplace",
+      label: "Marketplace",
+      description: "Vitrine pública de serviços",
+      defaultOn: false,
+    },
+    {
+      key: "white_label",
+      label: "White Label",
+      description: "Marca personalizada",
+      defaultOn: false,
+    },
+    {
+      key: "public_api",
+      label: "API Pública",
+      description: "Acesso programático externo",
+      defaultOn: false,
+    },
+  ];
 
 function FeaturesPanel({ companies }: { companies: CompanyRow[] }) {
   const qc = useQueryClient();
@@ -367,7 +418,9 @@ function JobsPanel() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("jobs")
-        .select("id,type,status,company_id,attempts,max_attempts,scheduled_at,finished_at,last_error,created_at")
+        .select(
+          "id,type,status,company_id,attempts,max_attempts,scheduled_at,finished_at,last_error,created_at",
+        )
         .order("created_at", { ascending: false })
         .limit(100);
       if (error) throw error;
@@ -412,7 +465,8 @@ function JobsPanel() {
         <div>
           <CardTitle>Filas — últimos 100 jobs</CardTitle>
           <p className="mt-1 text-xs text-muted-foreground">
-            Pending: {counts.PENDING ?? 0} · Running: {counts.RUNNING ?? 0} · Done: {counts.DONE ?? 0} · Failed: {counts.FAILED ?? 0}
+            Pending: {counts.PENDING ?? 0} · Running: {counts.RUNNING ?? 0} · Done:{" "}
+            {counts.DONE ?? 0} · Failed: {counts.FAILED ?? 0}
           </p>
         </div>
         <div className="flex gap-2">

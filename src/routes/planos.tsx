@@ -28,20 +28,40 @@ const PLANS = [
     name: "Starter",
     price: "49,90",
     desc: "Para quem está começando.",
-    features: ["1 usuário", "Até 500 clientes", "Agenda", "Clientes para Retorno", "Financeiro", "Relatórios"],
+    features: [
+      "1 usuário",
+      "Até 500 clientes",
+      "Agenda",
+      "Clientes para Retorno",
+      "Financeiro",
+      "Relatórios",
+    ],
   },
   {
     name: "Professional",
     price: "89,90",
     desc: "Mais popular para salões em crescimento.",
     featured: true,
-    features: ["Até 5 usuários", "Até 3.000 clientes", "Tudo do Starter", "Integrações", "WhatsApp", "Suporte prioritário"],
+    features: [
+      "Até 5 usuários",
+      "Até 3.000 clientes",
+      "Tudo do Starter",
+      "Integrações",
+      "WhatsApp",
+      "Suporte prioritário",
+    ],
   },
   {
     name: "Premium",
     price: "149,90",
     desc: "Para operações maiores.",
-    features: ["Usuários ilimitados", "Clientes ilimitados", "Tudo do Professional", "IA (em breve)", "Recursos avançados"],
+    features: [
+      "Usuários ilimitados",
+      "Clientes ilimitados",
+      "Tudo do Professional",
+      "IA (em breve)",
+      "Recursos avançados",
+    ],
   },
 ];
 
@@ -50,7 +70,9 @@ function Planos() {
     <MarketingShell>
       <section className="mx-auto max-w-6xl px-6 pt-20 pb-12 text-center">
         <Badge variant="outline">Planos</Badge>
-        <h1 className="mt-4 text-4xl md:text-5xl font-bold tracking-tight">Escolha o plano ideal</h1>
+        <h1 className="mt-4 text-4xl md:text-5xl font-bold tracking-tight">
+          Escolha o plano ideal
+        </h1>
         <p className="mt-4 text-muted-foreground max-w-xl mx-auto">
           14 dias grátis em qualquer plano. Sem cartão de crédito. Cancele quando quiser.
         </p>
@@ -58,7 +80,10 @@ function Planos() {
 
       <section className="mx-auto max-w-6xl px-6 pb-24 grid gap-6 md:grid-cols-3">
         {PLANS.map((p) => (
-          <Card key={p.name} className={`relative p-6 ${p.featured ? "border-primary shadow-soft" : ""}`}>
+          <Card
+            key={p.name}
+            className={`relative p-6 ${p.featured ? "border-primary shadow-soft" : ""}`}
+          >
             {p.featured && (
               <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 gradient-primary text-primary-foreground border-0">
                 Mais popular

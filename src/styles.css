@@ -67,34 +67,34 @@
   --radius: 0.75rem;
 
   /* Beauty Purple — premium SaaS */
-  --background: oklch(0.985 0.005 270);               /* #F8FAFC */
-  --foreground: oklch(0.21 0.02 265);                 /* #111827 */
+  --background: oklch(0.985 0.005 270); /* #F8FAFC */
+  --foreground: oklch(0.21 0.02 265); /* #111827 */
 
-  --card: oklch(1 0 0);                               /* #FFFFFF */
+  --card: oklch(1 0 0); /* #FFFFFF */
   --card-foreground: oklch(0.21 0.02 265);
 
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.21 0.02 265);
 
-  --primary: oklch(0.55 0.24 295);                    /* #7C3AED Beauty Purple */
+  --primary: oklch(0.55 0.24 295); /* #7C3AED Beauty Purple */
   --primary-foreground: oklch(0.99 0 0);
 
-  --secondary: oklch(0.96 0.015 295);                 /* soft violet wash */
+  --secondary: oklch(0.96 0.015 295); /* soft violet wash */
   --secondary-foreground: oklch(0.35 0.15 295);
 
   --muted: oklch(0.965 0.008 270);
-  --muted-foreground: oklch(0.55 0.02 260);           /* #6B7280 */
+  --muted-foreground: oklch(0.55 0.02 260); /* #6B7280 */
 
-  --accent: oklch(0.93 0.04 295);                     /* light purple accent */
+  --accent: oklch(0.93 0.04 295); /* light purple accent */
   --accent-foreground: oklch(0.3 0.18 295);
 
-  --destructive: oklch(0.62 0.23 25);                 /* #EF4444 */
+  --destructive: oklch(0.62 0.23 25); /* #EF4444 */
   --destructive-foreground: oklch(0.99 0 0);
 
-  --success: oklch(0.7 0.18 150);                     /* #22C55E */
+  --success: oklch(0.7 0.18 150); /* #22C55E */
   --success-foreground: oklch(0.99 0 0);
 
-  --warning: oklch(0.78 0.16 75);                     /* #F59E0B */
+  --warning: oklch(0.78 0.16 75); /* #F59E0B */
   --warning-foreground: oklch(0.25 0.05 70);
 
   --border: oklch(0.93 0.008 270);
@@ -150,7 +150,8 @@
     border-color: var(--color-border);
   }
 
-  html, body {
+  html,
+  body {
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;

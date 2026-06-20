@@ -27,9 +27,7 @@ Regras:
 
 export const parseImportText = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input) =>
-    z.object({ text: z.string().trim().min(3).max(50_000) }).parse(input),
-  )
+  .inputValidator((input) => z.object({ text: z.string().trim().min(3).max(50_000) }).parse(input))
   .handler(async ({ data }) => {
     const apiKey = process.env.LOVABLE_API_KEY;
     if (!apiKey) throw new Error("AI indisponível: LOVABLE_API_KEY ausente.");
@@ -51,7 +49,8 @@ export const parseImportText = createServerFn({ method: "POST" })
     });
 
     if (res.status === 429) throw new Error("Muitas requisições. Tente novamente em instantes.");
-    if (res.status === 402) throw new Error("Créditos de IA esgotados. Adicione créditos no workspace.");
+    if (res.status === 402)
+      throw new Error("Créditos de IA esgotados. Adicione créditos no workspace.");
     if (!res.ok) {
       const t = await res.text();
       throw new Error(`Falha no AI Gateway (${res.status}): ${t.slice(0, 200)}`);
@@ -60,7 +59,11 @@ export const parseImportText = createServerFn({ method: "POST" })
     const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
     const content = json.choices?.[0]?.message?.content ?? "{}";
     let parsed: unknown;
-    try { parsed = JSON.parse(content); } catch { throw new Error("IA retornou formato inválido."); }
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      throw new Error("IA retornou formato inválido.");
+    }
     const arr = (parsed as { clients?: unknown }).clients;
     if (!Array.isArray(arr)) return { clients: [] as ParsedClient[] };
 
@@ -70,7 +73,7 @@ export const parseImportText = createServerFn({ method: "POST" })
       if (r.success) {
         out.push({
           ...r.data,
-          phone: r.data.phone ? toStoragePhone(r.data.phone) ?? r.data.phone : null,
+          phone: r.data.phone ? (toStoragePhone(r.data.phone) ?? r.data.phone) : null,
         });
       }
     }
@@ -79,28 +82,28 @@ export const parseImportText = createServerFn({ method: "POST" })
 
 export const commitImportClients = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input) =>
-    z.object({ clients: z.array(ClientRow).min(1).max(500) }).parse(input),
-  )
+  .inputValidator((input) => z.object({ clients: z.array(ClientRow).min(1).max(500) }).parse(input))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { data: profile } = await supabase
-      .from("profiles").select("company_id").eq("id", userId).maybeSingle();
+      .from("profiles")
+      .select("company_id")
+      .eq("id", userId)
+      .maybeSingle();
     if (!profile?.company_id) throw new Error("Empresa não encontrada");
     const companyId = profile.company_id;
 
     const rows = data.clients.map((c) => ({
       company_id: companyId,
       name: c.name,
-      phone: c.phone ? toStoragePhone(c.phone) ?? c.phone : null,
+      phone: c.phone ? (toStoragePhone(c.phone) ?? c.phone) : null,
       email: c.email || null,
       birthday: c.birthday || null,
       notes: c.notes || null,
       status: "ACTIVE" as const,
     }));
 
-    const { data: inserted, error } = await supabase
-      .from("clients").insert(rows).select("id");
+    const { data: inserted, error } = await supabase.from("clients").insert(rows).select("id");
     if (error) throw new Error(error.message);
     return { inserted: inserted?.length ?? 0 };
   });
@@ -115,12 +118,15 @@ export const enqueueImportClients = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { data: profile } = await supabase
-      .from("profiles").select("company_id").eq("id", userId).maybeSingle();
+      .from("profiles")
+      .select("company_id")
+      .eq("id", userId)
+      .maybeSingle();
     if (!profile?.company_id) throw new Error("Empresa não encontrada");
 
     const normalized = data.clients.map((c) => ({
       ...c,
-      phone: c.phone ? toStoragePhone(c.phone) ?? c.phone : null,
+      phone: c.phone ? (toStoragePhone(c.phone) ?? c.phone) : null,
     }));
 
     const { data: jobId, error } = await supabase.rpc("enqueue_job", {

@@ -18,7 +18,10 @@ export const enqueueCampaignRecord = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { data: profile } = await supabase
-      .from("profiles").select("company_id").eq("id", userId).maybeSingle();
+      .from("profiles")
+      .select("company_id")
+      .eq("id", userId)
+      .maybeSingle();
     if (!profile?.company_id) throw new Error("Empresa não encontrada");
 
     const { data: jobId, error } = await supabase.rpc("enqueue_job", {

@@ -151,7 +151,9 @@ function Landing() {
       {/* PROBLEMA */}
       <section className="mx-auto max-w-6xl px-6 py-24">
         <div className="mx-auto max-w-2xl text-center">
-          <Badge variant="outline" className="text-destructive border-destructive/30">O problema</Badge>
+          <Badge variant="outline" className="text-destructive border-destructive/30">
+            O problema
+          </Badge>
           <h2 className="mt-4 text-3xl md:text-4xl font-bold tracking-tight text-balance">
             Você trabalha duro para conquistar clientes.
             <br />
@@ -160,9 +162,21 @@ function Landing() {
         </div>
         <div className="mt-12 grid gap-4 md:grid-cols-4">
           {[
-            { icon: Clock, title: "Cliente esquece de voltar", desc: "Sem lembretes, sem retorno." },
-            { icon: Calendar, title: "Agenda fica vazia", desc: "Horários parados é receita parada." },
-            { icon: TrendingUp, title: "Faturamento oscila", desc: "Mês bom, mês ruim, sem padrão." },
+            {
+              icon: Clock,
+              title: "Cliente esquece de voltar",
+              desc: "Sem lembretes, sem retorno.",
+            },
+            {
+              icon: Calendar,
+              title: "Agenda fica vazia",
+              desc: "Horários parados é receita parada.",
+            },
+            {
+              icon: TrendingUp,
+              title: "Faturamento oscila",
+              desc: "Mês bom, mês ruim, sem padrão.",
+            },
             { icon: DollarSign, title: "Você perde dinheiro", desc: "Sem perceber, todo mês." },
           ].map((p) => (
             <Card key={p.title} className="p-6">
@@ -211,21 +225,35 @@ function Landing() {
       {/* DIFERENCIAL */}
       <section className="mx-auto max-w-6xl px-6 py-24">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl md:text-4xl font-bold tracking-tight">
-            Mais do que uma agenda.
-          </h2>
+          <h2 className="text-3xl md:text-4xl font-bold tracking-tight">Mais do que uma agenda.</h2>
           <p className="mt-3 text-muted-foreground">
             Um sistema completo para gerenciar e fazer crescer seu negócio.
           </p>
         </div>
         <div className="mt-12 grid gap-4 md:grid-cols-3">
           {[
-            { icon: Calendar, title: "Agenda Inteligente", desc: "Marque, edite e conclua atendimentos em segundos." },
-            { icon: Users, title: "CRM de Clientes", desc: "Histórico completo, preferências e ticket médio." },
+            {
+              icon: Calendar,
+              title: "Agenda Inteligente",
+              desc: "Marque, edite e conclua atendimentos em segundos.",
+            },
+            {
+              icon: Users,
+              title: "CRM de Clientes",
+              desc: "Histórico completo, preferências e ticket médio.",
+            },
             { icon: Bell, title: "Clientes para Retorno", desc: "Veja quem deveria voltar hoje." },
-            { icon: DollarSign, title: "Receita Recuperável", desc: "Saiba exatamente quanto pode recuperar." },
+            {
+              icon: DollarSign,
+              title: "Receita Recuperável",
+              desc: "Saiba exatamente quanto pode recuperar.",
+            },
             { icon: BarChart3, title: "Relatórios", desc: "Indicadores que ajudam a decidir." },
-            { icon: Wallet, title: "Financeiro Simplificado", desc: "Quanto entrou, saiu e sobrou." },
+            {
+              icon: Wallet,
+              title: "Financeiro Simplificado",
+              desc: "Quanto entrou, saiu e sobrou.",
+            },
           ].map((d) => (
             <Card key={d.title} className="p-6 hover:shadow-soft transition-shadow">
               <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -280,9 +308,7 @@ function Landing() {
           <h2 className="mt-4 text-3xl md:text-4xl font-bold tracking-tight">
             Veja o BeautyFlow em ação.
           </h2>
-          <p className="mt-3 text-muted-foreground">
-            90 segundos para entender como funciona.
-          </p>
+          <p className="mt-3 text-muted-foreground">90 segundos para entender como funciona.</p>
         </div>
         <div className="mt-10 aspect-video rounded-2xl border border-border bg-gradient-to-br from-secondary to-secondary/50 flex items-center justify-center shadow-soft">
           <button className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:scale-105 transition-transform">
@@ -339,15 +365,29 @@ function Landing() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {["Agenda", "Clientes", "Retornos automáticos", "Financeiro", "Relatórios"].map((r) => (
-                <tr key={r}>
-                  <td className="px-4 py-3 font-medium">{r}</td>
-                  <td className="px-4 py-3 text-center"><XCircle className="mx-auto h-4 w-4 text-muted-foreground" /></td>
-                  <td className="px-4 py-3 text-center">{r === "Agenda" ? <XCircle className="mx-auto h-4 w-4 text-muted-foreground" /> : <XCircle className="mx-auto h-4 w-4 text-muted-foreground" />}</td>
-                  <td className="px-4 py-3 text-center"><XCircle className="mx-auto h-4 w-4 text-muted-foreground" /></td>
-                  <td className="px-4 py-3 text-center"><CheckCircle2 className="mx-auto h-4 w-4 text-primary" /></td>
-                </tr>
-              ))}
+              {["Agenda", "Clientes", "Retornos automáticos", "Financeiro", "Relatórios"].map(
+                (r) => (
+                  <tr key={r}>
+                    <td className="px-4 py-3 font-medium">{r}</td>
+                    <td className="px-4 py-3 text-center">
+                      <XCircle className="mx-auto h-4 w-4 text-muted-foreground" />
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {r === "Agenda" ? (
+                        <XCircle className="mx-auto h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <XCircle className="mx-auto h-4 w-4 text-muted-foreground" />
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <XCircle className="mx-auto h-4 w-4 text-muted-foreground" />
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <CheckCircle2 className="mx-auto h-4 w-4 text-primary" />
+                    </td>
+                  </tr>
+                ),
+              )}
             </tbody>
           </table>
         </div>
@@ -357,15 +397,25 @@ function Landing() {
       <section className="bg-secondary/30 py-24">
         <div className="mx-auto max-w-6xl px-6">
           <div className="mx-auto max-w-2xl text-center">
-            <h2 className="text-3xl md:text-4xl font-bold tracking-tight">
-              Quem usa, recomenda.
-            </h2>
+            <h2 className="text-3xl md:text-4xl font-bold tracking-tight">Quem usa, recomenda.</h2>
           </div>
           <div className="mt-12 grid gap-6 md:grid-cols-3">
             {[
-              { name: "Mariana Costa", role: "Designer de sobrancelhas", text: "Recuperei 12 clientes no primeiro mês. Pagou o ano inteiro do sistema." },
-              { name: "Juliana Alves", role: "Lash designer", text: "Antes anotava em caderno e esquecia. Agora o BeautyFlow me avisa." },
-              { name: "Patrícia Souza", role: "Salão de beleza", text: "Meu faturamento subiu 18% em 3 meses sem trabalhar mais." },
+              {
+                name: "Mariana Costa",
+                role: "Designer de sobrancelhas",
+                text: "Recuperei 12 clientes no primeiro mês. Pagou o ano inteiro do sistema.",
+              },
+              {
+                name: "Juliana Alves",
+                role: "Lash designer",
+                text: "Antes anotava em caderno e esquecia. Agora o BeautyFlow me avisa.",
+              },
+              {
+                name: "Patrícia Souza",
+                role: "Salão de beleza",
+                text: "Meu faturamento subiu 18% em 3 meses sem trabalhar mais.",
+              },
             ].map((t) => (
               <Card key={t.name} className="p-6">
                 <Quote className="h-6 w-6 text-primary/40" />
@@ -391,9 +441,7 @@ function Landing() {
       {/* PLANOS */}
       <section id="planos" className="mx-auto max-w-6xl px-6 py-24">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl md:text-4xl font-bold tracking-tight">
-            Escolha o plano ideal.
-          </h2>
+          <h2 className="text-3xl md:text-4xl font-bold tracking-tight">Escolha o plano ideal.</h2>
           <p className="mt-3 text-muted-foreground">
             14 dias grátis em qualquer plano. Sem cartão de crédito.
           </p>
@@ -413,7 +461,12 @@ function Landing() {
           <PlanCard
             name="Premium"
             price="149,90"
-            features={["Tudo do Professional", "IA (em breve)", "Recursos avançados", "Suporte prioritário"]}
+            features={[
+              "Tudo do Professional",
+              "IA (em breve)",
+              "Recursos avançados",
+              "Suporte prioritário",
+            ]}
           />
         </div>
       </section>
@@ -440,11 +493,26 @@ function Landing() {
         </div>
         <div className="mt-10 space-y-3">
           {[
-            { q: "Posso cancelar quando quiser?", a: "Sim. Sem multa e sem fidelidade. Você cancela em um clique." },
-            { q: "Preciso instalar algo?", a: "Não. Funciona direto no navegador, no celular ou computador." },
-            { q: "Funciona no celular?", a: "Sim. O BeautyFlow é 100% responsivo e otimizado para mobile." },
-            { q: "Posso importar meus clientes?", a: "Sim. Você pode importar de planilha ou cadastrar manualmente." },
-            { q: "Meus dados estão seguros?", a: "Sim. Criptografia, backup automático e isolamento por empresa." },
+            {
+              q: "Posso cancelar quando quiser?",
+              a: "Sim. Sem multa e sem fidelidade. Você cancela em um clique.",
+            },
+            {
+              q: "Preciso instalar algo?",
+              a: "Não. Funciona direto no navegador, no celular ou computador.",
+            },
+            {
+              q: "Funciona no celular?",
+              a: "Sim. O BeautyFlow é 100% responsivo e otimizado para mobile.",
+            },
+            {
+              q: "Posso importar meus clientes?",
+              a: "Sim. Você pode importar de planilha ou cadastrar manualmente.",
+            },
+            {
+              q: "Meus dados estão seguros?",
+              a: "Sim. Criptografia, backup automático e isolamento por empresa.",
+            },
           ].map((f) => (
             <details key={f.q} className="group rounded-xl border border-border bg-card p-5">
               <summary className="flex cursor-pointer items-center justify-between font-semibold">
@@ -577,13 +645,20 @@ function ReturnsHighlightMockup() {
           { n: "Carla Mendes", d: "Última visita há 38 dias", v: "R$ 95", urgent: false },
           { n: "Beatriz Lima", d: "Última visita há 72 dias", v: "R$ 150", urgent: true },
         ].map((c) => (
-          <div key={c.n} className="flex items-center gap-3 rounded-lg border border-border bg-background p-3">
+          <div
+            key={c.n}
+            className="flex items-center gap-3 rounded-lg border border-border bg-background p-3"
+          >
             <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/40 to-primary/10" />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold truncate">{c.n}</p>
               <p className="text-xs text-muted-foreground truncate">{c.d}</p>
             </div>
-            {c.urgent && <Badge variant="outline" className="text-destructive border-destructive/40">Urgente</Badge>}
+            {c.urgent && (
+              <Badge variant="outline" className="text-destructive border-destructive/40">
+                Urgente
+              </Badge>
+            )}
             <span className="text-sm font-bold text-primary">{c.v}</span>
           </div>
         ))}
@@ -632,4 +707,3 @@ function PlanCard({
     </Card>
   );
 }
-

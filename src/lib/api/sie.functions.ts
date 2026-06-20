@@ -15,7 +15,10 @@ export const registerImport = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { data: profile } = await supabase
-      .from("profiles").select("company_id").eq("id", userId).maybeSingle();
+      .from("profiles")
+      .select("company_id")
+      .eq("id", userId)
+      .maybeSingle();
     if (!profile?.company_id) throw new Error("Empresa não encontrada");
 
     const { data: imp, error } = await supabase
@@ -52,7 +55,10 @@ export const applyImportRow = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { data: row, error } = await supabase
-      .from("import_rows").select("company_id").eq("id", data.rowId).maybeSingle();
+      .from("import_rows")
+      .select("company_id")
+      .eq("id", data.rowId)
+      .maybeSingle();
     if (error || !row) throw new Error("Linha não encontrada");
 
     const { data: jobId, error: qErr } = await supabase.rpc("enqueue_job", {
@@ -72,7 +78,12 @@ export const applyImportRow = createServerFn({ method: "POST" })
 export const applyImportBatch = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i) =>
-    z.object({ importId: z.string().uuid(), minConfidence: z.number().min(0).max(100).default(85) }).parse(i),
+    z
+      .object({
+        importId: z.string().uuid(),
+        minConfidence: z.number().min(0).max(100).default(85),
+      })
+      .parse(i),
   )
   .handler(async ({ data, context }) => {
     const { supabase } = context;

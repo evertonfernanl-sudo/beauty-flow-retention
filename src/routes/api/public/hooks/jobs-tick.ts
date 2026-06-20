@@ -34,10 +34,19 @@ async function handle(request: Request) {
     const { data: job, error: claimErr } = await supabaseAdmin.rpc("claim_next_job");
     if (claimErr) return json({ ok: false, error: claimErr.message, processed }, 500);
     if (!job) break;
-    const j = job as { id: string; type: string; payload: Record<string, unknown> | null; company_id: string | null };
+    const j = job as {
+      id: string;
+      type: string;
+      payload: Record<string, unknown> | null;
+      company_id: string | null;
+    };
     try {
       const result = await dispatch(j, supabaseAdmin);
-      await supabaseAdmin.rpc("finish_job", { _id: j.id, _ok: true, _result: (result ?? {}) as never });
+      await supabaseAdmin.rpc("finish_job", {
+        _id: j.id,
+        _ok: true,
+        _result: (result ?? {}) as never,
+      });
       processed.push({ id: j.id, type: j.type, ok: true });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -52,7 +61,12 @@ async function handle(request: Request) {
 type Admin = any;
 
 async function dispatch(
-  job: { id: string; type: string; payload: Record<string, unknown> | null; company_id: string | null },
+  job: {
+    id: string;
+    type: string;
+    payload: Record<string, unknown> | null;
+    company_id: string | null;
+  },
   admin: Admin,
 ): Promise<Record<string, unknown> | null> {
   switch (job.type) {
@@ -60,7 +74,9 @@ async function dispatch(
       return { echo: job.payload ?? {} };
 
     case "recovery.refresh": {
-      const { error } = await admin.rpc("refresh_recovery_opportunities", { _company: job.company_id });
+      const { error } = await admin.rpc("refresh_recovery_opportunities", {
+        _company: job.company_id,
+      });
       if (error) throw new Error(error.message);
       return { refreshed: true };
     }
@@ -88,45 +104,86 @@ async function dispatch(
 }
 
 // ===================== legacy import.commit =====================
-async function runImportCommit(admin: Admin, job: { payload: Record<string, unknown> | null; company_id: string | null }) {
+async function runImportCommit(
+  admin: Admin,
+  job: { payload: Record<string, unknown> | null; company_id: string | null },
+) {
   const payload = (job.payload ?? {}) as {
-    clients?: Array<{ name: string; phone: string | null; email: string | null; birthday: string | null; notes: string | null }>;
+    clients?: Array<{
+      name: string;
+      phone: string | null;
+      email: string | null;
+      birthday: string | null;
+      notes: string | null;
+    }>;
   };
   const clients = payload.clients ?? [];
   if (!job.company_id) throw new Error("import.commit: missing company_id");
   if (clients.length === 0) return { inserted: 0, merged: 0 };
-  let inserted = 0, merged = 0;
+  let inserted = 0,
+    merged = 0;
   for (const c of clients) {
     let existingId: string | null = null;
     if (c.phone) {
       const { data: dup } = await admin.rpc("find_duplicate_client", {
-        _company_id: job.company_id, _name: c.name, _phone: c.phone, _threshold: 1.0,
+        _company_id: job.company_id,
+        _name: c.name,
+        _phone: c.phone,
+        _threshold: 1.0,
       });
       const first = Array.isArray(dup) ? dup[0] : null;
       if (first?.reason === "phone") existingId = first.id as string;
     }
     if (existingId) {
-      await admin.from("clients").update({
-        email: c.email ?? undefined, birthday: c.birthday ?? undefined, notes: c.notes ?? undefined,
-      }).eq("id", existingId).is("email", null);
+      await admin
+        .from("clients")
+        .update({
+          email: c.email ?? undefined,
+          birthday: c.birthday ?? undefined,
+          notes: c.notes ?? undefined,
+        })
+        .eq("id", existingId)
+        .is("email", null);
       merged++;
     } else {
       const { error } = await admin.from("clients").insert({
-        company_id: job.company_id, name: c.name, phone: c.phone ?? null, email: c.email ?? null,
-        birthday: c.birthday ?? null, notes: c.notes ?? null, status: "ACTIVE",
+        company_id: job.company_id,
+        name: c.name,
+        phone: c.phone ?? null,
+        email: c.email ?? null,
+        birthday: c.birthday ?? null,
+        notes: c.notes ?? null,
+        status: "ACTIVE",
       });
-      if (error) { if (error.code === "23505") merged++; else throw new Error(error.message); } else inserted++;
+      if (error) {
+        if (error.code === "23505") merged++;
+        else throw new Error(error.message);
+      } else inserted++;
     }
   }
   return { inserted, merged, total: clients.length };
 }
 
-async function runCampaignRecord(admin: Admin, job: { payload: Record<string, unknown> | null; company_id: string | null }) {
-  const p = (job.payload ?? {}) as { name: string; segment: string; template_id: string | null; message_body: string; sent_count: number };
+async function runCampaignRecord(
+  admin: Admin,
+  job: { payload: Record<string, unknown> | null; company_id: string | null },
+) {
+  const p = (job.payload ?? {}) as {
+    name: string;
+    segment: string;
+    template_id: string | null;
+    message_body: string;
+    sent_count: number;
+  };
   if (!job.company_id) throw new Error("campaign.record: missing company_id");
   const { error } = await admin.from("campaigns").insert({
-    company_id: job.company_id, name: p.name, segment: p.segment, template_id: p.template_id ?? null,
-    message_body: p.message_body, sent_count: p.sent_count ?? 0, last_sent_at: new Date().toISOString(),
+    company_id: job.company_id,
+    name: p.name,
+    segment: p.segment,
+    template_id: p.template_id ?? null,
+    message_body: p.message_body,
+    sent_count: p.sent_count ?? 0,
+    last_sent_at: new Date().toISOString(),
   });
   if (error) throw new Error(error.message);
   return { ok: true };
@@ -135,12 +192,14 @@ async function runCampaignRecord(admin: Admin, job: { payload: Record<string, un
 // ===================== SIE: import.parse =====================
 const HEADER_MAP: Record<string, RegExp> = {
   name: /^(nome|name|cliente|client|customer|contato|first\s+name|given\s+name|nome\s+pr\S+prio|nome\s+proprio)$/i,
-  phone: /^(telefone|fone|phone|whatsapp|celular|cel|phone\s+1(\s*-\s*value)?|telefone\s+1(\s*-\s*valor)?)$/i,
+  phone:
+    /^(telefone|fone|phone|whatsapp|celular|cel|phone\s+1(\s*-\s*value)?|telefone\s+1(\s*-\s*valor)?)$/i,
   phone2: /^(phone\s+2(\s*-\s*value)?|telefone\s+2(\s*-\s*valor)?)$/i,
   email: /^(e-?mail|email)$/i,
   amount: /^(valor|amount|preco|preço|price|total|vlr|valor\s*\(r\$\)|valor\s*r\$|quantia)$/i,
   date: /^(data|date|dt|dia|quando|occurred|venda|atendimento|data\s+do\s+lan\S+amento|data\s+lan\S+amento)$/i,
-  description: /^(descricao|descrição|description|hist[óo]rico|lan[cç]amento|memo|complemento|hist[óo]rico\s+complementar|obs|observa|servi[cç]o|produto|hist[óo]rico\s*\/?\s*descri\S+ao|descri\S+ao\s+do\s+lan\S+amento)$/i,
+  description:
+    /^(descricao|descrição|description|hist[óo]rico|lan[cç]amento|memo|complemento|hist[óo]rico\s+complementar|obs|observa|servi[cç]o|produto|hist[óo]rico\s*\/?\s*descri\S+ao|descri\S+ao\s+do\s+lan\S+amento)$/i,
   payment: /^(pagamento|payment|metodo|método|forma)$/i,
 };
 
@@ -158,7 +217,10 @@ function detectColumns(headers: string[]): Record<string, number> {
 function parseAmount(v: unknown): number | null {
   if (v == null || v === "") return null;
   if (typeof v === "number") return Math.round(v * 100) / 100;
-  const s = String(v).replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".");
+  const s = String(v)
+    .replace(/[^\d,.-]/g, "")
+    .replace(/\.(?=\d{3}(\D|$))/g, "")
+    .replace(",", ".");
   const n = Number(s);
   return isFinite(n) ? Math.round(n * 100) / 100 : null;
 }
@@ -198,7 +260,10 @@ function detectPaymentMethod(desc: string | null | undefined): string | null {
 // Native-text PDF → tabular rows. Detects delimited tables first; falls back
 // to per-line heuristics (name + phone + amount + date).
 function parsePdfTextToRows(text: string): { headers: string[]; rows: Record<string, unknown>[] } {
-  const lines = text.split(/\r?\n/).map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean);
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
   if (lines.length === 0) return { headers: [], rows: [] };
 
   // 1) Try delimited table (CSV/TSV/semicolon/pipe leaked into PDF)
@@ -227,8 +292,13 @@ function parsePdfTextToRows(text: string): { headers: string[]; rows: Record<str
     const amount = line.match(amountRe)?.[1] ?? "";
     const date = line.match(dateRe)?.[1] ?? "";
     let rest = line;
-    [phone, amount, date].forEach((v) => { if (v) rest = rest.replace(v, " "); });
-    rest = rest.replace(/R\$\s*/gi, " ").replace(/\s+/g, " ").trim();
+    [phone, amount, date].forEach((v) => {
+      if (v) rest = rest.replace(v, " ");
+    });
+    rest = rest
+      .replace(/R\$\s*/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
     // Name = leading alpha tokens (>=2 chars, letters/spaces)
     const nameMatch = rest.match(/^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ.\s]{2,}?)(?=\s{2,}|\s-|$|\s\d)/);
     const name = (nameMatch?.[1] ?? "").trim();
@@ -242,31 +312,39 @@ function parsePdfTextToRows(text: string): { headers: string[]; rows: Record<str
 function isExpenseDescription(desc: string | null | undefined): boolean {
   if (!desc) return false;
   const normalized = desc.trim().toLowerCase();
-  return /^(pix\s+enviado|pix\s+para|transfer[êe]ncia\s+enviada|tarifa|compra|saque|pagamento\s+de\s+boleto|pagamento|juros|tributo|imposto|despesa)/i.test(normalized);
+  return /^(pix\s+enviado|pix\s+para|transfer[êe]ncia\s+enviada|tarifa|compra|saque|pagamento\s+de\s+boleto|pagamento|juros|tributo|imposto|despesa)/i.test(
+    normalized,
+  );
 }
 
 function extractNameFromDescription(desc: string | null | undefined): string | null {
   if (!desc) return null;
-  
+
   // Pattern 2: "Pix recebido de: Name" or "Pix Recebido de Name" or "Pix de Name"
-  const pixMatch = desc.match(/(?:pix\s+recebido\s+de|pix\s+de|transferência\s+recebida\s+de|recebido\s+de)\s*:?\s*([A-Za-zÀ-ÿ\s]{6,60})/i);
+  const pixMatch = desc.match(
+    /(?:pix\s+recebido\s+de|pix\s+de|transferência\s+recebida\s+de|recebido\s+de)\s*:?\s*([A-Za-zÀ-ÿ\s]{6,60})/i,
+  );
   if (pixMatch) {
     const name = pixMatch[1].trim();
-    const words = name.split(/\s+/).filter(w => w.length > 1);
+    const words = name.split(/\s+/).filter((w) => w.length > 1);
     if (words.length >= 2) {
       return name;
     }
   }
 
   // Pattern 1: Splitting by "-" (very common in Brazilian bank statements)
-  const parts = desc.split("-").map(p => p.trim()).filter(Boolean);
+  const parts = desc
+    .split("-")
+    .map((p) => p.trim())
+    .filter(Boolean);
   if (parts.length >= 2) {
     const nameRegex = /^[A-Za-zÀ-ÿ\s'\.\-]+$/;
-    const excludeKeywords = /(transfer[êe]ncia|recebido|recebida|enviado|enviada|pix|ted|doc|pagamento|compra|saque|dep[óo]sito|tarifa|juros|saldo|extrato|ag[êe]ncia|conta|nu\s+pagamentos|nubank|ita[úu]|bradesco|santander|caixa|banco|pagseguro|stone|picpay|mercado\s+pago|inter|original)/i;
-    
+    const excludeKeywords =
+      /(transfer[êe]ncia|recebido|recebida|enviado|enviada|pix|ted|doc|pagamento|compra|saque|dep[óo]sito|tarifa|juros|saldo|extrato|ag[êe]ncia|conta|nu\s+pagamentos|nubank|ita[úu]|bradesco|santander|caixa|banco|pagseguro|stone|picpay|mercado\s+pago|inter|original)/i;
+
     for (const part of parts) {
       if (nameRegex.test(part) && !excludeKeywords.test(part)) {
-        const words = part.split(/\s+/).filter(w => w.length > 1);
+        const words = part.split(/\s+/).filter((w) => w.length > 1);
         if (words.length >= 2) {
           return part;
         }
@@ -279,12 +357,12 @@ function extractNameFromDescription(desc: string | null | undefined): string | n
 
 function findServiceCombination(
   target: number,
-  services: Array<{ id: string; name: string; price: number }>
+  services: Array<{ id: string; name: string; price: number }>,
 ): Array<{ id: string; name: string; price: number }> | null {
   const targetCents = Math.round(target * 100);
   const items = services
-    .map(s => ({ ...s, priceCents: Math.round(s.price * 100) }))
-    .filter(s => s.priceCents > 0 && s.priceCents <= targetCents);
+    .map((s) => ({ ...s, priceCents: Math.round(s.price * 100) }))
+    .filter((s) => s.priceCents > 0 && s.priceCents <= targetCents);
 
   const result: Array<{ id: string; name: string; price: number }> = [];
 
@@ -313,12 +391,18 @@ function findServiceCombination(
   return null;
 }
 
-async function runImportParse(admin: Admin, job: { payload: Record<string, unknown> | null; company_id: string | null }) {
+async function runImportParse(
+  admin: Admin,
+  job: { payload: Record<string, unknown> | null; company_id: string | null },
+) {
   const { import_id } = (job.payload ?? {}) as { import_id?: string };
 
   if (!import_id || !job.company_id) throw new Error("import.parse: missing import_id/company_id");
 
-  await admin.from("imports").update({ status: "processing", started_at: new Date().toISOString() }).eq("id", import_id);
+  await admin
+    .from("imports")
+    .update({ status: "processing", started_at: new Date().toISOString() })
+    .eq("id", import_id);
 
   const { data: servicesData } = await admin
     .from("services")
@@ -328,11 +412,16 @@ async function runImportParse(admin: Admin, job: { payload: Record<string, unkno
   const activeServices = (servicesData ?? []) as Array<{ id: string; name: string; price: number }>;
 
   const { data: imp, error: impErr } = await admin
-    .from("imports").select("id, source, storage_path, company_id").eq("id", import_id).single();
+    .from("imports")
+    .select("id, source, storage_path, company_id")
+    .eq("id", import_id)
+    .single();
   if (impErr || !imp) throw new Error(impErr?.message ?? "import not found");
   if (!imp.storage_path) throw new Error("import sem storage_path");
 
-  const { data: file, error: dlErr } = await admin.storage.from("imports").download(imp.storage_path);
+  const { data: file, error: dlErr } = await admin.storage
+    .from("imports")
+    .download(imp.storage_path);
   if (dlErr || !file) throw new Error(`download falhou: ${dlErr?.message}`);
 
   let rows: Record<string, unknown>[] = [];
@@ -376,11 +465,14 @@ async function runImportParse(admin: Admin, job: { payload: Record<string, unkno
     throw new Error(`Fonte não suportada nesta fase: ${imp.source}`);
   }
 
-
   const cols = detectColumns(headers);
   const idx = (k: string) => (cols[k] !== undefined ? headers[cols[k]] : null);
 
-  let total = 0, matched = 0, review = 0, failed = 0, revenue = 0;
+  let total = 0,
+    matched = 0,
+    review = 0,
+    failed = 0,
+    revenue = 0;
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
@@ -391,7 +483,9 @@ async function runImportParse(admin: Admin, job: { payload: Record<string, unkno
     const description = idx("description") ? String(r[idx("description")!] ?? "").trim() : null;
     const amountRaw = parseAmount(idx("amount") ? r[idx("amount")!] : null);
     const occurred = parseDate(idx("date") ? r[idx("date")!] : null);
-    const paymentMethod = (idx("payment") ? String(r[idx("payment")!] ?? "").trim() : null) || detectPaymentMethod(description);
+    const paymentMethod =
+      (idx("payment") ? String(r[idx("payment")!] ?? "").trim() : null) ||
+      detectPaymentMethod(description);
 
     let name = nameFromCol;
     if (!name && description) {
@@ -424,10 +518,16 @@ async function runImportParse(admin: Admin, job: { payload: Record<string, unkno
     let clientFound = false;
     if (!isExpense && (name || phoneRaw)) {
       const { data: dup } = await admin.rpc("find_duplicate_client", {
-        _company_id: job.company_id, _name: name || "", _phone: phoneRaw || "", _threshold: 0.7,
+        _company_id: job.company_id,
+        _name: name || "",
+        _phone: phoneRaw || "",
+        _threshold: 0.7,
       });
       const first = Array.isArray(dup) ? dup[0] : null;
-      if (first) { clientId = first.id; clientFound = true; }
+      if (first) {
+        clientId = first.id;
+        clientFound = true;
+      }
     }
 
     // Offering prediction
@@ -439,11 +539,14 @@ async function runImportParse(admin: Admin, job: { payload: Record<string, unkno
     let tenantPattern = false;
     if (!isExpense && amount != null) {
       const { data: pred } = await admin.rpc("predict_offering_from_amount", {
-        _company_id: job.company_id, _amount: amount,
+        _company_id: job.company_id,
+        _amount: amount,
       });
       const p = Array.isArray(pred) ? pred[0] : null;
       if (p?.entity_id) {
-        offeringId = p.entity_id; offeringKind = p.entity_type; offeringLabel = p.label;
+        offeringId = p.entity_id;
+        offeringKind = p.entity_type;
+        offeringLabel = p.label;
         amountMatch = true;
         if (p.reason === "kb_amount") tenantPattern = true;
       } else if (activeServices.length > 0) {
@@ -451,7 +554,7 @@ async function runImportParse(admin: Admin, job: { payload: Record<string, unkno
         if (matchedCombination && matchedCombination.length > 0) {
           offeringId = matchedCombination[0].id;
           offeringKind = "service";
-          offeringLabel = matchedCombination.map(s => s.name).join(" + ");
+          offeringLabel = matchedCombination.map((s) => s.name).join(" + ");
           amountMatch = true;
         }
       }
@@ -467,9 +570,12 @@ async function runImportParse(admin: Admin, job: { payload: Record<string, unkno
         .limit(1)
         .maybeSingle();
       if (kb?.mapped_entity_id) {
-        descMatch = true; tenantPattern = true;
+        descMatch = true;
+        tenantPattern = true;
         if (!offeringId) {
-          offeringId = kb.mapped_entity_id; offeringKind = kb.mapped_entity_type; offeringLabel = kb.mapped_label;
+          offeringId = kb.mapped_entity_id;
+          offeringKind = kb.mapped_entity_type;
+          offeringLabel = kb.mapped_label;
         }
       }
     }
@@ -490,45 +596,96 @@ async function runImportParse(admin: Admin, job: { payload: Record<string, unkno
     }
 
     const status =
-      confidence >= 95 ? "matched" :
-      confidence >= 70 ? "review" :
-      confidence > 0 ? "manual" : "manual";
+      confidence >= 95
+        ? "matched"
+        : confidence >= 70
+          ? "review"
+          : confidence > 0
+            ? "manual"
+            : "manual";
 
     if (status === "matched") matched++;
     else if (status === "review") review++;
 
     const { error: rowErr } = await admin.from("import_rows").insert({
-      import_id, company_id: job.company_id, row_index: i,
-      raw: r as never, parsed: { name, phoneRaw: phoneRaw1, phoneRaw2, description, amount, occurred, paymentMethod, isExpense } as never,
-      client_name: name || null, client_phone: phoneApi, client_phone2: phoneApi2,
-      description, amount, occurred_at: occurred, payment_method: paymentMethod,
-      resolved_client_id: clientId, resolved_offering_id: offeringId, resolved_offering_kind: offeringKind,
-      confidence, status,
-      notes: isExpense ? "Despesa automática detectada" : (offeringLabel ? `Sugestão: ${offeringLabel}` : null),
+      import_id,
+      company_id: job.company_id,
+      row_index: i,
+      raw: r as never,
+      parsed: {
+        name,
+        phoneRaw: phoneRaw1,
+        phoneRaw2,
+        description,
+        amount,
+        occurred,
+        paymentMethod,
+        isExpense,
+      } as never,
+      client_name: name || null,
+      client_phone: phoneApi,
+      client_phone2: phoneApi2,
+      description,
+      amount,
+      occurred_at: occurred,
+      payment_method: paymentMethod,
+      resolved_client_id: clientId,
+      resolved_offering_id: offeringId,
+      resolved_offering_kind: offeringKind,
+      confidence,
+      status,
+      notes: isExpense
+        ? "Despesa automática detectada"
+        : offeringLabel
+          ? `Sugestão: ${offeringLabel}`
+          : null,
     });
-    if (rowErr) { failed++; await admin.from("import_errors").insert({
-      import_id, company_id: job.company_id, code: "row_insert", message: rowErr.message,
-    }); continue; }
+    if (rowErr) {
+      failed++;
+      await admin.from("import_errors").insert({
+        import_id,
+        company_id: job.company_id,
+        code: "row_insert",
+        message: rowErr.message,
+      });
+      continue;
+    }
 
     if (amount && status === "matched" && !isExpense) revenue += Number(amount);
   }
 
-  await admin.from("imports").update({
-    status: "completed",
-    rows_total: total, rows_matched: matched, rows_review: review, rows_failed: failed,
-    revenue_identified: revenue,
-    finished_at: new Date().toISOString(),
-  }).eq("id", import_id);
+  await admin
+    .from("imports")
+    .update({
+      status: "completed",
+      rows_total: total,
+      rows_matched: matched,
+      rows_review: review,
+      rows_failed: failed,
+      revenue_identified: revenue,
+      finished_at: new Date().toISOString(),
+    })
+    .eq("id", import_id);
 
   return { total, matched, review, failed, revenue };
 }
 
 // ===================== SIE: import.apply_row =====================
-async function runImportApplyRow(admin: Admin, job: { payload: Record<string, unknown> | null; company_id: string | null }) {
-  const { row_id, create_appointment } = (job.payload ?? {}) as { row_id?: string; create_appointment?: boolean };
+async function runImportApplyRow(
+  admin: Admin,
+  job: { payload: Record<string, unknown> | null; company_id: string | null },
+) {
+  const { row_id, create_appointment } = (job.payload ?? {}) as {
+    row_id?: string;
+    create_appointment?: boolean;
+  };
   if (!row_id) throw new Error("import.apply_row: missing row_id");
 
-  const { data: row, error } = await admin.from("import_rows").select("*").eq("id", row_id).single();
+  const { data: row, error } = await admin
+    .from("import_rows")
+    .select("*")
+    .eq("id", row_id)
+    .single();
   if (error || !row) throw new Error(error?.message ?? "row not found");
   if (row.status === "applied") return { skipped: true };
 
@@ -536,28 +693,40 @@ async function runImportApplyRow(admin: Admin, job: { payload: Record<string, un
 
   const isExpense = isExpenseDescription(row.description);
   if (isExpense) {
-    const { data: tx, error: txErr } = await admin.from("financial_transactions").insert({
-      company_id: companyId,
-      type: "EXPENSE",
-      category: "Despesa",
-      description: row.description ?? "Despesa automática (import)",
-      amount: row.amount ?? 0,
-      transaction_date: row.occurred_at ?? new Date().toISOString().slice(0, 10),
-      payment_method: row.payment_method ?? null,
-    }).select("id").single();
+    const { data: tx, error: txErr } = await admin
+      .from("financial_transactions")
+      .insert({
+        company_id: companyId,
+        type: "EXPENSE",
+        category: "Despesa",
+        description: row.description ?? "Despesa automática (import)",
+        amount: row.amount ?? 0,
+        transaction_date: row.occurred_at ?? new Date().toISOString().slice(0, 10),
+        payment_method: row.payment_method ?? null,
+      })
+      .select("id")
+      .single();
     if (txErr) throw new Error(`financial_transaction: ${txErr.message}`);
     const transactionId = tx.id;
 
-    await admin.from("import_rows").update({
-      status: "applied",
-      action_taken: "create_expense",
-      transaction_id: transactionId,
-    }).eq("id", row_id);
+    await admin
+      .from("import_rows")
+      .update({
+        status: "applied",
+        action_taken: "create_expense",
+        transaction_id: transactionId,
+      })
+      .eq("id", row_id);
 
     await admin.from("import_matches").insert({
-      import_id: row.import_id, company_id: companyId, row_id,
-      entity_type: "financial_transaction", entity_id: transactionId, confidence: row.confidence,
-      reason: "created_expense", action: "created",
+      import_id: row.import_id,
+      company_id: companyId,
+      row_id,
+      entity_type: "financial_transaction",
+      entity_id: transactionId,
+      confidence: row.confidence,
+      reason: "created_expense",
+      action: "created",
     });
 
     const { data: cur } = await admin
@@ -566,9 +735,12 @@ async function runImportApplyRow(admin: Admin, job: { payload: Record<string, un
       .eq("id", row.import_id)
       .single();
     if (cur) {
-      await admin.from("imports").update({
-        transactions_created: cur.transactions_created + 1,
-      }).eq("id", row.import_id);
+      await admin
+        .from("imports")
+        .update({
+          transactions_created: cur.transactions_created + 1,
+        })
+        .eq("id", row.import_id);
     }
 
     return { transactionId };
@@ -578,16 +750,21 @@ async function runImportApplyRow(admin: Admin, job: { payload: Record<string, un
   let createdClient = false;
 
   if (!clientId && (row.client_name || row.client_phone || row.client_phone2)) {
-    const { data: c, error: ce } = await admin.from("clients").insert({
-      company_id: companyId,
-      name: row.client_name ?? "Cliente importado",
-      phone: row.client_phone ?? null,
-      phone2: row.client_phone2 ?? null,
-      status: "ACTIVE",
-      notes: "Criado pela importação",
-    }).select("id").single();
+    const { data: c, error: ce } = await admin
+      .from("clients")
+      .insert({
+        company_id: companyId,
+        name: row.client_name ?? "Cliente importado",
+        phone: row.client_phone ?? null,
+        phone2: row.client_phone2 ?? null,
+        status: "ACTIVE",
+        notes: "Criado pela importação",
+      })
+      .select("id")
+      .single();
     if (ce) throw new Error(`cliente: ${ce.message}`);
-    clientId = c.id; createdClient = true;
+    clientId = c.id;
+    createdClient = true;
   }
 
   let appointmentId: string | null = null;
@@ -614,78 +791,110 @@ async function runImportApplyRow(admin: Admin, job: { payload: Record<string, un
 
     const start = row.occurred_at ? new Date(`${row.occurred_at}T12:00:00Z`) : new Date();
     const end = new Date(start.getTime() + 60 * 60 * 1000);
-    const { data: ap, error: ae } = await admin.from("appointments").insert({
-      company_id: companyId,
-      client_id: clientId,
-      service_id: serviceId,
-      start_datetime: start.toISOString(),
-      end_datetime: end.toISOString(),
-      status: "COMPLETED",
-      price: row.amount,
-      source: "import",
-      completed_at: start.toISOString(),
-      notes: (() => {
-        let n = row.description ?? "";
-        if (row.notes && row.notes.startsWith("Sugestão:")) {
-          n = n ? `${n} (${row.notes})` : row.notes;
-        }
-        return n || null;
-      })(),
-    }).select("id").single();
+    const { data: ap, error: ae } = await admin
+      .from("appointments")
+      .insert({
+        company_id: companyId,
+        client_id: clientId,
+        service_id: serviceId,
+        start_datetime: start.toISOString(),
+        end_datetime: end.toISOString(),
+        status: "COMPLETED",
+        price: row.amount,
+        source: "import",
+        completed_at: start.toISOString(),
+        notes: (() => {
+          let n = row.description ?? "";
+          if (row.notes && row.notes.startsWith("Sugestão:")) {
+            n = n ? `${n} (${row.notes})` : row.notes;
+          }
+          return n || null;
+        })(),
+      })
+      .select("id")
+      .single();
     if (ae) throw new Error(`appointment: ${ae.message}`);
     appointmentId = ap.id;
 
-    const { data: tx } = await admin.from("financial_transactions").insert({
-      company_id: companyId, type: "INCOME", category: "Importação",
-      description: row.description ?? "Atendimento histórico (import)",
-      amount: row.amount,
-      transaction_date: row.occurred_at ?? new Date().toISOString().slice(0, 10),
-      appointment_id: appointmentId,
-      payment_method: row.payment_method ?? null,
-    }).select("id").maybeSingle();
+    const { data: tx } = await admin
+      .from("financial_transactions")
+      .insert({
+        company_id: companyId,
+        type: "INCOME",
+        category: "Importação",
+        description: row.description ?? "Atendimento histórico (import)",
+        amount: row.amount,
+        transaction_date: row.occurred_at ?? new Date().toISOString().slice(0, 10),
+        appointment_id: appointmentId,
+        payment_method: row.payment_method ?? null,
+      })
+      .select("id")
+      .maybeSingle();
     transactionId = tx?.id ?? null;
   }
 
   // IIL learning
   if (row.amount && row.resolved_offering_id) {
     await admin.rpc("learn_pattern", {
-      _company_id: companyId, _type: "amount",
+      _company_id: companyId,
+      _type: "amount",
       _value: row.amount.toFixed(2),
-      _entity_type: row.resolved_offering_kind, _entity_id: row.resolved_offering_id,
-      _label: null, _delta: 1,
+      _entity_type: row.resolved_offering_kind,
+      _entity_id: row.resolved_offering_id,
+      _label: null,
+      _delta: 1,
     });
   }
   if (row.description && row.resolved_offering_id) {
     await admin.rpc("learn_pattern", {
-      _company_id: companyId, _type: "description",
+      _company_id: companyId,
+      _type: "description",
       _value: row.description,
-      _entity_type: row.resolved_offering_kind, _entity_id: row.resolved_offering_id,
-      _label: null, _delta: 1,
+      _entity_type: row.resolved_offering_kind,
+      _entity_id: row.resolved_offering_id,
+      _label: null,
+      _delta: 1,
     });
   }
   if (row.payment_method) {
-    await admin.from("payment_behavior_profiles")
-      .upsert({ company_id: companyId, payment_method: row.payment_method, hits: 1 },
-        { onConflict: "company_id,payment_method", ignoreDuplicates: false });
+    await admin
+      .from("payment_behavior_profiles")
+      .upsert(
+        { company_id: companyId, payment_method: row.payment_method, hits: 1 },
+        { onConflict: "company_id,payment_method", ignoreDuplicates: false },
+      );
     await admin.rpc("learn_pattern", {
-      _company_id: companyId, _type: "bank_description",
-      _value: row.payment_method, _entity_type: null, _entity_id: null, _label: null, _delta: 1,
+      _company_id: companyId,
+      _type: "bank_description",
+      _value: row.payment_method,
+      _entity_type: null,
+      _entity_id: null,
+      _label: null,
+      _delta: 1,
     });
   }
   if (clientId) await admin.rpc("refresh_client_behavior_profile", { _client_id: clientId });
 
-  await admin.from("import_rows").update({
-    status: "applied",
-    action_taken: createdClient ? "create_client" : "merge_client",
-    resolved_client_id: clientId,
-    appointment_id: appointmentId,
-    transaction_id: transactionId,
-  }).eq("id", row_id);
+  await admin
+    .from("import_rows")
+    .update({
+      status: "applied",
+      action_taken: createdClient ? "create_client" : "merge_client",
+      resolved_client_id: clientId,
+      appointment_id: appointmentId,
+      transaction_id: transactionId,
+    })
+    .eq("id", row_id);
 
   await admin.from("import_matches").insert({
-    import_id: row.import_id, company_id: companyId, row_id,
-    entity_type: "client", entity_id: clientId, confidence: row.confidence,
-    reason: createdClient ? "created" : "matched", action: createdClient ? "created" : "matched",
+    import_id: row.import_id,
+    company_id: companyId,
+    row_id,
+    entity_type: "client",
+    entity_id: clientId,
+    confidence: row.confidence,
+    reason: createdClient ? "created" : "matched",
+    action: createdClient ? "created" : "matched",
   });
 
   // Increment import counters
@@ -696,11 +905,14 @@ async function runImportApplyRow(admin: Admin, job: { payload: Record<string, un
       .eq("id", row.import_id)
       .single();
     if (cur) {
-      await admin.from("imports").update({
-        clients_created: cur.clients_created + (createdClient ? 1 : 0),
-        appointments_created: cur.appointments_created + (appointmentId ? 1 : 0),
-        transactions_created: cur.transactions_created + (transactionId ? 1 : 0),
-      }).eq("id", row.import_id);
+      await admin
+        .from("imports")
+        .update({
+          clients_created: cur.clients_created + (createdClient ? 1 : 0),
+          appointments_created: cur.appointments_created + (appointmentId ? 1 : 0),
+          transactions_created: cur.transactions_created + (transactionId ? 1 : 0),
+        })
+        .eq("id", row.import_id);
     }
   }
 
@@ -708,5 +920,8 @@ async function runImportApplyRow(admin: Admin, job: { payload: Record<string, un
 }
 
 function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
 }

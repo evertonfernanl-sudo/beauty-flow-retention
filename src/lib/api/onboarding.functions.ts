@@ -16,24 +16,70 @@ type Offering = {
 
 const SEEDS: Record<Vertical, Offering[]> = {
   BEAUTY: [
-    { name: "Design de Sobrancelhas", kind: "SERVICE", duration_minutes: 30, price: 50, return_days: 30 },
+    {
+      name: "Design de Sobrancelhas",
+      kind: "SERVICE",
+      duration_minutes: 30,
+      price: 50,
+      return_days: 30,
+    },
     { name: "Design com Henna", kind: "SERVICE", duration_minutes: 45, price: 70, return_days: 25 },
-    { name: "Lash Volume Brasileiro", kind: "SERVICE", duration_minutes: 90, price: 150, return_days: 21 },
+    {
+      name: "Lash Volume Brasileiro",
+      kind: "SERVICE",
+      duration_minutes: 90,
+      price: 150,
+      return_days: 21,
+    },
     { name: "Manicure", kind: "SERVICE", duration_minutes: 45, price: 40, return_days: 15 },
     { name: "Pedicure", kind: "SERVICE", duration_minutes: 60, price: 50, return_days: 30 },
   ],
   SALES: [
     { name: "Perfume 100ml", kind: "PRODUCT", duration_minutes: 0, price: 199, return_days: 45 },
-    { name: "Hidratante Corporal", kind: "PRODUCT", duration_minutes: 0, price: 59, return_days: 30 },
+    {
+      name: "Hidratante Corporal",
+      kind: "PRODUCT",
+      duration_minutes: 0,
+      price: 59,
+      return_days: 30,
+    },
     { name: "Sérum Facial", kind: "PRODUCT", duration_minutes: 0, price: 89, return_days: 60 },
     { name: "Kit Skincare", kind: "PRODUCT", duration_minutes: 0, price: 249, return_days: 75 },
     { name: "Batom Matte", kind: "PRODUCT", duration_minutes: 0, price: 39, return_days: 60 },
   ],
   GYM: [
-    { name: "Mensal", kind: "PLAN", duration_minutes: 0, price: 99, return_days: 30, billing_cycle_days: 30 },
-    { name: "Trimestral", kind: "PLAN", duration_minutes: 0, price: 270, return_days: 90, billing_cycle_days: 90 },
-    { name: "Semestral", kind: "PLAN", duration_minutes: 0, price: 500, return_days: 180, billing_cycle_days: 180 },
-    { name: "Anual", kind: "PLAN", duration_minutes: 0, price: 900, return_days: 365, billing_cycle_days: 365 },
+    {
+      name: "Mensal",
+      kind: "PLAN",
+      duration_minutes: 0,
+      price: 99,
+      return_days: 30,
+      billing_cycle_days: 30,
+    },
+    {
+      name: "Trimestral",
+      kind: "PLAN",
+      duration_minutes: 0,
+      price: 270,
+      return_days: 90,
+      billing_cycle_days: 90,
+    },
+    {
+      name: "Semestral",
+      kind: "PLAN",
+      duration_minutes: 0,
+      price: 500,
+      return_days: 180,
+      billing_cycle_days: 180,
+    },
+    {
+      name: "Anual",
+      kind: "PLAN",
+      duration_minutes: 0,
+      price: 900,
+      return_days: 365,
+      billing_cycle_days: 365,
+    },
   ],
 };
 
@@ -75,7 +121,8 @@ export const createCompanyForCurrentUser = createServerFn({ method: "POST" })
       })
       .select("id")
       .single();
-    if (companyError || !company) throw new Error(companyError?.message ?? "Falha ao criar empresa");
+    if (companyError || !company)
+      throw new Error(companyError?.message ?? "Falha ao criar empresa");
 
     const { error: profileError } = await supabaseAdmin
       .from("profiles")
@@ -98,10 +145,15 @@ export const setCompanyVertical = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { data: profile } = await supabase
-      .from("profiles").select("company_id").eq("id", userId).maybeSingle();
+      .from("profiles")
+      .select("company_id")
+      .eq("id", userId)
+      .maybeSingle();
     if (!profile?.company_id) throw new Error("Empresa não encontrada");
     const { error } = await supabase
-      .from("companies").update({ vertical: data.vertical }).eq("id", profile.company_id);
+      .from("companies")
+      .update({ vertical: data.vertical })
+      .eq("id", profile.company_id);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -111,15 +163,22 @@ export const seedDefaultServices = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
     const { data: profile } = await supabase
-      .from("profiles").select("company_id").eq("id", userId).maybeSingle();
+      .from("profiles")
+      .select("company_id")
+      .eq("id", userId)
+      .maybeSingle();
     if (!profile?.company_id) throw new Error("Empresa não encontrada");
 
     const { data: company } = await supabase
-      .from("companies").select("vertical").eq("id", profile.company_id).maybeSingle();
+      .from("companies")
+      .select("vertical")
+      .eq("id", profile.company_id)
+      .maybeSingle();
     const vertical = (company?.vertical ?? "BEAUTY") as Vertical;
 
     const { count } = await supabase
-      .from("services").select("id", { count: "exact", head: true })
+      .from("services")
+      .select("id", { count: "exact", head: true })
       .eq("company_id", profile.company_id);
     if ((count ?? 0) > 0) return { inserted: 0 };
 
@@ -149,7 +208,10 @@ export const addProfessionals = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { data: profile } = await supabase
-      .from("profiles").select("company_id").eq("id", userId).maybeSingle();
+      .from("profiles")
+      .select("company_id")
+      .eq("id", userId)
+      .maybeSingle();
     if (!profile?.company_id) throw new Error("Empresa não encontrada");
 
     const rows = data.professionals
@@ -169,15 +231,20 @@ export const addProfessionals = createServerFn({ method: "POST" })
 export const updateWhatsappTemplate = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) =>
-    z.object({
-      whatsapp: z.string().trim().max(40).optional().or(z.literal("")),
-      template: z.string().trim().max(2000).optional().or(z.literal("")),
-    }).parse(input),
+    z
+      .object({
+        whatsapp: z.string().trim().max(40).optional().or(z.literal("")),
+        template: z.string().trim().max(2000).optional().or(z.literal("")),
+      })
+      .parse(input),
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { data: profile } = await supabase
-      .from("profiles").select("company_id").eq("id", userId).maybeSingle();
+      .from("profiles")
+      .select("company_id")
+      .eq("id", userId)
+      .maybeSingle();
     if (!profile?.company_id) throw new Error("Empresa não encontrada");
     const { error } = await supabase
       .from("companies")
@@ -195,10 +262,15 @@ export const completeOnboarding = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
     const { data: profile } = await supabase
-      .from("profiles").select("company_id").eq("id", userId).maybeSingle();
+      .from("profiles")
+      .select("company_id")
+      .eq("id", userId)
+      .maybeSingle();
     if (!profile?.company_id) throw new Error("Empresa não encontrada");
     const { error } = await supabase
-      .from("companies").update({ onboarding_completed: true }).eq("id", profile.company_id);
+      .from("companies")
+      .update({ onboarding_completed: true })
+      .eq("id", profile.company_id);
     if (error) throw new Error(error.message);
     return { ok: true };
   });

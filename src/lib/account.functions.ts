@@ -9,15 +9,9 @@ type ExportPayload = {
   tables: { [table: string]: JsonRecord[] };
 };
 
-type ExportResult =
-  | { ok: true; data: ExportPayload }
-  | { ok: false; error: string };
+type ExportResult = { ok: true; data: ExportPayload } | { ok: false; error: string };
 
-type ActionResult =
-  | { ok: true; message: string }
-  | { ok: false; error: string };
-
-
+type ActionResult = { ok: true; message: string } | { ok: false; error: string };
 
 // LGPD — Export all data the current user's company owns.
 export const exportMyCompanyData = createServerFn({ method: "POST" })
@@ -54,7 +48,7 @@ export const exportMyCompanyData = createServerFn({ method: "POST" })
         .from(t as never)
         .select("*")
         .eq("company_id", companyId);
-      out[t] = ((data ?? []) as unknown as JsonRecord[]);
+      out[t] = (data ?? []) as unknown as JsonRecord[];
     }
 
     return {

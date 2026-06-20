@@ -15,7 +15,11 @@ export const Route = createFileRoute("/contato")({
   head: () => ({
     meta: [
       { title: "Contato — BeautyFlow" },
-      { name: "description", content: "Fale com o time do BeautyFlow. Tire suas dúvidas sobre planos, integrações e como recuperar clientes." },
+      {
+        name: "description",
+        content:
+          "Fale com o time do BeautyFlow. Tire suas dúvidas sobre planos, integrações e como recuperar clientes.",
+      },
       { property: "og:title", content: "Contato — BeautyFlow" },
       { property: "og:description", content: "Fale com nosso time. Respondemos rápido." },
       { property: "og:url", content: "https://beauty-flow-retention.lovable.app/contato" },
@@ -101,7 +105,13 @@ function Contato() {
                 </div>
                 <div>
                   <Label htmlFor="profession">Profissão</Label>
-                  <Input id="profession" name="profession" required maxLength={100} placeholder="Ex: Lash designer" />
+                  <Input
+                    id="profession"
+                    name="profession"
+                    required
+                    maxLength={100}
+                    placeholder="Ex: Lash designer"
+                  />
                 </div>
               </div>
               <div>

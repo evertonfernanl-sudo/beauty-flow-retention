@@ -12,7 +12,7 @@ export const createProfessionalUser = createServerFn({ method: "POST" })
         password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres").max(72),
         role: z.enum(["admin", "employee"]),
       })
-      .parse(input)
+      .parse(input),
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
@@ -26,7 +26,9 @@ export const createProfessionalUser = createServerFn({ method: "POST" })
       .maybeSingle();
 
     if (!currentRoleRow || (currentRoleRow.role !== "owner" && currentRoleRow.role !== "admin")) {
-      throw new Error("Permissão negada. Apenas administradores e proprietários podem gerenciar usuários.");
+      throw new Error(
+        "Permissão negada. Apenas administradores e proprietários podem gerenciar usuários.",
+      );
     }
 
     const companyId = currentRoleRow.company_id;
@@ -46,14 +48,12 @@ export const createProfessionalUser = createServerFn({ method: "POST" })
     const newUserId = authData.user.id;
 
     // 3) Create user profile
-    const { error: profileError } = await supabaseAdmin
-      .from("profiles")
-      .insert({
-        id: newUserId,
-        company_id: companyId,
-        name: data.name,
-        email: data.email.trim().toLowerCase(),
-      });
+    const { error: profileError } = await supabaseAdmin.from("profiles").insert({
+      id: newUserId,
+      company_id: companyId,
+      name: data.name,
+      email: data.email.trim().toLowerCase(),
+    });
 
     if (profileError) {
       // Cleanup auth user on failure
@@ -62,13 +62,11 @@ export const createProfessionalUser = createServerFn({ method: "POST" })
     }
 
     // 4) Assign company role
-    const { error: roleError } = await supabaseAdmin
-      .from("user_roles")
-      .insert({
-        user_id: newUserId,
-        company_id: companyId,
-        role: data.role,
-      });
+    const { error: roleError } = await supabaseAdmin.from("user_roles").insert({
+      user_id: newUserId,
+      company_id: companyId,
+      role: data.role,
+    });
 
     if (roleError) {
       // Cleanup profile & auth user on failure
@@ -79,19 +77,21 @@ export const createProfessionalUser = createServerFn({ method: "POST" })
 
     // 5) If role is employee, register a professional record
     if (data.role === "employee") {
-      const { error: profError } = await supabaseAdmin
-        .from("professionals")
-        .insert({
-          company_id: companyId,
-          user_id: newUserId,
-          name: data.name,
-          email: data.email.trim().toLowerCase(),
-          active: true,
-        });
+      const { error: profError } = await supabaseAdmin.from("professionals").insert({
+        company_id: companyId,
+        user_id: newUserId,
+        name: data.name,
+        email: data.email.trim().toLowerCase(),
+        active: true,
+      });
 
       if (profError) {
         // Cleanup all
-        await supabaseAdmin.from("user_roles").delete().eq("user_id", newUserId).eq("company_id", companyId);
+        await supabaseAdmin
+          .from("user_roles")
+          .delete()
+          .eq("user_id", newUserId)
+          .eq("company_id", companyId);
         await supabaseAdmin.from("profiles").delete().eq("id", newUserId);
         await supabaseAdmin.auth.admin.deleteUser(newUserId);
         throw new Error(profError.message);
@@ -108,7 +108,7 @@ export const deleteCompanyMember = createServerFn({ method: "POST" })
       .object({
         targetUserId: z.string().uuid(),
       })
-      .parse(input)
+      .parse(input),
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
@@ -122,7 +122,9 @@ export const deleteCompanyMember = createServerFn({ method: "POST" })
       .maybeSingle();
 
     if (!currentRoleRow || (currentRoleRow.role !== "owner" && currentRoleRow.role !== "admin")) {
-      throw new Error("Permissão negada. Apenas administradores e proprietários podem gerenciar usuários.");
+      throw new Error(
+        "Permissão negada. Apenas administradores e proprietários podem gerenciar usuários.",
+      );
     }
 
     const companyId = currentRoleRow.company_id;
@@ -155,15 +157,9 @@ export const deleteCompanyMember = createServerFn({ method: "POST" })
       .eq("company_id", companyId);
 
     // 3) Delete role, profile, and auth user
-    await supabaseAdmin
-      .from("user_roles")
-      .delete()
-      .eq("user_id", data.targetUserId);
+    await supabaseAdmin.from("user_roles").delete().eq("user_id", data.targetUserId);
 
-    await supabaseAdmin
-      .from("profiles")
-      .delete()
-      .eq("id", data.targetUserId);
+    await supabaseAdmin.from("profiles").delete().eq("id", data.targetUserId);
 
     const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(data.targetUserId);
     if (deleteError) {

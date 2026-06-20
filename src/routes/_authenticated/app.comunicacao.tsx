@@ -151,9 +151,7 @@ function TemplatesPanel() {
                   {t.category}
                 </Badge>
               </div>
-              <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
-                {t.body}
-              </p>
+              <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{t.body}</p>
             </div>
             <div className="flex gap-1">
               <Button
@@ -166,11 +164,7 @@ function TemplatesPanel() {
               >
                 <Edit2 className="h-4 w-4" />
               </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => del.mutate(t.id)}
-              >
+              <Button size="icon" variant="ghost" onClick={() => del.mutate(t.id)}>
                 <Trash2 className="h-4 w-4" />
               </Button>
             </div>
@@ -178,12 +172,7 @@ function TemplatesPanel() {
         ))}
       </CardContent>
 
-      <TemplateDialog
-        open={open}
-        onOpenChange={setOpen}
-        template={editing}
-        companyId={companyId}
-      />
+      <TemplateDialog open={open} onOpenChange={setOpen} template={editing} companyId={companyId} />
     </Card>
   );
 }
@@ -276,8 +265,7 @@ function TemplateDialog({
               placeholder="Oi {{nome}}, está na hora do seu retorno!"
             />
             <p className="mt-1 text-xs text-muted-foreground">
-              Variáveis disponíveis:{" "}
-              <code className="rounded bg-muted px-1">{"{{nome}}"}</code>
+              Variáveis disponíveis: <code className="rounded bg-muted px-1">{"{{nome}}"}</code>
             </p>
           </div>
         </div>
@@ -413,7 +401,6 @@ function CampaignsPanel() {
     );
   }
 
-
   const preview = useMemo(() => {
     if (!clients[0]) return body;
     return body.replaceAll("{{nome}}", clients[0].name || "Cliente");
@@ -530,9 +517,7 @@ function CampaignsHistory({ companyId }: { companyId?: string }) {
   if (!q.data || q.data.length === 0) return null;
   return (
     <div className="mt-6">
-      <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">
-        Últimas campanhas
-      </p>
+      <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">Últimas campanhas</p>
       <div className="space-y-2">
         {q.data.map((c) => (
           <div
@@ -548,9 +533,7 @@ function CampaignsHistory({ companyId }: { companyId?: string }) {
             <div className="text-right">
               <p>{c.sent_count} envios</p>
               <p className="text-xs text-muted-foreground">
-                {c.last_sent_at
-                  ? new Date(c.last_sent_at).toLocaleDateString("pt-BR")
-                  : "—"}
+                {c.last_sent_at ? new Date(c.last_sent_at).toLocaleDateString("pt-BR") : "—"}
               </p>
             </div>
           </div>

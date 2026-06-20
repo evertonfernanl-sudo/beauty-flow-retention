@@ -76,7 +76,9 @@ function Blog() {
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           {CATEGORIES.map((c) => (
-            <Badge key={c} variant="secondary" className="text-xs">{c}</Badge>
+            <Badge key={c} variant="secondary" className="text-xs">
+              {c}
+            </Badge>
           ))}
         </div>
       </section>
@@ -85,7 +87,9 @@ function Blog() {
         {POSTS.map((p) => (
           <Card key={p.slug} className="p-6 hover:shadow-soft transition-shadow flex flex-col">
             <div className="aspect-video rounded-lg bg-gradient-to-br from-primary/20 to-secondary mb-4" />
-            <Badge variant="outline" className="self-start text-xs">{p.cat}</Badge>
+            <Badge variant="outline" className="self-start text-xs">
+              {p.cat}
+            </Badge>
             <h2 className="mt-3 text-lg font-semibold leading-tight">{p.title}</h2>
             <p className="mt-2 text-sm text-muted-foreground flex-1">{p.excerpt}</p>
             <Link
