@@ -561,6 +561,9 @@ function AppointmentRow({
   shouldRestrictAgenda: boolean;
   myProfessional: any;
 }) {
+  const { data: profile } = useCurrentProfile();
+  const isAdm = profile?.role === "owner" || profile?.role === "admin";
+
   return (
     <li className="py-3 flex items-center justify-between gap-3">
       <Link
@@ -616,7 +619,7 @@ function AppointmentRow({
               myProfessional={myProfessional}
               onChanged={onChanged}
             />
-            <CancelAppointment a={a} onChanged={onChanged} />
+            {isAdm && <CancelAppointment a={a} onChanged={onChanged} />}
           </>
         )}
       </div>
