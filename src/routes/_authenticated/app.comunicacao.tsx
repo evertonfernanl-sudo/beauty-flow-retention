@@ -27,7 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { MessageSquare, Send, Plus, Trash2, Edit2, Lock } from "lucide-react";
+import { MessageSquare, Send, Plus, Trash2, Edit2, Lock, Copy } from "lucide-react";
 import { toStoragePhone } from "@/lib/phone";
 import { enqueueCampaignRecord } from "@/lib/api/campaigns.functions";
 
@@ -57,6 +57,9 @@ const SEGMENT_LABEL: Record<Segment, string> = {
 };
 
 export function ComunicacaoPage() {
+  const { data: profile } = useCurrentProfile();
+  const companyId = profile?.company?.id;
+
   return (
     <div className="space-y-6 p-4 md:p-6">
       <div>
@@ -65,6 +68,33 @@ export function ComunicacaoPage() {
           Templates de mensagem e campanhas em massa via WhatsApp.
         </p>
       </div>
+
+      {companyId && profile?.company?.slug && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 bg-muted/40 rounded-xl border border-primary/10 shadow-soft max-w-2xl">
+          <div className="flex-1 min-w-0">
+            <h4 className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">
+              Seu Link Público de Agendamento
+            </h4>
+            <div className="flex items-center gap-2">
+              <code className="text-xs select-all bg-background border px-3 py-1.5 rounded-lg truncate flex-1 font-mono text-muted-foreground">
+                {`${window.location.origin}/agendar/${profile.company.slug}`}
+              </code>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 shadow-sm flex-shrink-0"
+                onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}/agendar/${profile.company!.slug!}`);
+                  toast.success("Link copiado!");
+                }}
+              >
+                <Copy className="h-3.5 w-3.5 mr-1.5" />
+                Copiar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Tabs defaultValue="templates">
         <TabsList>
