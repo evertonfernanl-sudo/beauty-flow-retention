@@ -36,6 +36,7 @@ export const Route = createFileRoute("/_authenticated/app/clients")({
 const clientSchema = z.object({
   name: z.string().trim().min(2, "Nome muito curto").max(120),
   phone: z.string().trim().max(40).optional().or(z.literal("")),
+  phone2: z.string().trim().max(40).optional().or(z.literal("")),
   email: z.string().trim().email("E-mail inválido").max(255).optional().or(z.literal("")),
   birthday: z.string().optional().or(z.literal("")),
   instagram: z.string().trim().max(60).optional().or(z.literal("")),
@@ -99,7 +100,7 @@ function ClientsPage() {
 
   const form = useForm<z.infer<typeof clientSchema>>({
     resolver: zodResolver(clientSchema),
-    defaultValues: { name: "", phone: "", email: "", birthday: "", instagram: "", profession: "", notes: "" },
+    defaultValues: { name: "", phone: "", phone2: "", email: "", birthday: "", instagram: "", profession: "", notes: "" },
   });
 
   async function onCreate(values: z.infer<typeof clientSchema>) {
@@ -127,6 +128,7 @@ function ClientsPage() {
       company_id: companyId,
       name: values.name,
       phone: values.phone || null,
+      phone2: values.phone2 || null,
       email: values.email || null,
       birthday: values.birthday || null,
       instagram: values.instagram || null,
@@ -185,23 +187,29 @@ function ClientsPage() {
                   <Input id="phone" placeholder="(11) 99999-9999" {...form.register("phone")} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="birthday">Aniversário</Label>
-                  <Input id="birthday" type="date" {...form.register("birthday")} />
+                  <Label htmlFor="phone2">Telefone 2</Label>
+                  <Input id="phone2" placeholder="(11) 99999-9999" {...form.register("phone2")} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
+                  <Label htmlFor="birthday">Aniversário</Label>
+                  <Input id="birthday" type="date" {...form.register("birthday")} />
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="instagram">Instagram</Label>
                   <Input id="instagram" placeholder="@usuario" {...form.register("instagram")} />
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="profession">Profissão</Label>
                   <Input id="profession" {...form.register("profession")} />
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">E-mail</Label>
-                <Input id="email" type="email" {...form.register("email")} />
+                <div className="space-y-2">
+                  <Label htmlFor="email">E-mail</Label>
+                  <Input id="email" type="email" {...form.register("email")} />
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="notes">Observações</Label>
@@ -426,13 +434,14 @@ function EditClientDialog({
       ? {
           name: client.name ?? "",
           phone: client.phone ?? "",
+          phone2: client.phone2 ?? "",
           email: client.email ?? "",
           birthday: client.birthday ?? "",
           instagram: client.instagram ?? "",
           profession: client.profession ?? "",
           notes: client.notes ?? "",
         }
-      : { name: "", phone: "", email: "", birthday: "", instagram: "", profession: "", notes: "" },
+      : { name: "", phone: "", phone2: "", email: "", birthday: "", instagram: "", profession: "", notes: "" },
   });
 
   async function onSave(v: z.infer<typeof clientSchema>) {
@@ -442,6 +451,7 @@ function EditClientDialog({
       .update({
         name: v.name,
         phone: v.phone || null,
+        phone2: v.phone2 || null,
         email: v.email || null,
         birthday: v.birthday || null,
         instagram: v.instagram || null,
@@ -476,23 +486,29 @@ function EditClientDialog({
               <Input id="edit-phone" placeholder="(11) 99999-9999" {...form.register("phone")} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-birthday">Aniversário</Label>
-              <Input id="edit-birthday" type="date" {...form.register("birthday")} />
+              <Label htmlFor="edit-phone2">Telefone 2</Label>
+              <Input id="edit-phone2" placeholder="(11) 99999-9999" {...form.register("phone2")} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
+              <Label htmlFor="edit-birthday">Aniversário</Label>
+              <Input id="edit-birthday" type="date" {...form.register("birthday")} />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="edit-instagram">Instagram</Label>
               <Input id="edit-instagram" placeholder="@usuario" {...form.register("instagram")} />
             </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="edit-profession">Profissão</Label>
               <Input id="edit-profession" {...form.register("profession")} />
             </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="edit-email">E-mail</Label>
-            <Input id="edit-email" type="email" {...form.register("email")} />
+            <div className="space-y-2">
+              <Label htmlFor="edit-email">E-mail</Label>
+              <Input id="edit-email" type="email" {...form.register("email")} />
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="edit-notes">Observações</Label>

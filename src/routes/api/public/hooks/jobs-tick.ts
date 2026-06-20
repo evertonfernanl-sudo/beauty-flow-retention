@@ -134,12 +134,13 @@ async function runCampaignRecord(admin: Admin, job: { payload: Record<string, un
 
 // ===================== SIE: import.parse =====================
 const HEADER_MAP: Record<string, RegExp> = {
-  name: /^(nome|name|cliente|client|customer|contato)$/i,
-  phone: /^(telefone|fone|phone|whatsapp|celular|cel)$/i,
+  name: /^(nome|name|cliente|client|customer|contato|first\s+name)$/i,
+  phone: /^(telefone|fone|phone|whatsapp|celular|cel|phone\s+1\s*-\s*value)$/i,
+  phone2: /^(phone\s+2\s*-\s*value)$/i,
   email: /^(e-?mail|email)$/i,
   amount: /^(valor|amount|preco|preço|price|total|vlr)$/i,
   date: /^(data|date|dt|dia|quando|occurred|venda|atendimento)$/i,
-  description: /^(descricao|descrição|description|historico|histórico|obs|observa|servico|serviço|produto)$/i,
+  description: /^(descricao|descrição|description|hist[óo]rico|lan[cç]amento|memo|complemento|hist[óo]rico\s+complementar|obs|observa|servi[cç]o|produto)$/i,
   payment: /^(pagamento|payment|metodo|método|forma)$/i,
 };
 
@@ -238,12 +239,92 @@ function parsePdfTextToRows(text: string): { headers: string[]; rows: Record<str
   return { headers, rows };
 }
 
+function isExpenseDescription(desc: string | null | undefined): boolean {
+  if (!desc) return false;
+  return /^(pix\s+enviado|pix\s+para|transfer[êe]ncia\s+enviada)/i.test(desc.trim());
+}
+
+function extractNameFromDescription(desc: string | null | undefined): string | null {
+  if (!desc) return null;
+  
+  // Pattern 2: "Pix recebido de: Name" or "Pix Recebido de Name" or "Pix de Name"
+  const pixMatch = desc.match(/(?:pix\s+recebido\s+de|pix\s+de|transferência\s+recebida\s+de|recebido\s+de)\s*:?\s*([A-Za-zÀ-ÿ\s]{6,60})/i);
+  if (pixMatch) {
+    const name = pixMatch[1].trim();
+    const words = name.split(/\s+/).filter(w => w.length > 1);
+    if (words.length >= 2) {
+      return name;
+    }
+  }
+
+  // Pattern 1: Splitting by "-" (very common in Brazilian bank statements)
+  const parts = desc.split("-").map(p => p.trim()).filter(Boolean);
+  if (parts.length >= 2) {
+    const nameRegex = /^[A-Za-zÀ-ÿ\s'\.\-]+$/;
+    const excludeKeywords = /(transfer[êe]ncia|recebido|recebida|enviado|enviada|pix|ted|doc|pagamento|compra|saque|dep[óo]sito|tarifa|juros|saldo|extrato|ag[êe]ncia|conta|nu\s+pagamentos|nubank|ita[úu]|bradesco|santander|caixa|banco|pagseguro|stone|picpay|mercado\s+pago|inter|original)/i;
+    
+    for (const part of parts) {
+      if (nameRegex.test(part) && !excludeKeywords.test(part)) {
+        const words = part.split(/\s+/).filter(w => w.length > 1);
+        if (words.length >= 2) {
+          return part;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+function findServiceCombination(
+  target: number,
+  services: Array<{ id: string; name: string; price: number }>
+): Array<{ id: string; name: string; price: number }> | null {
+  const targetCents = Math.round(target * 100);
+  const items = services
+    .map(s => ({ ...s, priceCents: Math.round(s.price * 100) }))
+    .filter(s => s.priceCents > 0 && s.priceCents <= targetCents);
+
+  const result: Array<{ id: string; name: string; price: number }> = [];
+
+  function search(index: number, currentSum: number): boolean {
+    if (currentSum === targetCents) return true;
+    if (currentSum > targetCents || index >= items.length) return false;
+
+    // Try including items[index]
+    result.push(items[index]);
+    if (search(index + 1, currentSum + items[index].priceCents)) {
+      return true;
+    }
+    result.pop(); // backtracking
+
+    // Try excluding items[index]
+    if (search(index + 1, currentSum)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  if (search(0, 0)) {
+    return result;
+  }
+  return null;
+}
+
 async function runImportParse(admin: Admin, job: { payload: Record<string, unknown> | null; company_id: string | null }) {
   const { import_id } = (job.payload ?? {}) as { import_id?: string };
 
   if (!import_id || !job.company_id) throw new Error("import.parse: missing import_id/company_id");
 
   await admin.from("imports").update({ status: "processing", started_at: new Date().toISOString() }).eq("id", import_id);
+
+  const { data: servicesData } = await admin
+    .from("services")
+    .select("id, name, price")
+    .eq("company_id", job.company_id)
+    .eq("active", true);
+  const activeServices = (servicesData ?? []) as Array<{ id: string; name: string; price: number }>;
 
   const { data: imp, error: impErr } = await admin
     .from("imports").select("id, source, storage_path, company_id").eq("id", import_id).single();
@@ -302,27 +383,44 @@ async function runImportParse(admin: Admin, job: { payload: Record<string, unkno
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
-    const name = idx("name") ? String(r[idx("name")!] ?? "").trim() : "";
-    const phoneRaw = idx("phone") ? String(r[idx("phone")!] ?? "").trim() : "";
+    const nameFromCol = idx("name") ? String(r[idx("name")!] ?? "").trim() : "";
+    const phoneRaw1 = idx("phone") ? String(r[idx("phone")!] ?? "").trim() : "";
+    const phoneRaw2 = idx("phone2") ? String(r[idx("phone2")!] ?? "").trim() : "";
+    const phoneRaw = phoneRaw1 || phoneRaw2;
     const description = idx("description") ? String(r[idx("description")!] ?? "").trim() : null;
     const amount = parseAmount(idx("amount") ? r[idx("amount")!] : null);
     const occurred = parseDate(idx("date") ? r[idx("date")!] : null);
     const paymentMethod = (idx("payment") ? String(r[idx("payment")!] ?? "").trim() : null) || detectPaymentMethod(description);
+
+    let name = nameFromCol;
+    if (!name && description) {
+      const extracted = extractNameFromDescription(description);
+      if (extracted) {
+        name = extracted;
+      }
+    }
+
+    const isExpense = isExpenseDescription(description);
 
     if (!name && !phoneRaw && amount == null) continue;
     total++;
 
     // Normalize phone via RPC for consistency with rest of system
     let phoneApi: string | null = null;
-    if (phoneRaw) {
-      const { data: p } = await admin.rpc("normalize_phone", { _phone: phoneRaw });
+    if (phoneRaw1) {
+      const { data: p } = await admin.rpc("normalize_phone", { _phone: phoneRaw1 });
       phoneApi = (p as string | null) ?? null;
+    }
+    let phoneApi2: string | null = null;
+    if (phoneRaw2) {
+      const { data: p } = await admin.rpc("normalize_phone", { _phone: phoneRaw2 });
+      phoneApi2 = (p as string | null) ?? null;
     }
 
     // Identity resolution
     let clientId: string | null = null;
     let clientFound = false;
-    if (name || phoneRaw) {
+    if (!isExpense && (name || phoneRaw)) {
       const { data: dup } = await admin.rpc("find_duplicate_client", {
         _company_id: job.company_id, _name: name || "", _phone: phoneRaw || "", _threshold: 0.7,
       });
@@ -337,7 +435,7 @@ async function runImportParse(admin: Admin, job: { payload: Record<string, unkno
     let amountMatch = false;
     let descMatch = false;
     let tenantPattern = false;
-    if (amount != null) {
+    if (!isExpense && amount != null) {
       const { data: pred } = await admin.rpc("predict_offering_from_amount", {
         _company_id: job.company_id, _amount: amount,
       });
@@ -346,9 +444,17 @@ async function runImportParse(admin: Admin, job: { payload: Record<string, unkno
         offeringId = p.entity_id; offeringKind = p.entity_type; offeringLabel = p.label;
         amountMatch = true;
         if (p.reason === "kb_amount") tenantPattern = true;
+      } else if (activeServices.length > 0) {
+        const matchedCombination = findServiceCombination(amount, activeServices);
+        if (matchedCombination && matchedCombination.length > 0) {
+          offeringId = matchedCombination[0].id;
+          offeringKind = "service";
+          offeringLabel = matchedCombination.map(s => s.name).join(" + ");
+          amountMatch = true;
+        }
       }
     }
-    if (description) {
+    if (!isExpense && description) {
       const { data: kb } = await admin
         .from("import_knowledge_base")
         .select("mapped_entity_id, mapped_entity_type, mapped_label, confidence")
@@ -366,15 +472,20 @@ async function runImportParse(admin: Admin, job: { payload: Record<string, unkno
       }
     }
 
-    const hasHistory = clientFound;
-    const { data: confData } = await admin.rpc("compute_import_confidence", {
-      _client_found: clientFound,
-      _amount_match: amountMatch,
-      _desc_match: descMatch,
-      _has_history: hasHistory,
-      _tenant_pattern: tenantPattern,
-    });
-    const confidence = (confData as number) ?? 0;
+    let confidence = 0;
+    if (isExpense) {
+      confidence = 95;
+    } else {
+      const hasHistory = clientFound;
+      const { data: confData } = await admin.rpc("compute_import_confidence", {
+        _client_found: clientFound,
+        _amount_match: amountMatch,
+        _desc_match: descMatch,
+        _has_history: hasHistory,
+        _tenant_pattern: tenantPattern,
+      });
+      confidence = (confData as number) ?? 0;
+    }
 
     const status =
       confidence >= 95 ? "matched" :
@@ -386,18 +497,18 @@ async function runImportParse(admin: Admin, job: { payload: Record<string, unkno
 
     const { error: rowErr } = await admin.from("import_rows").insert({
       import_id, company_id: job.company_id, row_index: i,
-      raw: r as never, parsed: { name, phoneRaw, description, amount, occurred, paymentMethod } as never,
-      client_name: name || null, client_phone: phoneApi,
+      raw: r as never, parsed: { name, phoneRaw: phoneRaw1, phoneRaw2, description, amount, occurred, paymentMethod, isExpense } as never,
+      client_name: name || null, client_phone: phoneApi, client_phone2: phoneApi2,
       description, amount, occurred_at: occurred, payment_method: paymentMethod,
       resolved_client_id: clientId, resolved_offering_id: offeringId, resolved_offering_kind: offeringKind,
       confidence, status,
-      notes: offeringLabel ? `Sugestão: ${offeringLabel}` : null,
+      notes: isExpense ? "Despesa automática detectada" : (offeringLabel ? `Sugestão: ${offeringLabel}` : null),
     });
     if (rowErr) { failed++; await admin.from("import_errors").insert({
       import_id, company_id: job.company_id, code: "row_insert", message: rowErr.message,
     }); continue; }
 
-    if (amount && status === "matched") revenue += Number(amount);
+    if (amount && status === "matched" && !isExpense) revenue += Number(amount);
   }
 
   await admin.from("imports").update({
@@ -420,14 +531,56 @@ async function runImportApplyRow(admin: Admin, job: { payload: Record<string, un
   if (row.status === "applied") return { skipped: true };
 
   const companyId = row.company_id as string;
+
+  const isExpense = isExpenseDescription(row.description);
+  if (isExpense) {
+    const { data: tx, error: txErr } = await admin.from("financial_transactions").insert({
+      company_id: companyId,
+      type: "EXPENSE",
+      category: "Despesa",
+      description: row.description ?? "Despesa automática (import)",
+      amount: row.amount ?? 0,
+      transaction_date: row.occurred_at ?? new Date().toISOString().slice(0, 10),
+      payment_method: row.payment_method ?? null,
+    }).select("id").single();
+    if (txErr) throw new Error(`financial_transaction: ${txErr.message}`);
+    const transactionId = tx.id;
+
+    await admin.from("import_rows").update({
+      status: "applied",
+      action_taken: "create_expense",
+      transaction_id: transactionId,
+    }).eq("id", row_id);
+
+    await admin.from("import_matches").insert({
+      import_id: row.import_id, company_id: companyId, row_id,
+      entity_type: "financial_transaction", entity_id: transactionId, confidence: row.confidence,
+      reason: "created_expense", action: "created",
+    });
+
+    const { data: cur } = await admin
+      .from("imports")
+      .select("transactions_created")
+      .eq("id", row.import_id)
+      .single();
+    if (cur) {
+      await admin.from("imports").update({
+        transactions_created: cur.transactions_created + 1,
+      }).eq("id", row.import_id);
+    }
+
+    return { transactionId };
+  }
+
   let clientId: string | null = row.resolved_client_id;
   let createdClient = false;
 
-  if (!clientId && (row.client_name || row.client_phone)) {
+  if (!clientId && (row.client_name || row.client_phone || row.client_phone2)) {
     const { data: c, error: ce } = await admin.from("clients").insert({
       company_id: companyId,
       name: row.client_name ?? "Cliente importado",
       phone: row.client_phone ?? null,
+      phone2: row.client_phone2 ?? null,
       status: "ACTIVE",
       notes: "Criado pela importação",
     }).select("id").single();
@@ -439,19 +592,43 @@ async function runImportApplyRow(admin: Admin, job: { payload: Record<string, un
   let transactionId: string | null = null;
 
   if (clientId && row.amount && create_appointment !== false) {
+    let serviceId = row.resolved_offering_kind === "service" ? row.resolved_offering_id : null;
+    if (!serviceId) {
+      const { data: fallbackService } = await admin
+        .from("services")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("active", true)
+        .limit(1)
+        .maybeSingle();
+      if (fallbackService) {
+        serviceId = fallbackService.id;
+      }
+    }
+
+    if (!serviceId) {
+      throw new Error("Não foi possível encontrar um serviço ativo para vincular ao agendamento");
+    }
+
     const start = row.occurred_at ? new Date(`${row.occurred_at}T12:00:00Z`) : new Date();
     const end = new Date(start.getTime() + 60 * 60 * 1000);
     const { data: ap, error: ae } = await admin.from("appointments").insert({
       company_id: companyId,
       client_id: clientId,
-      service_id: row.resolved_offering_kind === "service" ? row.resolved_offering_id : null,
+      service_id: serviceId,
       start_datetime: start.toISOString(),
       end_datetime: end.toISOString(),
       status: "COMPLETED",
       price: row.amount,
       source: "import",
       completed_at: start.toISOString(),
-      notes: row.description ?? null,
+      notes: (() => {
+        let n = row.description ?? "";
+        if (row.notes && row.notes.startsWith("Sugestão:")) {
+          n = n ? `${n} (${row.notes})` : row.notes;
+        }
+        return n || null;
+      })(),
     }).select("id").single();
     if (ae) throw new Error(`appointment: ${ae.message}`);
     appointmentId = ap.id;

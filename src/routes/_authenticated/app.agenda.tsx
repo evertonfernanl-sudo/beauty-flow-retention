@@ -32,6 +32,7 @@ export const Route = createFileRoute("/_authenticated/app/agenda")({
 const schema = z.object({
   client_id: z.string().uuid("Selecione a cliente"),
   service_id: z.string().uuid("Selecione o serviço"),
+  professional_id: z.string().uuid("Selecione o profissional").optional().nullable(),
   date: z.string().min(1, "Data obrigatória"),
   time: z.string().min(1, "Hora obrigatória"),
   price: z.coerce.number().min(0).optional(),
@@ -53,20 +54,44 @@ function AgendaPage() {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
 
+  const isEmployee = profile?.role === "employee";
+
+  const { data: myProfessional } = useQuery({
+    enabled: !!companyId && isEmployee,
+    queryKey: ["my-professional", profile?.userId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("professionals")
+        .select("id, name")
+        .eq("user_id", profile!.userId)
+        .maybeSingle();
+      return data;
+    }
+  });
+
+  const professionals = useQuery({
+    enabled: !!companyId,
+    queryKey: ["professionals-options", companyId],
+    queryFn: async () => (await supabase.from("professionals").select("id, name").eq("company_id", companyId!).eq("active", true).order("name")).data ?? [],
+  });
+
   const { start, end, label } = useMemo(() => rangeFor(view, cursor), [view, cursor]);
 
   const list = useQuery({
-    enabled: !!companyId,
-    queryKey: ["appointments", companyId, view, start.toISOString(), statusFilter],
+    enabled: !!companyId && (!isEmployee || !!myProfessional),
+    queryKey: ["appointments", companyId, view, start.toISOString(), statusFilter, isEmployee, myProfessional?.id],
     queryFn: async () => {
       let q = supabase
         .from("appointments")
-        .select("id, start_datetime, end_datetime, status, price, notes, cancellation_reason, client_id, service_id, clients(name, phone), services(name, duration_minutes, price)")
+        .select("id, start_datetime, end_datetime, status, price, notes, cancellation_reason, client_id, service_id, professional_id, clients(name, phone), services(name, duration_minutes, price)")
         .eq("company_id", companyId!)
         .gte("start_datetime", start.toISOString())
         .lt("start_datetime", end.toISOString())
         .order("start_datetime");
       if (statusFilter !== "ALL") q = q.eq("status", statusFilter);
+      if (isEmployee && myProfessional) {
+        q = q.eq("professional_id", myProfessional.id);
+      }
       const { data, error } = await q;
       if (error) throw error;
       return data;
@@ -97,7 +122,7 @@ function AgendaPage() {
 
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
-    defaultValues: { client_id: "", service_id: "", date: toISODate(new Date()), time: "09:00", notes: "" },
+    defaultValues: { client_id: "", service_id: "", professional_id: "", date: toISODate(new Date()), time: "09:00", notes: "" },
   });
 
   const selectedServiceId = form.watch("service_id");
@@ -117,6 +142,7 @@ function AgendaPage() {
       company_id: companyId,
       client_id: values.client_id,
       service_id: values.service_id,
+      professional_id: isEmployee ? (myProfessional?.id ?? null) : (values.professional_id || null),
       start_datetime: startDt.toISOString(),
       end_datetime: endDt.toISOString(),
       price: values.price ?? Number(svc.price ?? 0),
@@ -125,7 +151,7 @@ function AgendaPage() {
     });
     if (error) { toast.error(error.message); return; }
     toast.success("Atendimento agendado!");
-    form.reset({ client_id: "", service_id: "", date: values.date, time: "09:00", notes: "" });
+    form.reset({ client_id: "", service_id: "", professional_id: "", date: values.date, time: "09:00", notes: "" });
     setOpen(false);
     queryClient.invalidateQueries({ queryKey: ["appointments", companyId] });
   }
@@ -181,6 +207,12 @@ function AgendaPage() {
                   label="Cliente" name="client_id" form={form}
                   options={(clients.data ?? []).map((c: any) => ({ value: c.id, label: c.name }))}
                 />
+                {!isEmployee && (
+                  <FormSelectField
+                    label="Profissional" name="professional_id" form={form}
+                    options={(professionals.data ?? []).map((p: any) => ({ value: p.id, label: p.name }))}
+                  />
+                )}
                 <FormSelectField
                   label="Serviço" name="service_id" form={form}
                   options={(services.data ?? []).map((s: any) => ({
@@ -239,6 +271,9 @@ function AgendaPage() {
           <GroupedList items={filtered} view={view} onComplete={markCompleted} onConfirm={confirmAppointment}
             onChanged={() => queryClient.invalidateQueries({ queryKey: ["appointments", companyId] })}
             services={services.data ?? []}
+            professionals={professionals.data ?? []}
+            isEmployee={isEmployee}
+            myProfessional={myProfessional}
           />
         )}
       </Card>
@@ -246,15 +281,27 @@ function AgendaPage() {
   );
 }
 
-function GroupedList({ items, view, onComplete, onConfirm, onChanged, services }: {
+function GroupedList({ items, view, onComplete, onConfirm, onChanged, services, professionals, isEmployee, myProfessional }: {
   items: any[]; view: ViewMode;
   onComplete: (id: string) => void; onConfirm: (id: string) => void; onChanged: () => void;
-  services: any[];
+  services: any[]; professionals: any[]; isEmployee: boolean; myProfessional: any;
 }) {
   if (view === "day") {
     return (
       <ul className="divide-y">
-        {items.map((a) => <AppointmentRow key={a.id} a={a} onComplete={onComplete} onConfirm={onConfirm} onChanged={onChanged} services={services} />)}
+        {items.map((a) => (
+          <AppointmentRow
+            key={a.id}
+            a={a}
+            onComplete={onComplete}
+            onConfirm={onConfirm}
+            onChanged={onChanged}
+            services={services}
+            professionals={professionals}
+            isEmployee={isEmployee}
+            myProfessional={myProfessional}
+          />
+        ))}
       </ul>
     );
   }
@@ -272,7 +319,19 @@ function GroupedList({ items, view, onComplete, onConfirm, onChanged, services }
             {new Date(day + "T00:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "short" })}
           </p>
           <ul className="divide-y">
-            {arr.map((a) => <AppointmentRow key={a.id} a={a} onComplete={onComplete} onConfirm={onConfirm} onChanged={onChanged} services={services} />)}
+            {arr.map((a) => (
+              <AppointmentRow
+                key={a.id}
+                a={a}
+                onComplete={onComplete}
+                onConfirm={onConfirm}
+                onChanged={onChanged}
+                services={services}
+                professionals={professionals}
+                isEmployee={isEmployee}
+                myProfessional={myProfessional}
+              />
+            ))}
           </ul>
         </div>
       ))}
@@ -280,8 +339,9 @@ function GroupedList({ items, view, onComplete, onConfirm, onChanged, services }
   );
 }
 
-function AppointmentRow({ a, onComplete, onConfirm, onChanged, services }: {
-  a: any; onComplete: (id: string) => void; onConfirm: (id: string) => void; onChanged: () => void; services: any[];
+function AppointmentRow({ a, onComplete, onConfirm, onChanged, services, professionals, isEmployee, myProfessional }: {
+  a: any; onComplete: (id: string) => void; onConfirm: (id: string) => void; onChanged: () => void;
+  services: any[]; professionals: any[]; isEmployee: boolean; myProfessional: any;
 }) {
   return (
     <li className="py-3 flex items-center justify-between gap-3">
@@ -292,9 +352,12 @@ function AppointmentRow({ a, onComplete, onConfirm, onChanged, services }: {
           </p>
           <p className="text-[10px] text-muted-foreground">{a.services?.duration_minutes}min</p>
         </div>
-        <div className="min-w-0">
-          <p className="font-medium truncate">{a.clients?.name}</p>
-          <p className="text-xs text-muted-foreground truncate">{a.services?.name} · {formatBRL(Number(a.price))}</p>
+        <div className="min-w-0 flex-1">
+          <p className="font-medium truncate text-sm">{a.clients?.name}</p>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className="text-xs text-muted-foreground truncate">{a.services?.name} · {formatBRL(Number(a.price))}</p>
+            {a.notes && <span className="text-[9px] bg-secondary text-muted-foreground px-1.5 py-0.5 rounded truncate max-w-[200px]" title={a.notes}>{a.notes}</span>}
+          </div>
         </div>
       </Link>
       <div className="flex items-center gap-1.5 shrink-0">
@@ -309,7 +372,14 @@ function AppointmentRow({ a, onComplete, onConfirm, onChanged, services }: {
             <Button size="sm" variant="outline" onClick={() => onComplete(a.id)}>
               <Check className="h-4 w-4 mr-1" /> Concluir
             </Button>
-            <EditAppointment a={a} services={services} onChanged={onChanged} />
+            <EditAppointment
+              a={a}
+              services={services}
+              professionals={professionals}
+              isEmployee={isEmployee}
+              myProfessional={myProfessional}
+              onChanged={onChanged}
+            />
             <CancelAppointment a={a} onChanged={onChanged} />
           </>
         )}
@@ -318,20 +388,28 @@ function AppointmentRow({ a, onComplete, onConfirm, onChanged, services }: {
   );
 }
 
-function EditAppointment({ a, services, onChanged }: { a: any; services: any[]; onChanged: () => void }) {
+function EditAppointment({ a, services, professionals, isEmployee, myProfessional, onChanged }: {
+  a: any; services: any[]; professionals: any[]; isEmployee: boolean; myProfessional: any; onChanged: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const startDate = new Date(a.start_datetime);
   const [date, setDate] = useState(toISODate(startDate));
   const [time, setTime] = useState(startDate.toTimeString().slice(0, 5));
   const [serviceId, setServiceId] = useState<string>(a.service_id);
+  const [professionalId, setProfessionalId] = useState<string>(a.professional_id ?? "");
   const [price, setPrice] = useState<string>(String(a.price));
 
   async function save() {
     const svc = services.find((s) => s.id === serviceId);
     const startDt = new Date(`${date}T${time}:00`);
     const endDt = new Date(startDt.getTime() + ((svc?.duration_minutes ?? 60) * 60_000));
+    const finalProfId = isEmployee
+      ? (myProfessional?.id ?? null)
+      : (professionalId === "none" || !professionalId ? null : professionalId);
+
     const { error } = await supabase.from("appointments").update({
       service_id: serviceId,
+      professional_id: finalProfId,
       start_datetime: startDt.toISOString(),
       end_datetime: endDt.toISOString(),
       price: Number(price),
@@ -359,6 +437,18 @@ function EditAppointment({ a, services, onChanged }: { a: any; services: any[]; 
               </SelectContent>
             </Select>
           </div>
+          {!isEmployee && (
+            <div className="space-y-2">
+              <Label>Profissional</Label>
+              <Select value={professionalId || "none"} onValueChange={setProfessionalId}>
+                <SelectTrigger><SelectValue placeholder="Sem profissional" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sem profissional</SelectItem>
+                  {professionals.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2"><Label>Data</Label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
             <div className="space-y-2"><Label>Hora</Label><Input type="time" value={time} onChange={(e) => setTime(e.target.value)} /></div>

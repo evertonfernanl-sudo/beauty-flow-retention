@@ -152,6 +152,7 @@ function ClientProfilePage() {
             </div>
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
               {c.phone && <span className="inline-flex items-center gap-1"><Phone className="h-3 w-3" />{c.phone}</span>}
+              {c.phone2 && <span className="inline-flex items-center gap-1"><Phone className="h-3 w-3" />{c.phone2}</span>}
               {c.email && <span>{c.email}</span>}
               {c.instagram && <span>{c.instagram}</span>}
               {c.profession && <span>{c.profession}</span>}
@@ -367,6 +368,7 @@ function resultLabel(r: string) {
 const editSchema = z.object({
   name: z.string().trim().min(2).max(120),
   phone: z.string().trim().max(40).optional().or(z.literal("")),
+  phone2: z.string().trim().max(40).optional().or(z.literal("")),
   email: z.string().trim().email("E-mail inválido").max(255).optional().or(z.literal("")),
   birthday: z.string().optional().or(z.literal("")),
   instagram: z.string().trim().max(60).optional().or(z.literal("")),
@@ -380,6 +382,7 @@ function EditClientButton({ client, onSaved, compact }: { client: any; onSaved: 
     defaultValues: {
       name: client.name,
       phone: client.phone ?? "",
+      phone2: client.phone2 ?? "",
       email: client.email ?? "",
       birthday: client.birthday ?? "",
       instagram: client.instagram ?? "",
@@ -390,6 +393,7 @@ function EditClientButton({ client, onSaved, compact }: { client: any; onSaved: 
     const { error } = await supabase.from("clients").update({
       name: v.name,
       phone: v.phone || null,
+      phone2: v.phone2 || null,
       email: v.email || null,
       birthday: v.birthday || null,
       instagram: v.instagram || null,
@@ -417,13 +421,16 @@ function EditClientButton({ client, onSaved, compact }: { client: any; onSaved: 
           <div className="space-y-2"><Label>Nome</Label><Input {...form.register("name")} /></div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2"><Label>WhatsApp</Label><Input {...form.register("phone")} /></div>
-            <div className="space-y-2"><Label>Aniversário</Label><Input type="date" {...form.register("birthday")} /></div>
+            <div className="space-y-2"><Label>Telefone 2</Label><Input {...form.register("phone2")} /></div>
           </div>
           <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2"><Label>Aniversário</Label><Input type="date" {...form.register("birthday")} /></div>
             <div className="space-y-2"><Label>Instagram</Label><Input {...form.register("instagram")} /></div>
-            <div className="space-y-2"><Label>Profissão</Label><Input {...form.register("profession")} /></div>
           </div>
-          <div className="space-y-2"><Label>E-mail</Label><Input type="email" {...form.register("email")} /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2"><Label>Profissão</Label><Input {...form.register("profession")} /></div>
+            <div className="space-y-2"><Label>E-mail</Label><Input type="email" {...form.register("email")} /></div>
+          </div>
           <DialogFooter><Button type="submit" disabled={form.formState.isSubmitting}>Salvar</Button></DialogFooter>
         </form>
       </DialogContent>

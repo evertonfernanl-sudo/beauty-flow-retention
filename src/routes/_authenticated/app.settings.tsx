@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -17,14 +17,21 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
+import { Textarea } from "@/components/ui/textarea";
 import { formatBRL } from "@/lib/format";
 import {
   Building2, Calendar, CheckCircle2, CreditCard, Globe, Image as ImageIcon, Instagram, KeyRound,
   Lock, LogOut, Mail, MessageCircle, Phone, Plug, Plus, Receipt, Send, Settings, ShieldCheck,
-  Sparkles, Trash2, Upload, UserCog, Users, XCircle,
+  Sparkles, Trash2, Upload, UserCog, Users, XCircle, Scissors, Trophy, Repeat, TrendingUp, MoreVertical, Loader2,
 } from "lucide-react";
+import { createProfessionalUser, deleteCompanyMember } from "@/lib/api/users.functions";
+
+const settingsSearchSchema = z.object({
+  tab: z.string().optional().catch("company"),
+});
 
 export const Route = createFileRoute("/_authenticated/app/settings")({
+  validateSearch: (search) => settingsSearchSchema.parse(search),
   head: () => ({ meta: [{ title: "Configurações · BeautyFlow" }] }),
   component: SettingsPage,
 });
@@ -51,6 +58,14 @@ function SettingsPage() {
   const isOwner   = profile?.role === "owner";
   const isAdmin   = profile?.role === "owner" || profile?.role === "admin";
 
+  const { tab } = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const activeTab = tab || "company";
+
+  const handleTabChange = (val: string) => {
+    navigate({ search: { tab: val } });
+  };
+
   return (
     <div className="space-y-6 pb-24 max-w-5xl">
       <header>
@@ -58,9 +73,10 @@ function SettingsPage() {
         <p className="text-sm text-muted-foreground">Gerencie sua empresa, equipe e assinatura.</p>
       </header>
 
-      <Tabs defaultValue="company" className="space-y-5">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-5">
         <TabsList className="w-full overflow-x-auto justify-start no-scrollbar">
           <TabsTrigger value="company"><Building2 className="h-3.5 w-3.5 mr-1.5" /> Empresa</TabsTrigger>
+          <TabsTrigger value="services"><Scissors className="h-3.5 w-3.5 mr-1.5" /> Serviços</TabsTrigger>
           <TabsTrigger value="users"><Users className="h-3.5 w-3.5 mr-1.5" /> Usuários</TabsTrigger>
           <TabsTrigger value="plan"><Sparkles className="h-3.5 w-3.5 mr-1.5" /> Plano</TabsTrigger>
           <TabsTrigger value="billing"><Receipt className="h-3.5 w-3.5 mr-1.5" /> Assinatura</TabsTrigger>
@@ -70,6 +86,7 @@ function SettingsPage() {
         </TabsList>
 
         <TabsContent value="company"><CompanyTab companyId={companyId} canEdit={isAdmin} qc={qc} /></TabsContent>
+        <TabsContent value="services"><ServicesTab companyId={companyId} qc={qc} /></TabsContent>
         <TabsContent value="users"><UsersTab companyId={companyId} canManage={isAdmin} qc={qc} /></TabsContent>
         <TabsContent value="plan"><PlanTab companyId={companyId} isOwner={isOwner} qc={qc} /></TabsContent>
         <TabsContent value="billing"><BillingTab companyId={companyId} /></TabsContent>
@@ -223,7 +240,18 @@ function CompanyTab({ companyId, canEdit, qc }: { companyId?: string; canEdit: b
 // ========================== USERS ==========================
 function UsersTab({ companyId, canManage, qc }: { companyId?: string; canManage: boolean; qc: any }) {
   const [open, setOpen] = useState(false);
-  const [email, setEmail] = useState(""); const [role, setRole] = useState<"admin" | "employee">("employee");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState<"admin" | "employee">("employee");
+  const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Credentials dialog state
+  const [credsModalOpen, setCredsModalOpen] = useState(false);
+  const [creds, setCreds] = useState<{ name: string; email: string; password: string; link: string } | null>(null);
+
+  const { data: currentProfile } = useCurrentProfile();
 
   const members = useQuery({
     enabled: !!companyId,
@@ -237,33 +265,71 @@ function UsersTab({ companyId, canManage, qc }: { companyId?: string; canManage:
     },
   });
 
-  const invites = useQuery({
-    enabled: !!companyId,
-    queryKey: ["invitations", companyId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("invitations")
-        .select("id, company_id, email, role, status, invited_by, expires_at, accepted_at, created_at, updated_at")
-        .eq("company_id", companyId!)
-        .order("created_at", { ascending: false });
-      return data ?? [];
-    },
-  });
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copiado!`);
+  };
 
-  async function sendInvite() {
-    if (!companyId || !email) return;
-    const { error } = await supabase.from("invitations").insert({
-      company_id: companyId, email: email.trim().toLowerCase(), role,
-    } as any);
-    if (error) return toast.error(error.message);
-    toast.success("Convite criado. Compartilhe o link com o usuário.");
-    setOpen(false); setEmail("");
-    qc.invalidateQueries({ queryKey: ["invitations", companyId] });
+  async function handleCreateUser(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim() || !email.trim() || !password.trim()) {
+      return toast.error("Preencha todos os campos obrigatórios.");
+    }
+    if (password.length < 6) {
+      return toast.error("A senha deve ter pelo menos 6 caracteres.");
+    }
+    setLoading(true);
+    try {
+      const res = await createProfessionalUser({
+        name: name.trim(),
+        email: email.trim(),
+        password: password,
+        role: role,
+      });
+
+      if (!res.ok) {
+        throw new Error("Erro desconhecido ao criar usuário");
+      }
+
+      toast.success("Usuário criado com sucesso!");
+      const accessLink = `${window.location.origin}/auth`;
+      setCreds({
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        password: password,
+        link: accessLink,
+      });
+      setCredsModalOpen(true);
+
+      // Reset form
+      setName("");
+      setEmail("");
+      setPassword("");
+      setRole("employee");
+      setOpen(false);
+
+      qc.invalidateQueries({ queryKey: ["members", companyId] });
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao criar usuário.");
+    } finally {
+      setLoading(false);
+    }
   }
 
-  async function cancelInvite(id: string) {
-    await supabase.from("invitations").update({ status: "CANCELED" } as any).eq("id", id);
-    qc.invalidateQueries({ queryKey: ["invitations", companyId] });
+  async function handleDeleteUser(userIdToDelete: string) {
+    if (!confirm("Tem certeza que deseja excluir a conta deste profissional? Todo o acesso dele será removido imediatamente e de forma definitiva.")) {
+      return;
+    }
+    setDeletingId(userIdToDelete);
+    try {
+      await deleteCompanyMember({ targetUserId: userIdToDelete });
+      toast.success("Usuário excluído com sucesso.");
+      qc.invalidateQueries({ queryKey: ["members", companyId] });
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao excluir usuário.");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   return (
@@ -272,34 +338,45 @@ function UsersTab({ companyId, canManage, qc }: { companyId?: string; canManage:
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="font-semibold text-[15px]">Membros da equipe</h2>
-            <p className="text-xs text-muted-foreground">Quem tem acesso a este BeautyFlow.</p>
+            <p className="text-xs text-muted-foreground">Gerencie o acesso dos profissionais ao BeautyFlow.</p>
           </div>
           {canManage && (
             <Dialog open={open} onOpenChange={setOpen}>
-              <DialogTrigger asChild><Button size="sm"><Plus className="h-3.5 w-3.5 mr-1.5" /> Convidar</Button></DialogTrigger>
+              <DialogTrigger asChild><Button size="sm"><Plus className="h-3.5 w-3.5 mr-1.5" /> Criar Usuário</Button></DialogTrigger>
               <DialogContent>
-                <DialogHeader><DialogTitle>Convidar usuário</DialogTitle></DialogHeader>
-                <div className="space-y-3">
-                  <Field label="E-mail"><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nome@empresa.com" /></Field>
-                  <Field label="Perfil">
+                <DialogHeader><DialogTitle>Criar usuário do profissional</DialogTitle></DialogHeader>
+                <form onSubmit={handleCreateUser} className="space-y-3 pt-2">
+                  <Field label="Nome completo *">
+                    <Input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Patrícia Silva" required />
+                  </Field>
+                  <Field label="E-mail de login *">
+                    <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Ex: patricia@salao.com" required />
+                  </Field>
+                  <Field label="Senha de acesso *">
+                    <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mínimo 6 caracteres" required />
+                  </Field>
+                  <Field label="Perfil / Permissões *">
                     <Select value={role} onValueChange={(v) => setRole(v as any)}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="admin">Admin · Operação completa</SelectItem>
-                        <SelectItem value="employee">Employee · Agenda e clientes</SelectItem>
+                        <SelectItem value="employee">Profissional (employee) · Apenas própria agenda</SelectItem>
+                        <SelectItem value="admin">Administrador (admin) · Operação completa</SelectItem>
                       </SelectContent>
                     </Select>
                   </Field>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-                  <Button onClick={sendInvite}><Send className="h-3.5 w-3.5 mr-1.5" /> Enviar convite</Button>
-                </DialogFooter>
+                  <DialogFooter className="pt-2">
+                    <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
+                    <Button type="submit" disabled={loading}>
+                      {loading ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1.5" />}
+                      Criar Acesso
+                    </Button>
+                  </DialogFooter>
+                </form>
               </DialogContent>
             </Dialog>
           )}
         </div>
-        {!members.data?.length ? <Empty text="Nenhum membro." /> : (
+        {!members.data?.length ? <Empty text="Nenhum membro cadastrado." /> : (
           <ul className="divide-y">
             {members.data.map((m: any) => (
               <li key={m.user_id} className="py-3 flex items-center gap-3">
@@ -310,35 +387,66 @@ function UsersTab({ companyId, canManage, qc }: { companyId?: string; canManage:
                   <p className="text-sm font-medium truncate">{m.profile?.name ?? "—"}</p>
                   <p className="text-xs text-muted-foreground truncate">{m.profile?.email ?? "—"}</p>
                 </div>
-                <Badge variant={m.role === "owner" ? "default" : "secondary"} className="capitalize">{m.role}</Badge>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-
-      <Card className="p-5 shadow-soft">
-        <h2 className="font-semibold text-[15px] mb-3">Convites pendentes</h2>
-        {!invites.data?.length ? <Empty text="Sem convites." /> : (
-          <ul className="divide-y">
-            {invites.data.map((i: any) => (
-              <li key={i.id} className="py-3 flex items-center gap-3">
-                <Mail className="h-4 w-4 text-muted-foreground" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{i.email}</p>
-                  <p className="text-xs text-muted-foreground">Perfil: {i.role} · Expira em {new Date(i.expires_at).toLocaleDateString("pt-BR")}</p>
-                </div>
-                <Badge variant={i.status === "PENDING" ? "secondary" : i.status === "ACCEPTED" ? "default" : "outline"} className="capitalize">
-                  {i.status.toLowerCase()}
-                </Badge>
-                {canManage && i.status === "PENDING" && (
-                  <Button size="icon" variant="ghost" onClick={() => cancelInvite(i.id)}><Trash2 className="h-4 w-4" /></Button>
+                <Badge variant={m.role === "owner" ? "default" : "secondary"} className="capitalize mr-2">{m.role}</Badge>
+                {canManage && m.user_id !== currentProfile?.userId && m.role !== "owner" && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="text-destructive hover:bg-destructive/10 h-8 w-8"
+                    disabled={deletingId === m.user_id}
+                    onClick={() => handleDeleteUser(m.user_id)}
+                    title="Excluir profissional e remover acesso"
+                  >
+                    {deletingId === m.user_id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  </Button>
                 )}
               </li>
             ))}
           </ul>
         )}
       </Card>
+
+      {/* Credentials Presentation Modal */}
+      <Dialog open={credsModalOpen} onOpenChange={setCredsModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-primary font-semibold">
+              <CheckCircle2 className="h-5 w-5 text-emerald-500" /> Acesso Criado!
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-3">
+            <p className="text-sm text-muted-foreground">
+              O profissional {creds?.name} foi cadastrado. Copie as credenciais abaixo e envie para ele realizar o login por senha:
+            </p>
+            <div className="space-y-3 rounded-lg bg-muted/50 p-4 text-sm font-medium">
+              <div className="flex justify-between items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] text-muted-foreground uppercase">Link de Login</p>
+                  <p className="font-mono text-xs truncate">{creds?.link}</p>
+                </div>
+                <Button size="xs" variant="outline" className="h-7 text-xs px-2 shrink-0" onClick={() => copyToClipboard(creds?.link ?? "", "Link de login")}>Copiar</Button>
+              </div>
+              <div className="flex justify-between items-center gap-2 border-t pt-2.5">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] text-muted-foreground uppercase">E-mail</p>
+                  <p className="font-mono text-xs truncate">{creds?.email}</p>
+                </div>
+                <Button size="xs" variant="outline" className="h-7 text-xs px-2 shrink-0" onClick={() => copyToClipboard(creds?.email ?? "", "E-mail")}>Copiar</Button>
+              </div>
+              <div className="flex justify-between items-center gap-2 border-t pt-2.5">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] text-muted-foreground uppercase">Senha de Acesso</p>
+                  <p className="font-mono text-xs truncate">{creds?.password}</p>
+                </div>
+                <Button size="xs" variant="outline" className="h-7 text-xs px-2 shrink-0" onClick={() => copyToClipboard(creds?.password ?? "", "Senha")}>Copiar</Button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button className="w-full" onClick={() => setCredsModalOpen(false)}>Fechar e Concluir</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -706,4 +814,260 @@ function Feature({ ok, children }: { ok?: boolean; children: any }) {
 }
 function Empty({ text }: { text: string }) {
   return <p className="text-sm text-muted-foreground py-6 text-center">{text}</p>;
+}
+
+// ========================== SERVICES TAB ==========================
+const CATEGORIES = [
+  "Sobrancelhas", "Lash", "Cabelo", "Barba", "Massagem",
+  "Depilação", "Estética", "Unhas", "Outros",
+];
+
+const COLORS = [
+  "#EC4899", "#A855F7", "#3B82F6", "#10B981",
+  "#F59E0B", "#EF4444", "#6B7280", "#14B8A6",
+];
+
+const servicesSchema = z.object({
+  name: z.string().trim().min(2, "Nome é obrigatório").max(120),
+  price: z.coerce.number().min(0).max(100000),
+  duration_minutes: z.coerce.number().int().min(5).max(600),
+  return_days: z.coerce.number().int().min(1).max(365),
+  category: z.string().optional().or(z.literal("")),
+  color: z.string().optional().or(z.literal("")),
+  description: z.string().max(500).optional().or(z.literal("")),
+});
+type ServicesFormVals = z.infer<typeof servicesSchema>;
+
+function ServicesTab({ companyId, qc }: { companyId?: string; qc: any }) {
+  const [editing, setEditing] = useState<any | null>(null);
+  const [open, setOpen] = useState(false);
+
+  const list = useQuery({
+    enabled: !!companyId,
+    queryKey: ["services", companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("services").select("*").eq("company_id", companyId!).order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const metrics = useQuery({
+    enabled: !!companyId,
+    queryKey: ["service_metrics", companyId],
+    queryFn: async () => {
+      const { data } = await supabase.from("service_metrics").select("*").eq("company_id", companyId!);
+      return data ?? [];
+    },
+  });
+
+  const top = useMemo(() => {
+    const m = (metrics.data ?? []) as any[];
+    const bySold = [...m].sort((a, b) => Number(b.total_completed ?? 0) - Number(a.total_completed ?? 0))[0];
+    const byRev = [...m].sort((a, b) => Number(b.total_revenue ?? 0) - Number(a.total_revenue ?? 0))[0];
+    const byRec = [...m].sort((a, b) => Number(b.recurrence_ratio ?? 0) - Number(a.recurrence_ratio ?? 0))[0];
+    return { bySold, byRev, byRec };
+  }, [metrics.data]);
+
+  function openCreate() { setEditing(null); setOpen(true); }
+  function openEdit(s: any) { setEditing(s); setOpen(true); }
+
+  async function duplicateService(s: any) {
+    if (!companyId) return;
+    const { error } = await supabase.from("services").insert({
+      company_id: companyId,
+      name: `${s.name} (cópia)`,
+      price: s.price, duration_minutes: s.duration_minutes, return_days: s.return_days,
+      category: s.category, color: s.color, description: s.description,
+    });
+    if (error) return toast.error(error.message);
+    toast.success("Serviço duplicado");
+    qc.invalidateQueries({ queryKey: ["services", companyId] });
+  }
+
+  async function removeService(id: string) {
+    if (!confirm("Excluir este serviço? Atendimentos passados não serão afetados.")) return;
+    const { error } = await supabase.from("services").delete().eq("id", id);
+    if (error) return toast.error(error.message);
+    toast.success("Serviço excluído");
+    qc.invalidateQueries({ queryKey: ["services", companyId] });
+  }
+
+  async function toggleActive(id: string, active: boolean) {
+    const { error } = await supabase.from("services").update({ active }).eq("id", id);
+    if (error) return toast.error(error.message);
+    qc.invalidateQueries({ queryKey: ["services", companyId] });
+  }
+
+  return (
+    <div className="space-y-6">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h2 className="font-semibold text-lg tracking-tight">Serviços</h2>
+          <p className="text-sm text-muted-foreground">A base de todo agendamento. O retorno ideal define quando contatar o cliente novamente.</p>
+        </div>
+        <Button onClick={openCreate} size="sm"><Plus className="h-4 w-4 mr-1" /> Novo serviço</Button>
+      </header>
+
+      {/* Top metrics */}
+      <section className="grid gap-3 sm:grid-cols-3">
+        <ServicesMetricCard icon={Trophy}     label="Mais vendido"      title={top.bySold?.name ?? null} hint={top.bySold ? `${Number(top.bySold.total_completed ?? 0)} atendimentos` : "—"} />
+        <ServicesMetricCard icon={TrendingUp} label="Maior faturamento" title={top.byRev?.name ?? null}  hint={top.byRev ? formatBRL(Number(top.byRev.total_revenue ?? 0)) : "—"} />
+        <ServicesMetricCard icon={Repeat}     label="Maior recorrência" title={top.byRec?.name ?? null}  hint={top.byRec ? `${Number(top.byRec.recurrence_ratio ?? 0).toFixed(1)}× por cliente` : "—"} />
+      </section>
+
+      <Card className="p-4 shadow-soft">
+        {list.isLoading ? (
+          <p className="text-sm text-muted-foreground py-12 text-center">Carregando…</p>
+        ) : !list.data?.length ? (
+          <div className="py-16 text-center">
+            <div className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-full bg-secondary text-primary">
+              <Scissors className="h-5 w-5" />
+            </div>
+            <p className="mt-3 font-medium">Nenhum serviço cadastrado</p>
+            <Button className="mt-3" onClick={openCreate}>Criar primeiro serviço</Button>
+          </div>
+        ) : (
+          <ul className="divide-y">
+            {list.data.map((s: any) => (
+              <li key={s.id} className="py-3 flex items-center gap-3">
+                <span className="h-9 w-1.5 rounded-full shrink-0" style={{ background: s.color ?? "hsl(var(--primary))" }} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-medium truncate text-sm">{s.name}</p>
+                    {s.category && <Badge variant="secondary" className="text-[9px] px-1.5 py-0.5">{s.category}</Badge>}
+                    {!s.active && <Badge variant="outline" className="text-[9px] px-1.5 py-0.5">Inativo</Badge>}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {s.duration_minutes}min · retorno em {s.return_days} dias
+                  </p>
+                </div>
+                <p className="text-sm font-semibold tabular-nums">{formatBRL(Number(s.price))}</p>
+                <Switch checked={s.active} onCheckedChange={(v) => toggleActive(s.id, v)} />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => openEdit(s)}>Editar</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => duplicateService(s)}>Duplicar</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => toggleActive(s.id, !s.active)}>
+                      {s.active ? "Desativar" : "Ativar"}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="text-destructive" onClick={() => removeService(s.id)}>Excluir</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <ServiceDialog
+        open={open}
+        onOpenChange={setOpen}
+        editing={editing}
+        companyId={companyId}
+        onSaved={() => qc.invalidateQueries({ queryKey: ["services", companyId] })}
+      />
+    </div>
+  );
+}
+
+function ServicesMetricCard({ icon: Icon, label, title, hint }: { icon: any; label: string; title?: string | null; hint: string }) {
+  return (
+    <Card className="p-4 shadow-soft">
+      <div className="flex items-start justify-between">
+        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+        <span className="grid h-8 w-8 place-items-center rounded-lg bg-secondary text-primary"><Icon className="h-3.5 w-3.5" /></span>
+      </div>
+      <p className="mt-2 font-semibold truncate text-sm">{title ?? "—"}</p>
+      <p className="text-xs text-muted-foreground">{hint}</p>
+    </Card>
+  );
+}
+
+function ServiceDialog({
+  open, onOpenChange, editing, companyId, onSaved,
+}: { open: boolean; onOpenChange: (v: boolean) => void; editing: any; companyId?: string; onSaved: () => void }) {
+  const form = useForm<ServicesFormVals>({
+    resolver: zodResolver(servicesSchema),
+    values: editing ? {
+      name: editing.name, price: Number(editing.price), duration_minutes: editing.duration_minutes,
+      return_days: editing.return_days, category: editing.category ?? "", color: editing.color ?? "",
+      description: editing.description ?? "",
+    } : { name: "", price: 0, duration_minutes: 60, return_days: 30, category: "", color: COLORS[0], description: "" },
+  });
+
+  async function onSubmit(v: ServicesFormVals) {
+    if (!companyId) return;
+    const payload = {
+      ...v,
+      category: v.category || null,
+      color: v.color || null,
+      description: v.description || null,
+    };
+    const op = editing
+      ? supabase.from("services").update(payload).eq("id", editing.id)
+      : supabase.from("services").insert({ ...payload, company_id: companyId });
+    const { error } = await op;
+    if (error) return toast.error(error.message);
+    toast.success(editing ? "Serviço atualizado" : "Serviço criado");
+    onOpenChange(false);
+    form.reset();
+    onSaved();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>{editing ? "Editar serviço" : "Novo serviço"}</DialogTitle></DialogHeader>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <div className="space-y-2">
+            <Label>Nome *</Label>
+            <Input {...form.register("name")} placeholder="Ex: Design de Sobrancelhas" />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-2"><Label>Preço (R$) *</Label><Input type="number" step="0.01" {...form.register("price")} /></div>
+            <div className="space-y-2"><Label>Duração (min) *</Label><Input type="number" {...form.register("duration_minutes")} /></div>
+            <div className="space-y-2"><Label>Retorno (dias) *</Label><Input type="number" {...form.register("return_days")} /></div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Categoria</Label>
+              <Controller control={form.control} name="category" render={({ field }) => (
+                <Select value={field.value || undefined} onValueChange={field.onChange}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>
+                    {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              )} />
+            </div>
+            <div className="space-y-2">
+              <Label>Cor</Label>
+              <Controller control={form.control} name="color" render={({ field }) => (
+                <div className="flex gap-1.5 pt-1">
+                  {COLORS.map((c) => (
+                    <button key={c} type="button" onClick={() => field.onChange(c)}
+                      className={`h-7 w-7 rounded-full border-2 ${field.value === c ? "border-foreground" : "border-transparent"}`}
+                      style={{ background: c }} aria-label={c}/>
+                  ))}
+                </div>
+              )} />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Descrição</Label>
+            <Textarea {...form.register("description")} rows={2} />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
+            <Button type="submit" disabled={form.formState.isSubmitting}>Salvar</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
 }
