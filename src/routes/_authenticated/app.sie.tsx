@@ -191,7 +191,7 @@ function SiePage() {
                     <span>R$ {Number(imp.revenue_identified).toFixed(2)} identificado</span>
                   </div>
                 )}
-                {selected === imp.id && <ImportReview importId={imp.id} />}
+                {selected === imp.id && <ImportReview importId={imp.id} status={imp.status} />}
               </li>
             ))}
           </ul>
@@ -218,11 +218,25 @@ type Row = {
   payment_method: string | null; confidence: number; status: string; notes: string | null;
 };
 
-function ImportReview({ importId }: { importId: string }) {
+function ImportReview({ importId, status }: { importId: string; status: string }) {
   const qc = useQueryClient();
   const apply = useServerFn(applyImportRow);
   const applyBatch = useServerFn(applyImportBatch);
   const [busy, setBusy] = useState<string | null>(null);
+
+  if (status === "uploaded" || status === "processing") {
+    return (
+      <div className="mt-3 border-t pt-6 pb-8 flex flex-col items-center justify-center text-center space-y-3 bg-muted/20 rounded-lg">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        <div>
+          <p className="text-sm font-medium">Análise em andamento...</p>
+          <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
+            Estamos extraindo as linhas e identificando os dados do arquivo de forma inteligente. Esta tela se atualizará sozinha em instantes.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const rows = useQuery({
     queryKey: ["sie-rows", importId],

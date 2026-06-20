@@ -134,13 +134,13 @@ async function runCampaignRecord(admin: Admin, job: { payload: Record<string, un
 
 // ===================== SIE: import.parse =====================
 const HEADER_MAP: Record<string, RegExp> = {
-  name: /^(nome|name|cliente|client|customer|contato|first\s+name)$/i,
-  phone: /^(telefone|fone|phone|whatsapp|celular|cel|phone\s+1\s*-\s*value)$/i,
-  phone2: /^(phone\s+2\s*-\s*value)$/i,
+  name: /^(nome|name|cliente|client|customer|contato|first\s+name|given\s+name|nome\s+pr\S+prio|nome\s+proprio)$/i,
+  phone: /^(telefone|fone|phone|whatsapp|celular|cel|phone\s+1(\s*-\s*value)?|telefone\s+1(\s*-\s*valor)?)$/i,
+  phone2: /^(phone\s+2(\s*-\s*value)?|telefone\s+2(\s*-\s*valor)?)$/i,
   email: /^(e-?mail|email)$/i,
-  amount: /^(valor|amount|preco|preço|price|total|vlr)$/i,
-  date: /^(data|date|dt|dia|quando|occurred|venda|atendimento)$/i,
-  description: /^(descricao|descrição|description|hist[óo]rico|lan[cç]amento|memo|complemento|hist[óo]rico\s+complementar|obs|observa|servi[cç]o|produto)$/i,
+  amount: /^(valor|amount|preco|preço|price|total|vlr|valor\s*\(r\$\)|valor\s*r\$|quantia)$/i,
+  date: /^(data|date|dt|dia|quando|occurred|venda|atendimento|data\s+do\s+lan\S+amento|data\s+lan\S+amento)$/i,
+  description: /^(descricao|descrição|description|hist[óo]rico|lan[cç]amento|memo|complemento|hist[óo]rico\s+complementar|obs|observa|servi[cç]o|produto|hist[óo]rico\s*\/?\s*descri\S+ao|descri\S+ao\s+do\s+lan\S+amento)$/i,
   payment: /^(pagamento|payment|metodo|método|forma)$/i,
 };
 
@@ -241,7 +241,8 @@ function parsePdfTextToRows(text: string): { headers: string[]; rows: Record<str
 
 function isExpenseDescription(desc: string | null | undefined): boolean {
   if (!desc) return false;
-  return /^(pix\s+enviado|pix\s+para|transfer[êe]ncia\s+enviada)/i.test(desc.trim());
+  const normalized = desc.trim().toLowerCase();
+  return /^(pix\s+enviado|pix\s+para|transfer[êe]ncia\s+enviada|tarifa|compra|saque|pagamento\s+de\s+boleto|pagamento|juros|tributo|imposto|despesa)/i.test(normalized);
 }
 
 function extractNameFromDescription(desc: string | null | undefined): string | null {
@@ -388,7 +389,7 @@ async function runImportParse(admin: Admin, job: { payload: Record<string, unkno
     const phoneRaw2 = idx("phone2") ? String(r[idx("phone2")!] ?? "").trim() : "";
     const phoneRaw = phoneRaw1 || phoneRaw2;
     const description = idx("description") ? String(r[idx("description")!] ?? "").trim() : null;
-    const amount = parseAmount(idx("amount") ? r[idx("amount")!] : null);
+    const amountRaw = parseAmount(idx("amount") ? r[idx("amount")!] : null);
     const occurred = parseDate(idx("date") ? r[idx("date")!] : null);
     const paymentMethod = (idx("payment") ? String(r[idx("payment")!] ?? "").trim() : null) || detectPaymentMethod(description);
 
@@ -400,7 +401,8 @@ async function runImportParse(admin: Admin, job: { payload: Record<string, unkno
       }
     }
 
-    const isExpense = isExpenseDescription(description);
+    const isExpense = isExpenseDescription(description) || (amountRaw != null && amountRaw < 0);
+    const amount = amountRaw != null ? Math.abs(amountRaw) : null;
 
     if (!name && !phoneRaw && amount == null) continue;
     total++;
