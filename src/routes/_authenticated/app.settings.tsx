@@ -479,11 +479,15 @@ function UsersTab({
       if (!roles?.length) return [];
       const ids = roles.map((r) => r.user_id);
       
-      const [profsRes, companyRes] = await Promise.all([
+      const [profsRes, professionalsRes, companyRes] = await Promise.all([
         supabase
           .from("profiles")
           .select("id, name, email")
           .in("id", ids),
+        supabase
+          .from("professionals")
+          .select("id, user_id, active")
+          .in("user_id", ids),
         supabase
           .from("companies")
           .select("email")
@@ -492,10 +496,12 @@ function UsersTab({
       ]);
 
       const profs = profsRes.data;
+      const professionalsList = professionalsRes.data;
       const companyEmail = companyRes.data?.email;
 
       return roles.map((r) => {
         const profile = profs?.find((p) => p.id === r.user_id);
+        const assocProfessional = professionalsList?.find((p) => p.user_id === r.user_id);
         let finalRole = r.role;
         
         if (companyEmail && profile?.email?.toLowerCase() === companyEmail.toLowerCase()) {
@@ -505,7 +511,9 @@ function UsersTab({
         return { 
           ...r, 
           role: finalRole,
-          profile 
+          profile,
+          activeProfessional: assocProfessional ? assocProfessional.active : false,
+          professionalId: assocProfessional?.id
         };
       });
     },
@@ -750,6 +758,50 @@ function UsersTab({
                 >
                   {m.role}
                 </Badge>
+                <div className="flex items-center gap-1.5 mr-2">
+                  <span className="text-xs text-muted-foreground hidden sm:inline">Presta atendimento?</span>
+                  <Switch
+                    checked={m.activeProfessional}
+                    onCheckedChange={async (checked) => {
+                      const { data: existingProf } = await supabase
+                        .from("professionals")
+                        .select("id")
+                        .eq("user_id", m.user_id)
+                        .maybeSingle();
+
+                      if (existingProf) {
+                        const { error } = await supabase
+                          .from("professionals")
+                          .update({ active: checked })
+                          .eq("id", existingProf.id);
+                        if (error) {
+                          toast.error(error.message);
+                        } else {
+                          toast.success("Status de atendimento atualizado!");
+                          qc.invalidateQueries({ queryKey: ["members", companyId] });
+                          qc.invalidateQueries({ queryKey: ["professionals-options", companyId] });
+                        }
+                      } else {
+                        const { error } = await supabase
+                          .from("professionals")
+                          .insert({
+                            company_id: companyId,
+                            user_id: m.user_id,
+                            name: m.profile?.name || "Profissional",
+                            email: m.profile?.email,
+                            active: checked
+                          });
+                        if (error) {
+                          toast.error(error.message);
+                        } else {
+                          toast.success("Profissional registrado e ativado!");
+                          qc.invalidateQueries({ queryKey: ["members", companyId] });
+                          qc.invalidateQueries({ queryKey: ["professionals-options", companyId] });
+                        }
+                      }
+                    }}
+                  />
+                </div>
                 {canManage && m.role === "employee" && (
                   <Button
                     size="icon"

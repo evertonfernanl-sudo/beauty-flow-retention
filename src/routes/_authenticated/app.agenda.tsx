@@ -47,7 +47,7 @@ export const Route = createFileRoute("/_authenticated/app/agenda")({
 
 const schema = z.object({
   client_id: z.string().uuid("Selecione a cliente"),
-  service_id: z.string().uuid("Selecione o serviço"),
+  service_ids: z.array(z.string().uuid()).min(1, "Selecione pelo menos um serviço"),
   professional_id: z.string().uuid("Selecione o profissional").optional().nullable(),
   date: z.string().min(1, "Data obrigatória"),
   time: z.string().min(1, "Hora obrigatória"),
@@ -172,7 +172,7 @@ function AgendaPage() {
     resolver: zodResolver(schema),
     defaultValues: {
       client_id: "",
-      service_id: "",
+      service_ids: [],
       professional_id: "",
       date: toISODate(new Date()),
       time: "09:00",
@@ -180,38 +180,63 @@ function AgendaPage() {
     },
   });
 
-  const selectedServiceId = form.watch("service_id");
-  const selectedService = services.data?.find((s: any) => s.id === selectedServiceId);
+  const selectedServiceIds = form.watch("service_ids") || [];
   // auto-fill price when service changes
   useMemo(() => {
-    if (selectedService) form.setValue("price", Number(selectedService.price ?? 0));
-  }, [selectedServiceId]); // eslint-disable-line react-hooks/exhaustive-deps
+    const sum = selectedServiceIds.reduce((acc: number, id: string) => {
+      const s = services.data?.find((svc: any) => svc.id === id);
+      return acc + Number(s?.price ?? 0);
+    }, 0);
+    form.setValue("price", sum);
+  }, [selectedServiceIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function onCreate(values: z.infer<typeof schema>) {
     if (!companyId) return;
-    const svc = services.data?.find((s: any) => s.id === values.service_id);
-    if (!svc) return;
-    const startDt = new Date(`${values.date}T${values.time}:00`);
-    const endDt = new Date(startDt.getTime() + (svc.duration_minutes ?? 60) * 60_000);
-    const { error } = await supabase.from("appointments").insert({
-      company_id: companyId,
-      client_id: values.client_id,
-      service_id: values.service_id,
-      professional_id: shouldRestrictAgenda ? (myProfessional?.id ?? null) : values.professional_id || null,
-      start_datetime: startDt.toISOString(),
-      end_datetime: endDt.toISOString(),
-      price: values.price ?? Number(svc.price ?? 0),
-      notes: values.notes || null,
-      status: "SCHEDULED",
-    });
-    if (error) {
-      toast.error(error.message);
+    const selectedSvcs = values.service_ids
+      .map((id) => services.data?.find((s: any) => s.id === id))
+      .filter(Boolean) as any[];
+
+    if (!selectedSvcs.length) {
+      toast.error("Selecione pelo menos um serviço.");
       return;
     }
+
+    const startDt = new Date(`${values.date}T${values.time}:00`);
+    const sumPrices = selectedSvcs.reduce((acc, s) => acc + Number(s.price ?? 0), 0);
+    const customPrice = values.price !== undefined ? Number(values.price) : sumPrices;
+
+    let currentStart = startDt;
+    for (const svc of selectedSvcs) {
+      const duration = svc.duration_minutes ?? 60;
+      const endDt = new Date(currentStart.getTime() + duration * 60_000);
+      
+      const svcPrice = sumPrices > 0 
+        ? (customPrice * (Number(svc.price ?? 0) / sumPrices))
+        : 0;
+
+      const { error } = await supabase.from("appointments").insert({
+        company_id: companyId,
+        client_id: values.client_id,
+        service_id: svc.id,
+        professional_id: shouldRestrictAgenda ? (myProfessional?.id ?? null) : values.professional_id || null,
+        start_datetime: currentStart.toISOString(),
+        end_datetime: endDt.toISOString(),
+        price: svcPrice,
+        notes: values.notes || null,
+        status: "SCHEDULED",
+      });
+
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      currentStart = endDt;
+    }
+
     toast.success("Atendimento agendado!");
     form.reset({
       client_id: "",
-      service_id: "",
+      service_ids: [],
       professional_id: "",
       date: values.date,
       time: "09:00",
@@ -309,15 +334,49 @@ function AgendaPage() {
                     }))}
                   />
                 )}
-                <FormSelectField
-                  label="Serviço"
-                  name="service_id"
-                  form={form}
-                  options={(services.data ?? []).map((s: any) => ({
-                    value: s.id,
-                    label: `${s.name} · ${formatBRL(Number(s.price))}`,
-                  }))}
-                />
+                 <div className="space-y-2">
+                  <Label>Serviços (Selecione um ou mais)</Label>
+                  <Controller
+                    control={form.control}
+                    name="service_ids"
+                    render={({ field }) => {
+                      const selected = field.value || [];
+                      return (
+                        <div className="border rounded-lg p-3 max-h-48 overflow-y-auto space-y-2 bg-background">
+                          {(services.data ?? []).map((s: any) => {
+                            const isChecked = selected.includes(s.id);
+                            return (
+                              <label key={s.id} className="flex items-center gap-2 p-2 hover:bg-secondary/40 rounded cursor-pointer text-sm">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => {
+                                    if (isChecked) {
+                                      field.onChange(selected.filter((id: string) => id !== s.id));
+                                    } else {
+                                      field.onChange([...selected, s.id]);
+                                    }
+                                  }}
+                                  className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4"
+                                />
+                                <span className="flex-1 font-medium">{s.name}</span>
+                                <span className="text-muted-foreground">{formatBRL(Number(s.price))}</span>
+                              </label>
+                            );
+                          })}
+                          {(services.data ?? []).length === 0 && (
+                            <p className="text-xs text-muted-foreground">Nenhum serviço disponível.</p>
+                          )}
+                        </div>
+                      );
+                    }}
+                  />
+                  {form.formState.errors.service_ids && (
+                    <p className="text-xs text-destructive mt-1">
+                      {form.formState.errors.service_ids.message}
+                    </p>
+                  )}
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
                      <Label>Data</Label>

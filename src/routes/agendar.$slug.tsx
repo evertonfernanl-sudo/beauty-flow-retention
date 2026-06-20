@@ -99,7 +99,17 @@ function BookingPage() {
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [loadingMeta, setLoadingMeta] = useState(true);
 
-  const [service, setService] = useState<Service | null>(null);
+  const [selectedServices, setSelectedServices] = useState<Service[]>([]);
+  const service = selectedServices[0] || null;
+
+  const totalDuration = useMemo(() => {
+    return selectedServices.reduce((acc, s) => acc + s.duration_minutes, 0);
+  }, [selectedServices]);
+
+  const totalPrice = useMemo(() => {
+    return selectedServices.reduce((acc, s) => acc + Number(s.price), 0);
+  }, [selectedServices]);
+
   const [professional, setProfessional] = useState<Professional | null>(null);
   const [dateCursor, setDateCursor] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -173,14 +183,14 @@ function BookingPage() {
   );
 
   function slotsFor(day: Date): { time: string; iso: string; free: boolean }[] {
-    if (!service) return [];
+    if (selectedServices.length === 0) return [];
     const start = new Date(day);
     start.setHours(9, 0, 0, 0);
     const end = new Date(day);
     end.setHours(19, 0, 0, 0);
     const out: { time: string; iso: string; free: boolean }[] = [];
     const stepMs = 30 * 60 * 1000;
-    const durMs = service.duration_minutes * 60 * 1000;
+    const durMs = totalDuration * 60 * 1000;
     for (let t = start.getTime(); t + durMs <= end.getTime(); t += stepMs) {
       const slotStart = t,
         slotEnd = t + durMs;
@@ -201,7 +211,7 @@ function BookingPage() {
   }
 
   async function submitBooking() {
-    if (!service || !selectedTime || !name.trim() || !phone.trim()) {
+    if (selectedServices.length === 0 || !selectedTime || !name.trim() || !phone.trim()) {
       toast.error("Preencha todos os campos.");
       return;
     }
@@ -220,26 +230,28 @@ function BookingPage() {
         .single();
       if (cErr) throw cErr;
 
-      const startISO = selectedTime;
-      const endISO = new Date(
-        new Date(startISO).getTime() + service.duration_minutes * 60 * 1000,
-      ).toISOString();
+      let currentStart = selectedTime;
+      for (const s of selectedServices) {
+        const duration = s.duration_minutes ?? 60;
+        const currentEnd = new Date(new Date(currentStart).getTime() + duration * 60 * 1000).toISOString();
 
-      const { error: aErr } = await supabase.from("appointments").insert({
-        company_id: company.id,
-        client_id: client.id,
-        service_id: service.id,
-        professional_id: professional?.id ?? null,
-        start_datetime: startISO,
-        end_datetime: endISO,
-        price: service.price,
-        status: "SCHEDULED",
-        source: "ONLINE",
-        notes: notes.trim() || null,
-      });
-      if (aErr) throw aErr;
+        const { error: aErr } = await supabase.from("appointments").insert({
+          company_id: company.id,
+          client_id: client.id,
+          service_id: s.id,
+          professional_id: professional?.id ?? null,
+          start_datetime: currentStart,
+          end_datetime: currentEnd,
+          price: s.price,
+          status: "SCHEDULED",
+          source: "ONLINE",
+          notes: notes.trim() || null,
+        });
+        if (aErr) throw aErr;
+        currentStart = currentEnd;
+      }
 
-      setConfirmation({ when: new Date(startISO) });
+      setConfirmation({ when: new Date(selectedTime) });
       setStep("done");
     } catch (e) {
       console.error(e);
@@ -290,8 +302,8 @@ function BookingPage() {
 
       <main className="max-w-3xl mx-auto p-4 pb-24 space-y-4">
         {step === "service" && (
-          <section>
-            <h2 className="text-lg font-semibold mb-3">Escolha o serviço</h2>
+          <section className="space-y-4">
+            <h2 className="text-lg font-semibold mb-3">Escolha os serviços</h2>
             {loadingMeta ? (
               <div className="space-y-2">
                 {[0, 1, 2].map((i) => (
@@ -303,32 +315,61 @@ function BookingPage() {
                 Sem serviços disponíveis no momento.
               </Card>
             ) : (
-              <ul className="space-y-2">
-                {services.map((s) => (
-                  <li key={s.id}>
-                    <button
-                      onClick={() => {
-                        setService(s);
-                        setStep(professionals.length > 0 ? "professional" : "time");
-                      }}
-                      className="w-full text-left"
-                    >
-                      <Card className="p-4 hover:border-primary/40 transition flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-lg bg-secondary grid place-items-center text-primary">
-                          <Scissors className="h-4 w-4" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="font-medium truncate">{s.name}</p>
-                          <p className="text-xs text-muted-foreground">{s.duration_minutes} min</p>
-                        </div>
-                        <span className="font-semibold text-primary tabular-nums">
-                          {formatBRL(Number(s.price))}
-                        </span>
-                      </Card>
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <ul className="space-y-2">
+                  {services.map((s) => {
+                    const isSelected = selectedServices.some(item => item.id === s.id);
+                    return (
+                      <li key={s.id}>
+                        <button
+                          onClick={() => {
+                            setSelectedServices(prev => {
+                              const exists = prev.some(item => item.id === s.id);
+                              if (exists) {
+                                return prev.filter(item => item.id !== s.id);
+                              } else {
+                                return [...prev, s];
+                              }
+                            });
+                          }}
+                          className="w-full text-left"
+                        >
+                          <Card className={`p-4 transition flex items-center gap-3 border ${isSelected ? "border-primary bg-primary/5" : "hover:border-primary/40"}`}>
+                            <div className="h-10 w-10 rounded-lg bg-secondary grid place-items-center text-primary">
+                              <Scissors className="h-4 w-4" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium truncate">{s.name}</p>
+                              <p className="text-xs text-muted-foreground">{s.duration_minutes} min</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-primary tabular-nums">
+                                {formatBRL(Number(s.price))}
+                              </span>
+                              {isSelected && (
+                                <div className="h-5 w-5 rounded-full bg-primary text-primary-foreground grid place-items-center">
+                                  <Check className="h-3 w-3" />
+                                </div>
+                              )}
+                            </div>
+                          </Card>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div className="pt-2">
+                  <Button
+                    onClick={() => {
+                      setStep(professionals.length > 0 ? "professional" : "time");
+                    }}
+                    disabled={selectedServices.length === 0}
+                    className="w-full h-11"
+                  >
+                    Avançar com {selectedServices.length} {selectedServices.length === 1 ? "serviço" : "serviços"}
+                  </Button>
+                </div>
+              </>
             )}
           </section>
         )}
@@ -389,7 +430,7 @@ function BookingPage() {
           </section>
         )}
 
-        {step === "time" && service && (
+        {step === "time" && selectedServices.length > 0 && (
           <section>
             <BackBtn
               onClick={() => setStep(professionals.length > 0 ? "professional" : "service")}
@@ -462,18 +503,32 @@ function BookingPage() {
           </section>
         )}
 
-        {step === "info" && service && selectedTime && (
+        {step === "info" && selectedServices.length > 0 && selectedTime && (
           <section>
             <BackBtn onClick={() => setStep("time")} />
             <h2 className="text-lg font-semibold mb-3">Seus dados</h2>
-            <Card className="p-4 mb-4 bg-accent/40">
-              <div className="text-xs text-muted-foreground uppercase tracking-wider">Resumo</div>
-              <div className="mt-2 space-y-1 text-sm">
-                <p className="flex items-center gap-2">
-                  <Scissors className="h-3.5 w-3.5 text-primary" />
-                  {service.name} · {service.duration_minutes} min ·{" "}
-                  <span className="font-semibold">{formatBRL(Number(service.price))}</span>
-                </p>
+            <Card className="p-4 mb-4 bg-accent/40 space-y-3">
+              <div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Serviços Selecionados</div>
+                <div className="mt-1.5 space-y-2 max-h-40 overflow-y-auto">
+                  {selectedServices.map((s) => (
+                    <div key={s.id} className="flex justify-between items-center text-sm">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Scissors className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                        <span className="truncate">{s.name}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground flex-shrink-0 ml-2">
+                        {s.duration_minutes} min · <span className="font-semibold text-foreground">{formatBRL(Number(s.price))}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="border-t pt-2 flex justify-between items-center text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                <span>Total ({selectedServices.length} {selectedServices.length === 1 ? "serviço" : "serviços"}) · {totalDuration} min</span>
+                <span className="text-sm font-bold text-foreground">{formatBRL(totalPrice)}</span>
+              </div>
+              <div className="border-t pt-2 space-y-1.5 text-sm">
                 {professional && (
                   <p className="flex items-center gap-2">
                     <User className="h-3.5 w-3.5 text-primary" />
