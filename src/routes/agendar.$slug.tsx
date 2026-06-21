@@ -37,7 +37,7 @@ export const Route = createFileRoute("/agendar/$slug")({
   loader: async ({ params }) => {
     const { data: company } = await supabase
       .from("companies")
-      .select("id, name, slug, logo_url, phone, address, city, state, vertical")
+      .select("id, name, slug, logo_url, address, city, state, vertical")
       .eq("slug", params.slug)
       .eq("active", true)
       .eq("onboarding_completed", true)
