@@ -161,22 +161,30 @@ function BookingPage() {
       const from = new Date(dateCursor);
       from.setHours(0, 0, 0, 0);
       const to = addDays(from, 7);
-      let q = supabase
-        .from("v_public_busy_slots")
-        .select("start_datetime, end_datetime, professional_id")
-        .eq("company_id", company.id)
-        .gte("start_datetime", from.toISOString())
-        .lt("start_datetime", to.toISOString());
-      if (professional?.id) q = q.eq("professional_id", professional.id);
-      const { data } = await q;
-      setBusy(
-        (data ?? []).map((r) => ({
-          start: r.start_datetime as string,
-          end: r.end_datetime as string,
-          professional_id: (r as any).professional_id,
-        })),
-      );
-      setLoadingSlots(false);
+      
+      try {
+        const { data, error } = await supabase.rpc("get_public_busy_slots" as any, {
+          p_company_id: company.id,
+          p_from: from.toISOString(),
+          p_to: to.toISOString(),
+          p_professional_id: professional?.id || null,
+        });
+
+        if (error) throw error;
+        
+        setBusy(
+          (data ?? []).map((r: any) => ({
+            start: r.start_datetime as string,
+            end: r.end_datetime as string,
+            professional_id: r.professional_id,
+          })),
+        );
+      } catch (err: any) {
+        console.error(err);
+        toast.error(err.message || "Erro ao carregar horários ocupados.");
+      } finally {
+        setLoadingSlots(false);
+      }
     })();
   }, [step, dateCursor, professional?.id, company.id]);
 

@@ -28,5 +28,7 @@ dist-ssr
 *.suo
 *.ntvs*
 *.njsproj
-*.sln
 *.sw?
+
+# Scratch scripts
+scratch/
