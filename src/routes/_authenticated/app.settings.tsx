@@ -778,7 +778,7 @@ function UsersTab({
                         const { error } = await supabase
                           .from("professionals")
                           .insert({
-                            company_id: companyId,
+                            company_id: companyId!,
                             user_id: m.user_id,
                             name: m.profile?.name || "Profissional",
                             email: m.profile?.email ?? null,
