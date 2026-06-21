@@ -44,13 +44,11 @@ export const registerImport = createServerFn({ method: "POST" })
     });
     if (qErr) throw new Error(qErr.message);
 
-    // Trigger worker in background
-    import("@/integrations/supabase/client.server").then(({ supabaseAdmin }) => {
-      import("@/lib/api/worker.server").then(({ runWorker }) => {
-        runWorker(supabaseAdmin).catch((err) => {
-          console.error("[Worker] Background run error:", err);
-        });
-      });
+    // Trigger worker and await execution
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { runWorker } = await import("@/lib/api/worker.server");
+    await runWorker(supabaseAdmin).catch((err) => {
+      console.error("[Worker] Run error:", err);
     });
 
     return { importId: imp.id };
@@ -82,13 +80,11 @@ export const applyImportRow = createServerFn({ method: "POST" })
     });
     if (qErr) throw new Error(qErr.message);
 
-    // Trigger worker in background
-    import("@/integrations/supabase/client.server").then(({ supabaseAdmin }) => {
-      import("@/lib/api/worker.server").then(({ runWorker }) => {
-        runWorker(supabaseAdmin).catch((err) => {
-          console.error("[Worker] Background run error:", err);
-        });
-      });
+    // Trigger worker and await execution
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { runWorker } = await import("@/lib/api/worker.server");
+    await runWorker(supabaseAdmin).catch((err) => {
+      console.error("[Worker] Run error:", err);
     });
 
     return { jobId };
@@ -126,13 +122,11 @@ export const applyImportBatch = createServerFn({ method: "POST" })
     }
 
     if (queued > 0) {
-      // Trigger worker in background once for the entire batch
-      import("@/integrations/supabase/client.server").then(({ supabaseAdmin }) => {
-        import("@/lib/api/worker.server").then(({ runWorker }) => {
-          runWorker(supabaseAdmin).catch((err) => {
-            console.error("[Worker] Background run error:", err);
-          });
-        });
+      // Trigger worker and await execution
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { runWorker } = await import("@/lib/api/worker.server");
+      await runWorker(supabaseAdmin).catch((err) => {
+        console.error("[Worker] Run error:", err);
       });
     }
 

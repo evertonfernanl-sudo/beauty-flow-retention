@@ -137,13 +137,11 @@ export const enqueueImportClients = createServerFn({ method: "POST" })
     });
     if (error) throw new Error(error.message);
 
-    // Trigger worker in background
-    import("@/integrations/supabase/client.server").then(({ supabaseAdmin }) => {
-      import("@/lib/api/worker.server").then(({ runWorker }) => {
-        runWorker(supabaseAdmin).catch((err) => {
-          console.error("[Worker] Background run error:", err);
-        });
-      });
+    // Trigger worker and await execution
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { runWorker } = await import("@/lib/api/worker.server");
+    await runWorker(supabaseAdmin).catch((err) => {
+      console.error("[Worker] Run error:", err);
     });
 
     return { jobId: jobId as string, count: normalized.length };
