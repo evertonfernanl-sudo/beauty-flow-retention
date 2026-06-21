@@ -443,23 +443,28 @@ function isExpenseDescription(desc: string | null | undefined): boolean {
 function extractNameFromDescription(desc: string | null | undefined): string | null {
   if (!desc) return null;
 
-  // Pattern 2: "Pix recebido de: Name" or "Pix Recebido de Name" or "Pix de Name"
-  const pixMatch = desc.match(
-    /(?:pix\s+recebido\s+de|pix\s+de|transferência\s+recebida\s+de|recebido\s+de)\s*:?\s*([A-Za-zÀ-ÿ\s]{6,60})/i,
-  );
-  if (pixMatch) {
-    const name = pixMatch[1].trim();
-    const words = name.split(/\s+/).filter((w) => w.length > 1);
-    if (words.length >= 2) {
-      return name;
+  const clean = desc.replace(/\s+/g, " ").trim();
+
+  // 1) Common Pix/TED prefixes with explicit name boundaries
+  const regexes = [
+    /(?:pix\s+recebido\s+de|pix\s+de|transferência\s+recebida\s+de|recebido\s+de|pix\s+recebido|ted\s+recebida|credito\s+pix|transf\s+recebida|transferencia|ted|doc)\s*:?\s*-?\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i
+  ];
+
+  for (const re of regexes) {
+    const match = clean.match(re);
+    if (match) {
+      const candidate = match[1].trim();
+      const words = candidate.split(/\s+/).filter(w => w.length >= 2);
+      const blacklist = /^(pix|ted|doc|tarifa|compra|saque|pagamento|recebido|transferencia|itau|bradesco|caixa|nubank|banco|itaucard|saldo|extrato|juros|tributo|mensalidade|taxa|retirada|deposito)$/i;
+      const validWords = words.filter(w => !blacklist.test(w));
+      if (validWords.length >= 2) {
+        return validWords.join(" ");
+      }
     }
   }
 
-  // Pattern 1: Splitting by "-" (very common in Brazilian bank statements)
-  const parts = desc
-    .split("-")
-    .map((p) => p.trim())
-    .filter(Boolean);
+  // 2) Split by "-" if present (very common in Brazilian statements, e.g. "PIX RECEBIDO - MARIA SILVA")
+  const parts = clean.split("-").map(p => p.trim()).filter(Boolean);
   if (parts.length >= 2) {
     const nameRegex = /^[A-Za-zÀ-ÿ\s'\.\-]+$/;
     const excludeKeywords =
@@ -467,10 +472,25 @@ function extractNameFromDescription(desc: string | null | undefined): string | n
 
     for (const part of parts) {
       if (nameRegex.test(part) && !excludeKeywords.test(part)) {
-        const words = part.split(/\s+/).filter((w) => w.length > 1);
+        const words = part.split(/\s+/).filter(w => w.length > 1);
         if (words.length >= 2) {
           return part;
         }
+      }
+    }
+  }
+
+  // 3) Fallback: if it's a simple line with 2 to 4 capitalized words, e.g. "MARIA SILVA"
+  const words = clean.split(/\s+/);
+  if (words.length >= 2 && words.length <= 4) {
+    const nameRegex = /^[A-Za-zÀ-ÿ\s'\.\-]+$/;
+    const excludeKeywords =
+      /(transfer[êe]ncia|recebido|recebida|enviado|enviada|pix|ted|doc|pagamento|compra|saque|dep[óo]sito|tarifa|juros|saldo|extrato|ag[êe]ncia|conta|nu\s+pagamentos|nubank|ita[úu]|bradesco|santander|caixa|banco|pagseguro|stone|picpay|mercado\s+pago|inter|original)/i;
+    
+    if (nameRegex.test(clean) && !excludeKeywords.test(clean)) {
+      const validWords = words.filter(w => w.length >= 2);
+      if (validWords.length >= 2) {
+        return clean;
       }
     }
   }
@@ -970,12 +990,13 @@ async function runImportApplyRow(
   let clientId: string | null = row.resolved_client_id;
   let createdClient = false;
 
-  if (!clientId && (row.client_name || row.client_phone || row.client_phone2)) {
+  if (!clientId) {
+    const nameToUse = row.client_name || "Cliente Importado";
     const { data: c, error: ce } = await admin
       .from("clients")
       .insert({
         company_id: companyId,
-        name: row.client_name ?? "Cliente importado",
+        name: nameToUse,
         phone: row.client_phone ?? null,
         phone2: row.client_phone2 ?? null,
         status: "ACTIVE",
