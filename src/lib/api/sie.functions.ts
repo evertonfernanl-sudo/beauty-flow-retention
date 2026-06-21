@@ -95,23 +95,39 @@ export const applyImportBatch = createServerFn({ method: "POST" })
   .inputValidator((i) =>
     z
       .object({
-        importId: z.string().uuid(),
-        minConfidence: z.number().min(0).max(100).default(85),
+        importId: z.string().uuid().optional(),
+        minConfidence: z.number().min(0).max(100).optional(),
+        rowIds: z.array(z.string().uuid()).optional(),
       })
       .parse(i),
   )
   .handler(async ({ data, context }) => {
     const { supabase } = context;
-    const { data: rows, error } = await supabase
-      .from("import_rows")
-      .select("id, company_id, confidence, status")
-      .eq("import_id", data.importId)
-      .in("status", ["matched", "review"])
-      .gte("confidence", data.minConfidence);
-    if (error) throw new Error(error.message);
+    
+    let rows: Array<{ id: string; company_id: string; confidence: number; status: string }> = [];
+    
+    if (data.rowIds && data.rowIds.length > 0) {
+      const { data: dbRows, error } = await supabase
+        .from("import_rows")
+        .select("id, company_id, confidence, status")
+        .in("id", data.rowIds)
+        .in("status", ["matched", "review"]);
+      if (error) throw new Error(error.message);
+      rows = dbRows ?? [];
+    } else if (data.importId) {
+      const minConf = data.minConfidence ?? 85;
+      const { data: dbRows, error } = await supabase
+        .from("import_rows")
+        .select("id, company_id, confidence, status")
+        .eq("import_id", data.importId)
+        .in("status", ["matched", "review"])
+        .gte("confidence", minConf);
+      if (error) throw new Error(error.message);
+      rows = dbRows ?? [];
+    }
 
     let queued = 0;
-    for (const r of rows ?? []) {
+    for (const r of rows) {
       const { error: qErr } = await supabase.rpc("enqueue_job", {
         _company_id: r.company_id,
         _type: "import.apply_row",

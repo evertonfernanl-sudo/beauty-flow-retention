@@ -984,7 +984,9 @@ async function runImportApplyRow(
 
   const companyId = row.company_id as string;
 
-  const isExpense = isExpenseDescription(row.description);
+  const isExpense = row.parsed && typeof row.parsed === "object" && "isExpense" in (row.parsed as any)
+    ? (row.parsed as any).isExpense
+    : (isExpenseDescription(row.description) || (row.amount != null && row.amount < 0));
   if (isExpense) {
     const { data: tx, error: txErr } = await admin
       .from("financial_transactions")

@@ -23,6 +23,9 @@ import { registerImport, applyImportRow, applyImportBatch } from "@/lib/api/sie.
 import { useCurrentProfile } from "@/lib/hooks/use-current-profile";
 import { useFeature } from "@/lib/hooks/use-feature";
 import { formatPhoneBR } from "@/lib/phone";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 export const Route = createFileRoute("/_authenticated/app/sie")({
   head: () => ({ meta: [{ title: "Importar Dados · BeautyFlow" }] }),
@@ -293,6 +296,16 @@ type Row = {
   confidence: number;
   status: string;
   notes: string | null;
+  parsed?: {
+    name?: string;
+    phoneRaw?: string;
+    phoneRaw2?: string;
+    description?: string;
+    amount?: number;
+    occurred?: string;
+    paymentMethod?: string;
+    isExpense?: boolean;
+  };
 };
 
 function ImportReview({ importId, status }: { importId: string; status: string }) {
@@ -300,6 +313,7 @@ function ImportReview({ importId, status }: { importId: string; status: string }
   const apply = useServerFn(applyImportRow);
   const applyBatch = useServerFn(applyImportBatch);
   const [busy, setBusy] = useState<string | null>(null);
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
 
   const rows = useQuery({
     queryKey: ["sie-rows", importId],
@@ -307,7 +321,7 @@ function ImportReview({ importId, status }: { importId: string; status: string }
       const { data, error } = await supabase
         .from("import_rows")
         .select(
-          "id,row_index,client_name,client_phone,description,amount,occurred_at,payment_method,confidence,status,notes",
+          "id,row_index,client_name,client_phone,description,amount,occurred_at,payment_method,confidence,status,notes,parsed",
         )
         .eq("import_id", importId)
         .order("confidence", { ascending: false })
@@ -321,6 +335,61 @@ function ImportReview({ importId, status }: { importId: string; status: string }
   useEffect(() => {
     qc.invalidateQueries({ queryKey: ["sie-imports"] });
   }, [rows.data, qc]);
+
+  const checkableRows = rows.data?.filter((r) => r.status !== "applied") ?? [];
+  const allChecked = checkableRows.length > 0 && checkableRows.every((r) => selectedRowIds.has(r.id));
+  const someChecked = checkableRows.length > 0 && checkableRows.some((r) => selectedRowIds.has(r.id)) && !allChecked;
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedRowIds(new Set(checkableRows.map((r) => r.id)));
+    } else {
+      setSelectedRowIds(new Set());
+    }
+  };
+
+  const handleSelectRow = (id: string, checked: boolean) => {
+    const next = new Set(selectedRowIds);
+    if (checked) {
+      next.add(id);
+    } else {
+      next.delete(id);
+    }
+    setSelectedRowIds(next);
+  };
+
+  async function toggleIsExpense(row: Row) {
+    const currentParsed = row.parsed || {};
+    const isExpenseCurrent = currentParsed.isExpense ?? false;
+    const nextIsExpense = !isExpenseCurrent;
+    const updatedParsed = {
+      ...currentParsed,
+      isExpense: nextIsExpense,
+    };
+    
+    // Update local query cache optimistically
+    qc.setQueryData(["sie-rows", importId], (old: Row[] | undefined) => {
+      if (!old) return [];
+      return old.map((item) =>
+        item.id === row.id
+          ? { ...item, parsed: updatedParsed }
+          : item
+      );
+    });
+
+    try {
+      const { error } = await supabase
+        .from("import_rows")
+        .update({ parsed: updatedParsed as any })
+        .eq("id", row.id);
+      
+      if (error) throw error;
+      toast.success(`Lançamento alterado para ${nextIsExpense ? "Despesa" : "Receita"}`);
+    } catch (e) {
+      toast.error("Erro ao alterar tipo: " + (e as Error).message);
+      qc.invalidateQueries({ queryKey: ["sie-rows", importId] });
+    }
+  }
 
   if (status === "uploaded" || status === "processing") {
     return (
@@ -360,21 +429,68 @@ function ImportReview({ importId, status }: { importId: string; status: string }
     }
   }
 
+  async function approveSelected() {
+    if (selectedRowIds.size === 0) return;
+    setBusy("batch-selected");
+    try {
+      const res = await applyBatch({ data: { rowIds: Array.from(selectedRowIds) } });
+      toast.success(`${res.queued} lançamentos selecionados enfileirados para aplicação.`);
+      setSelectedRowIds(new Set());
+      qc.invalidateQueries({ queryKey: ["sie-rows", importId] });
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <div className="mt-3 border-t pt-3 space-y-2">
       <div className="flex items-center justify-between">
-        <div className="text-xs text-muted-foreground">{rows.data?.length ?? 0} linhas</div>
-        <Button size="sm" variant="secondary" onClick={approveAll}>
-          <Check className="h-3.5 w-3.5 mr-1" /> Aprovar todas ≥85%
-        </Button>
+        <div className="text-xs text-muted-foreground flex items-center gap-2">
+          <span>{rows.data?.length ?? 0} linhas</span>
+          {selectedRowIds.size > 0 && (
+            <Badge variant="secondary" className="text-[10px]">
+              {selectedRowIds.size} selecionadas
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {selectedRowIds.size > 0 && (
+            <Button
+              size="sm"
+              variant="default"
+              disabled={busy != null}
+              onClick={approveSelected}
+            >
+              {busy === "batch-selected" ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+              ) : (
+                <Check className="h-3.5 w-3.5 mr-1" />
+              )}
+              Aplicar Selecionados ({selectedRowIds.size})
+            </Button>
+          )}
+          <Button size="sm" variant="secondary" onClick={approveAll} disabled={busy != null}>
+            <Check className="h-3.5 w-3.5 mr-1" /> Aprovar todas ≥85%
+          </Button>
+        </div>
       </div>
       <div className="overflow-x-auto -mx-1">
         <table className="w-full text-xs">
           <thead className="text-muted-foreground">
             <tr>
+              <th className="p-1 w-8 text-center">
+                <Checkbox
+                  checked={allChecked || (someChecked ? "indeterminate" : false)}
+                  onCheckedChange={(checked) => handleSelectAll(!!checked)}
+                  aria-label="Selecionar todas as linhas"
+                />
+              </th>
               <th className="text-left p-1">Cliente</th>
               <th className="text-left p-1">Telefone</th>
               <th className="text-left p-1">Descrição</th>
+              <th className="text-left p-1">Tipo</th>
               <th className="text-right p-1">Valor</th>
               <th className="text-left p-1">Data</th>
               <th className="text-right p-1">Score</th>
@@ -383,37 +499,69 @@ function ImportReview({ importId, status }: { importId: string; status: string }
             </tr>
           </thead>
           <tbody>
-            {(rows.data ?? []).map((r) => (
-              <tr key={r.id} className="border-t">
-                <td className="p-1">{r.client_name || "—"}</td>
-                <td className="p-1">{r.client_phone ? formatPhoneBR(r.client_phone) : "—"}</td>
-                <td className="p-1 max-w-[200px] truncate" title={r.description ?? ""}>
-                  {r.description ?? "—"}
-                </td>
-                <td className="p-1 text-right tabular-nums">
-                  {r.amount != null ? `R$ ${Number(r.amount).toFixed(2)}` : "—"}
-                </td>
-                <td className="p-1">{r.occurred_at ?? "—"}</td>
-                <td className="p-1 text-right tabular-nums">
-                  <ConfidenceChip value={r.confidence} />
-                </td>
-                <td className="p-1">
-                  <Badge variant="outline">{r.status}</Badge>
-                </td>
-                <td className="p-1 text-right">
-                  {r.status !== "applied" && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={busy === r.id}
-                      onClick={() => approve(r.id)}
-                    >
-                      {busy === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Aplicar"}
-                    </Button>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {(rows.data ?? []).map((r) => {
+              const isExpense = r.parsed?.isExpense ?? false;
+              return (
+                <tr key={r.id} className="border-t">
+                  <td className="p-1 w-8 text-center">
+                    {r.status !== "applied" ? (
+                      <Checkbox
+                        checked={selectedRowIds.has(r.id)}
+                        onCheckedChange={(checked) => handleSelectRow(r.id, !!checked)}
+                        aria-label={`Selecionar linha ${r.row_index}`}
+                      />
+                    ) : (
+                      <div className="text-emerald-500 font-bold text-center">✓</div>
+                    )}
+                  </td>
+                  <td className="p-1">{r.client_name || "—"}</td>
+                  <td className="p-1">{r.client_phone ? formatPhoneBR(r.client_phone) : "—"}</td>
+                  <td className="p-1 max-w-[200px] truncate" title={r.description ?? ""}>
+                    {r.description ?? "—"}
+                  </td>
+                  <td className="p-1">
+                    <div className="flex items-center gap-1.5">
+                      <Switch
+                        id={`type-switch-${r.id}`}
+                        checked={isExpense}
+                        onCheckedChange={() => toggleIsExpense(r)}
+                        disabled={r.status === "applied" || busy != null}
+                      />
+                      <Label
+                        htmlFor={`type-switch-${r.id}`}
+                        className={`text-[10px] font-semibold cursor-pointer select-none transition-colors ${
+                          isExpense ? "text-rose-500" : "text-emerald-500"
+                        }`}
+                      >
+                        {isExpense ? "Despesa" : "Receita"}
+                      </Label>
+                    </div>
+                  </td>
+                  <td className="p-1 text-right tabular-nums">
+                    {r.amount != null ? `R$ ${Number(r.amount).toFixed(2)}` : "—"}
+                  </td>
+                  <td className="p-1">{r.occurred_at ?? "—"}</td>
+                  <td className="p-1 text-right tabular-nums">
+                    <ConfidenceChip value={r.confidence} />
+                  </td>
+                  <td className="p-1">
+                    <Badge variant="outline">{r.status}</Badge>
+                  </td>
+                  <td className="p-1 text-right">
+                    {r.status !== "applied" && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={busy === r.id}
+                        onClick={() => approve(r.id)}
+                      >
+                        {busy === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Aplicar"}
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
