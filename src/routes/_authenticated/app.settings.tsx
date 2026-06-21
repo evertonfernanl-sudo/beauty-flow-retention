@@ -189,7 +189,7 @@ function SettingsPage() {
           <PreferencesTab companyId={companyId} qc={qc} />
         </TabsContent>
         <TabsContent value="security">
-          <SecurityTab />
+          <SecurityTab isAdmin={isAdmin} email={profile?.email} />
         </TabsContent>
       </Tabs>
     </div>
@@ -1369,9 +1369,18 @@ function PreferencesTab({ companyId, qc }: { companyId?: string; qc: any }) {
 }
 
 // ========================== SECURITY ==========================
-function SecurityTab() {
+function SecurityTab({ isAdmin, email }: { isAdmin: boolean; email?: string }) {
   const [pwd, setPwd] = useState("");
   const [pwd2, setPwd2] = useState("");
+
+  // States for system reset
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [requestingCode, setRequestingCode] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [verificationCode, setVerificationCode] = useState("");
+  const [devCode, setDevCode] = useState<string | null>(null);
+
+  const qc = useQueryClient();
 
   async function changePassword() {
     if (pwd.length < 8) return toast.error("Senha deve ter pelo menos 8 caracteres.");
@@ -1387,6 +1396,57 @@ function SecurityTab() {
     const { error } = await supabase.auth.signOut({ scope: "global" });
     if (error) return toast.error(error.message);
     toast.success("Você foi desconectado de todos os dispositivos.");
+  }
+
+  async function handleStartReset() {
+    try {
+      setRequestingCode(true);
+      setDevCode(null);
+      setVerificationCode("");
+      
+      const { requestSystemResetCode } = await import("@/lib/api/security.functions");
+      const res = await requestSystemResetCode();
+      
+      if (res.ok) {
+        if (res.devMode && res.code) {
+          setDevCode(res.code);
+          toast.success("Código gerado em modo de desenvolvimento!");
+        } else {
+          toast.success(`Código de verificação enviado para ${email || "seu e-mail"}!`);
+        }
+        setResetDialogOpen(true);
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao solicitar código de verificação.");
+    } finally {
+      setRequestingCode(false);
+    }
+  }
+
+  async function handleConfirmReset() {
+    if (verificationCode.trim().length !== 6) {
+      return toast.error("Por favor, digite o código de 6 dígitos.");
+    }
+    
+    try {
+      setResetting(true);
+      const { verifyAndResetSystem } = await import("@/lib/api/security.functions");
+      const res = await verifyAndResetSystem({ code: verificationCode.trim() });
+      
+      if (res.ok) {
+        toast.success("Sistema zerado com sucesso!");
+        setResetDialogOpen(false);
+        setVerificationCode("");
+        setDevCode(null);
+        
+        // Invalidate queries to refresh UI and show empty state
+        qc.invalidateQueries();
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao zerar o sistema.");
+    } finally {
+      setResetting(false);
+    }
   }
 
   return (
@@ -1433,6 +1493,104 @@ function SecurityTab() {
           Em breve. Adicione uma camada extra de segurança à sua conta.
         </p>
       </Card>
+
+      {isAdmin && (
+        <Card className="p-6 shadow-soft border border-destructive/20 bg-destructive/5 space-y-4">
+          <div className="flex items-center gap-2">
+            <Trash2 className="h-4 w-4 text-destructive" />
+            <h2 className="font-semibold text-[15px] text-destructive">Zerar Sistema (Reset de Testes)</h2>
+          </div>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Apague de forma definitiva todos os dados transacionais e de configuração (clientes, agendamentos, serviços, profissionais, lançamentos financeiros e outros usuários). A sua conta e dados de empresa serão mantidos.
+          </p>
+          <div className="flex justify-end">
+            <Button 
+              variant="destructive" 
+              onClick={handleStartReset} 
+              disabled={requestingCode}
+            >
+              {requestingCode ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  Solicitando código...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                  Zerar Sistema
+                </>
+              )}
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* Dialog para Zerar Sistema */}
+      <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="text-destructive flex items-center gap-2">
+              <Trash2 className="h-5 w-5" />
+              Zerar Todo o Sistema
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-3">
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Um código de segurança de 6 dígitos foi enviado para o e-mail cadastrado{" "}
+              <strong>{email}</strong>.
+            </p>
+            <p className="text-sm text-destructive font-medium">
+              Esta ação apagará permanentemente todos os clientes, agendamentos, serviços, profissionais, lançamentos financeiros e outros usuários.
+            </p>
+            
+            <div className="space-y-2">
+              <Label htmlFor="verification-code" className="text-xs">
+                Código de Segurança
+              </Label>
+              <Input
+                id="verification-code"
+                placeholder="Ex: 123456"
+                maxLength={6}
+                value={verificationCode}
+                onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ""))}
+                className="text-center tracking-widest font-mono text-lg text-black dark:text-white"
+              />
+            </div>
+
+            {devCode && (
+              <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-900/30 p-3 rounded-lg text-xs text-yellow-800 dark:text-yellow-400">
+                <span className="font-semibold">Modo de Teste:</span> Código gerado:{" "}
+                <code className="font-mono bg-yellow-100 dark:bg-yellow-900/40 px-1.5 py-0.5 rounded font-bold">
+                  {devCode}
+                </code>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setResetDialogOpen(false)}
+              disabled={resetting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmReset}
+              disabled={resetting || verificationCode.trim().length !== 6}
+            >
+              {resetting ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  Limpando dados...
+                </>
+              ) : (
+                "Confirmar Exclusão"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
