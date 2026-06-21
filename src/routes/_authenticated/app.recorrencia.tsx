@@ -146,7 +146,8 @@ function RecorrenciaPage() {
   const activeTab = tabs.find((t) => t.key === tab) ?? tabs[0];
   const classes = activeTab?.classes ?? ["ATTENTION", "LATE"];
 
-  const shouldRestrictRecurrence = profile?.role === "employee" && !profile?.permissions?.view_all_recurrence;
+  const shouldRestrictRecurrence =
+    profile?.role === "employee" && !profile?.permissions?.view_all_recurrence;
 
   const { data: myProfessional } = useQuery({
     enabled: !!companyId && shouldRestrictRecurrence,
@@ -230,7 +231,9 @@ function RecorrenciaPage() {
       toast.error("Selecione clientes com WhatsApp.");
       return;
     }
-    const link = profile?.company?.slug ? `${window.location.origin}/agendar/${profile.company.slug}` : "";
+    const link = profile?.company?.slug
+      ? `${window.location.origin}/agendar/${profile.company.slug}`
+      : "";
     let opened = 0;
     for (const r of rows) {
       let msg = waTemplate
@@ -347,7 +350,9 @@ function RecorrenciaPage() {
                       variant="outline"
                       className="h-8 shadow-sm flex-shrink-0"
                       onClick={() => {
-                        navigator.clipboard.writeText(`${window.location.origin}/agendar/${profile.company!.slug!}`);
+                        navigator.clipboard.writeText(
+                          `${window.location.origin}/agendar/${profile.company!.slug!}`,
+                        );
                         toast.success("Link copiado!");
                       }}
                     >

@@ -71,7 +71,11 @@ import {
   MoreVertical,
   Loader2,
 } from "lucide-react";
-import { createProfessionalUser, deleteCompanyMember, updateUserPermissions } from "@/lib/api/users.functions";
+import {
+  createProfessionalUser,
+  deleteCompanyMember,
+  updateUserPermissions,
+} from "@/lib/api/users.functions";
 
 const settingsSearchSchema = z.object({
   tab: z.string().optional().catch("company"),
@@ -471,21 +475,11 @@ function UsersTab({
       const roles = rolesRes.data;
       if (!roles?.length) return [];
       const ids = roles.map((r) => r.user_id);
-      
+
       const [profsRes, professionalsRes, companyRes] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select("id, name, email")
-          .in("id", ids),
-        supabase
-          .from("professionals")
-          .select("id, user_id, active")
-          .in("user_id", ids),
-        supabase
-          .from("companies")
-          .select("email")
-          .eq("id", companyId!)
-          .maybeSingle()
+        supabase.from("profiles").select("id, name, email").in("id", ids),
+        supabase.from("professionals").select("id, user_id, active").in("user_id", ids),
+        supabase.from("companies").select("email").eq("id", companyId!).maybeSingle(),
       ]);
 
       const profs = profsRes.data;
@@ -496,17 +490,17 @@ function UsersTab({
         const profile = profs?.find((p) => p.id === r.user_id);
         const assocProfessional = professionalsList?.find((p) => p.user_id === r.user_id);
         let finalRole = r.role;
-        
+
         if (companyEmail && profile?.email?.toLowerCase() === companyEmail.toLowerCase()) {
           finalRole = "owner";
         }
 
-        return { 
-          ...r, 
+        return {
+          ...r,
           role: finalRole,
           profile,
           activeProfessional: assocProfessional ? assocProfessional.active : false,
-          professionalId: assocProfessional?.id
+          professionalId: assocProfessional?.id,
         };
       });
     },
@@ -696,7 +690,10 @@ function UsersTab({
                           view_all_recurrence: "Ver todos os clientes na recorrência",
                         }).map(([key, label]) => (
                           <div key={key} className="flex items-center justify-between">
-                            <Label htmlFor={`create-${key}`} className="text-xs font-medium cursor-pointer flex-1 py-1">
+                            <Label
+                              htmlFor={`create-${key}`}
+                              className="text-xs font-medium cursor-pointer flex-1 py-1"
+                            >
                               {label}
                             </Label>
                             <Switch
@@ -752,7 +749,9 @@ function UsersTab({
                   {m.role}
                 </Badge>
                 <div className="flex items-center gap-1.5 mr-2">
-                  <span className="text-xs text-muted-foreground hidden sm:inline">Presta atendimento?</span>
+                  <span className="text-xs text-muted-foreground hidden sm:inline">
+                    Presta atendimento?
+                  </span>
                   <Switch
                     checked={m.activeProfessional}
                     onCheckedChange={async (checked) => {
@@ -775,15 +774,13 @@ function UsersTab({
                           qc.invalidateQueries({ queryKey: ["professionals-options", companyId] });
                         }
                       } else {
-                        const { error } = await supabase
-                          .from("professionals")
-                          .insert({
-                            company_id: companyId!,
-                            user_id: m.user_id,
-                            name: m.profile?.name || "Profissional",
-                            email: m.profile?.email ?? null,
-                            active: checked
-                          });
+                        const { error } = await supabase.from("professionals").insert({
+                          company_id: companyId!,
+                          user_id: m.user_id,
+                          name: m.profile?.name || "Profissional",
+                          email: m.profile?.email ?? null,
+                          active: checked,
+                        });
                         if (error) {
                           toast.error(error.message);
                         } else {
@@ -811,7 +808,7 @@ function UsersTab({
                           view_settings: false,
                           view_other_professionals_agenda: false,
                           view_all_recurrence: false,
-                        }
+                        },
                       );
                       setEditPermissionsOpen(true);
                     }}
@@ -863,7 +860,10 @@ function UsersTab({
                 view_all_recurrence: "Ver todos os clientes na recorrência",
               }).map(([key, label]) => (
                 <div key={key} className="flex items-center justify-between">
-                  <Label htmlFor={`edit-${key}`} className="text-sm font-medium leading-none cursor-pointer flex-1 py-1">
+                  <Label
+                    htmlFor={`edit-${key}`}
+                    className="text-sm font-medium leading-none cursor-pointer flex-1 py-1"
+                  >
                     {label}
                   </Label>
                   <Switch
@@ -1403,10 +1403,10 @@ function SecurityTab({ isAdmin, email }: { isAdmin: boolean; email?: string }) {
       setRequestingCode(true);
       setDevCode(null);
       setVerificationCode("");
-      
+
       const { requestSystemResetCode } = await import("@/lib/api/security.functions");
       const res = await requestSystemResetCode();
-      
+
       if (res.ok) {
         if (res.devMode && res.code) {
           setDevCode(res.code);
@@ -1427,18 +1427,18 @@ function SecurityTab({ isAdmin, email }: { isAdmin: boolean; email?: string }) {
     if (verificationCode.trim().length !== 6) {
       return toast.error("Por favor, digite o código de 6 dígitos.");
     }
-    
+
     try {
       setResetting(true);
       const { verifyAndResetSystem } = await import("@/lib/api/security.functions");
       const res = await verifyAndResetSystem({ code: verificationCode.trim() });
-      
+
       if (res.ok) {
         toast.success("Sistema zerado com sucesso!");
         setResetDialogOpen(false);
         setVerificationCode("");
         setDevCode(null);
-        
+
         // Invalidate queries to refresh UI and show empty state
         qc.invalidateQueries();
       }
@@ -1498,17 +1498,17 @@ function SecurityTab({ isAdmin, email }: { isAdmin: boolean; email?: string }) {
         <Card className="p-6 shadow-soft border border-destructive/20 bg-destructive/5 space-y-4">
           <div className="flex items-center gap-2">
             <Trash2 className="h-4 w-4 text-destructive" />
-            <h2 className="font-semibold text-[15px] text-destructive">Zerar Sistema (Reset de Testes)</h2>
+            <h2 className="font-semibold text-[15px] text-destructive">
+              Zerar Sistema (Reset de Testes)
+            </h2>
           </div>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            Apague de forma definitiva todos os dados transacionais e de configuração (clientes, agendamentos, serviços, profissionais, lançamentos financeiros e outros usuários). A sua conta e dados de empresa serão mantidos.
+            Apague de forma definitiva todos os dados transacionais e de configuração (clientes,
+            agendamentos, serviços, profissionais, lançamentos financeiros e outros usuários). A sua
+            conta e dados de empresa serão mantidos.
           </p>
           <div className="flex justify-end">
-            <Button 
-              variant="destructive" 
-              onClick={handleStartReset} 
-              disabled={requestingCode}
-            >
+            <Button variant="destructive" onClick={handleStartReset} disabled={requestingCode}>
               {requestingCode ? (
                 <>
                   <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
@@ -1540,9 +1540,10 @@ function SecurityTab({ isAdmin, email }: { isAdmin: boolean; email?: string }) {
               <strong>{email}</strong>.
             </p>
             <p className="text-sm text-destructive font-medium">
-              Esta ação apagará permanentemente todos os clientes, agendamentos, serviços, profissionais, lançamentos financeiros e outros usuários.
+              Esta ação apagará permanentemente todos os clientes, agendamentos, serviços,
+              profissionais, lançamentos financeiros e outros usuários.
             </p>
-            
+
             <div className="space-y-2">
               <Label htmlFor="verification-code" className="text-xs">
                 Código de Segurança

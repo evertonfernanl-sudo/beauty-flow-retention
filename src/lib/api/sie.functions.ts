@@ -103,9 +103,9 @@ export const applyImportBatch = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { supabase } = context;
-    
+
     let rows: Array<{ id: string; company_id: string; confidence: number; status: string }> = [];
-    
+
     if (data.rowIds && data.rowIds.length > 0) {
       const { data: dbRows, error } = await supabase
         .from("import_rows")

@@ -85,10 +85,13 @@ function AppShell() {
       let allowed = true;
       if (profile.role === "employee") {
         if (pathname === "/app" && !profile.permissions?.view_dashboard) allowed = false;
-        if (pathname.startsWith("/app/clients") && !profile.permissions?.view_clients) allowed = false;
-        if (pathname.startsWith("/app/financial") && !profile.permissions?.view_financial) allowed = false;
+        if (pathname.startsWith("/app/clients") && !profile.permissions?.view_clients)
+          allowed = false;
+        if (pathname.startsWith("/app/financial") && !profile.permissions?.view_financial)
+          allowed = false;
         if (pathname.startsWith("/app/sie") && !profile.permissions?.view_imports) allowed = false;
-        if (pathname.startsWith("/app/settings") && !profile.permissions?.view_settings) allowed = false;
+        if (pathname.startsWith("/app/settings") && !profile.permissions?.view_settings)
+          allowed = false;
       }
 
       if (!allowed) {

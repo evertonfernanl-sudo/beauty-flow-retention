@@ -209,16 +209,16 @@ function AgendaPage() {
     for (const svc of selectedSvcs) {
       const duration = svc.duration_minutes ?? 60;
       const endDt = new Date(currentStart.getTime() + duration * 60_000);
-      
-      const svcPrice = sumPrices > 0 
-        ? (customPrice * (Number(svc.price ?? 0) / sumPrices))
-        : 0;
+
+      const svcPrice = sumPrices > 0 ? customPrice * (Number(svc.price ?? 0) / sumPrices) : 0;
 
       const { error } = await supabase.from("appointments").insert({
         company_id: companyId,
         client_id: values.client_id,
         service_id: svc.id,
-        professional_id: shouldRestrictAgenda ? (myProfessional?.id ?? null) : values.professional_id || null,
+        professional_id: shouldRestrictAgenda
+          ? (myProfessional?.id ?? null)
+          : values.professional_id || null,
         start_datetime: currentStart.toISOString(),
         end_datetime: endDt.toISOString(),
         price: svcPrice,
@@ -334,7 +334,7 @@ function AgendaPage() {
                     }))}
                   />
                 )}
-                 <div className="space-y-2">
+                <div className="space-y-2">
                   <Label>Serviços (Selecione um ou mais)</Label>
                   <Controller
                     control={form.control}
@@ -346,7 +346,10 @@ function AgendaPage() {
                           {(services.data ?? []).map((s: any) => {
                             const isChecked = selected.includes(s.id);
                             return (
-                              <label key={s.id} className="flex items-center gap-2 p-2 hover:bg-secondary/40 rounded cursor-pointer text-sm">
+                              <label
+                                key={s.id}
+                                className="flex items-center gap-2 p-2 hover:bg-secondary/40 rounded cursor-pointer text-sm"
+                              >
                                 <input
                                   type="checkbox"
                                   checked={isChecked}
@@ -360,12 +363,16 @@ function AgendaPage() {
                                   className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4"
                                 />
                                 <span className="flex-1 font-medium">{s.name}</span>
-                                <span className="text-muted-foreground">{formatBRL(Number(s.price))}</span>
+                                <span className="text-muted-foreground">
+                                  {formatBRL(Number(s.price))}
+                                </span>
                               </label>
                             );
                           })}
                           {(services.data ?? []).length === 0 && (
-                            <p className="text-xs text-muted-foreground">Nenhum serviço disponível.</p>
+                            <p className="text-xs text-muted-foreground">
+                              Nenhum serviço disponível.
+                            </p>
                           )}
                         </div>
                       );
@@ -379,7 +386,7 @@ function AgendaPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
-                     <Label>Data</Label>
+                    <Label>Data</Label>
                     <Input type="date" {...form.register("date")} />
                   </div>
                   <div className="space-y-2">

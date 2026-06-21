@@ -6,7 +6,9 @@ type Admin = any;
 
 const MAX_PER_TICK = 20;
 
-export async function runWorker(admin: Admin): Promise<Array<{ id: string; type: string; ok: boolean; error?: string }>> {
+export async function runWorker(
+  admin: Admin,
+): Promise<Array<{ id: string; type: string; ok: boolean; error?: string }>> {
   const processed: Array<{ id: string; type: string; ok: boolean; error?: string }> = [];
 
   for (let i = 0; i < MAX_PER_TICK; i++) {
@@ -174,8 +176,7 @@ const HEADER_MAP: Record<string, RegExp> = {
   email: /^(e-?mail|email)$/i,
   amount: /^(valor|amount|preco|preço|price|total|vlr|valor\s*\(r\$\)|valor\s*r\$|quantia)$/i,
   date: /^(data|date|dt|dia|quando|occurred|venda|atendimento|data\s+do\s+lan\S+amento|data\s+lan\S+amento)$/i,
-  description:
-    /^(descri.*|hist.*|lan[cç].*|memo|complemento|obs|observa|servi[cç]o|produto)$/i,
+  description: /^(descri.*|hist.*|lan[cç].*|memo|complemento|obs|observa|servi[cç]o|produto)$/i,
   payment: /^(pagamento|payment|metodo|método|forma)$/i,
 };
 
@@ -185,15 +186,37 @@ const isNameHeader = (h: string): boolean => {
     return false;
   }
   const exactNames = [
-    "first name", "nome", "favorecido", "beneficiario", "beneficiário", "cliente", 
-    "fornecedor", "pagador", "recebedor", "sacado", "cedente", "contraparte", 
-    "nome favorecido", "nome cliente", "nome destinatario", "nome destinatário", 
-    "destinatario", "destinatário", "description", "receiver", "payee"
+    "first name",
+    "nome",
+    "favorecido",
+    "beneficiario",
+    "beneficiário",
+    "cliente",
+    "fornecedor",
+    "pagador",
+    "recebedor",
+    "sacado",
+    "cedente",
+    "contraparte",
+    "nome favorecido",
+    "nome cliente",
+    "nome destinatario",
+    "nome destinatário",
+    "destinatario",
+    "destinatário",
+    "description",
+    "receiver",
+    "payee",
   ];
   if (exactNames.includes(norm)) return true;
 
   return (
-    (norm.includes("nome") || norm.includes("name") || norm.includes("cliente") || norm.includes("client") || norm.includes("contato") || norm.includes("customer")) &&
+    (norm.includes("nome") ||
+      norm.includes("name") ||
+      norm.includes("cliente") ||
+      norm.includes("client") ||
+      norm.includes("contato") ||
+      norm.includes("customer")) &&
     !norm.includes("sobre") &&
     !norm.includes("last") &&
     !norm.includes("family") &&
@@ -207,12 +230,23 @@ const isNameHeader = (h: string): boolean => {
 
 const isPhoneHeader = (h: string): boolean => {
   const norm = h.toLowerCase().trim();
-  if (norm.includes("label") || norm.includes("tipo") || norm.includes("descrição") || norm.includes("descricao")) {
+  if (
+    norm.includes("label") ||
+    norm.includes("tipo") ||
+    norm.includes("descrição") ||
+    norm.includes("descricao")
+  ) {
     return false;
   }
   const exactPhones = [
-    "phone 1 - value", "phone 2 - value", "telefone 1 - valor", "telefone 2 - valor",
-    "telefone 1", "telefone 2", "phone 1", "phone 2"
+    "phone 1 - value",
+    "phone 2 - value",
+    "telefone 1 - valor",
+    "telefone 2 - valor",
+    "telefone 1",
+    "telefone 2",
+    "phone 1",
+    "phone 2",
   ];
   if (exactPhones.includes(norm)) return true;
 
@@ -233,20 +267,44 @@ const isEmailHeader = (h: string): boolean => {
     return false;
   }
   const exactEmails = [
-    "e-mail 1 - value", "email 1 - value", "e-mail 1", "email 1", "email 1 - valor", "e-mail 1 - valor"
+    "e-mail 1 - value",
+    "email 1 - value",
+    "e-mail 1",
+    "email 1",
+    "email 1 - valor",
+    "e-mail 1 - valor",
   ];
   if (exactEmails.includes(norm)) return true;
 
-  return norm.includes("email") || norm.includes("e-mail") || (norm.includes("mail") && !norm.includes("name"));
+  return (
+    norm.includes("email") ||
+    norm.includes("e-mail") ||
+    (norm.includes("mail") && !norm.includes("name"))
+  );
 };
 
 const isAmountHeader = (h: string): boolean => {
   const norm = h.toLowerCase().trim();
   const exactAmounts = [
-    "valor", "valor r$", "valor (r$)", "valor movimento", "valor movimentado", 
-    "valor operação", "credito", "crédito", "credito (r$)", "crédito (r$)", 
-    "debito", "débito", "debito (r$)", "débito (r$)", "entrada", "saida", "saída", 
-    "amount", "transaction amount"
+    "valor",
+    "valor r$",
+    "valor (r$)",
+    "valor movimento",
+    "valor movimentado",
+    "valor operação",
+    "credito",
+    "crédito",
+    "credito (r$)",
+    "crédito (r$)",
+    "debito",
+    "débito",
+    "debito (r$)",
+    "débito (r$)",
+    "entrada",
+    "saida",
+    "saída",
+    "amount",
+    "transaction amount",
   ];
   if (exactAmounts.includes(norm)) return true;
 
@@ -265,10 +323,23 @@ const isAmountHeader = (h: string): boolean => {
 const isDateHeader = (h: string): boolean => {
   const norm = h.toLowerCase().trim();
   const exactDates = [
-    "data", "data mov", "data movimentacao", "data movimentação", "data lancamento", 
-    "data lançamento", "data operação", "data operacao", "data transacao", 
-    "data transação", "data documento", "dt movimento", "dt mov", "dt lançamento", 
-    "dt lancamento", "movement date", "transaction date"
+    "data",
+    "data mov",
+    "data movimentacao",
+    "data movimentação",
+    "data lancamento",
+    "data lançamento",
+    "data operação",
+    "data operacao",
+    "data transacao",
+    "data transação",
+    "data documento",
+    "dt movimento",
+    "dt mov",
+    "dt lançamento",
+    "dt lancamento",
+    "movement date",
+    "transaction date",
   ];
   if (exactDates.includes(norm)) return true;
 
@@ -285,10 +356,24 @@ const isDateHeader = (h: string): boolean => {
 const isDescriptionHeader = (h: string): boolean => {
   const norm = h.toLowerCase().trim();
   const exactDescriptions = [
-    "descricao", "descrição", "historico", "histórico", "historico/complemento", 
-    "histórico/complemento", "complemento", "detalhes", "detalhamento", "narrativa", 
-    "observacao", "observação", "descricao lancamento", "descrição lançamento", 
-    "historico transacao", "histórico transação", "transaction description", "memo"
+    "descricao",
+    "descrição",
+    "historico",
+    "histórico",
+    "historico/complemento",
+    "histórico/complemento",
+    "complemento",
+    "detalhes",
+    "detalhamento",
+    "narrativa",
+    "observacao",
+    "observação",
+    "descricao lancamento",
+    "descrição lançamento",
+    "historico transacao",
+    "histórico transação",
+    "transaction description",
+    "memo",
   ];
   if (exactDescriptions.includes(norm)) return true;
 
@@ -320,17 +405,19 @@ const isPaymentHeader = (h: string): boolean => {
 function findHeaderRowIndex(rows: unknown[][]): number {
   let bestIndex = 0;
   let maxMatches = 0;
-  
+
   const limit = Math.min(rows.length, 15);
   for (let i = 0; i < limit; i++) {
     const row = rows[i];
     if (!row || !Array.isArray(row)) continue;
-    
+
     let matches = 0;
-    row.forEach(cell => {
-      const cellStr = String(cell ?? "").trim().toLowerCase();
+    row.forEach((cell) => {
+      const cellStr = String(cell ?? "")
+        .trim()
+        .toLowerCase();
       if (!cellStr) return;
-      
+
       if (
         isNameHeader(cellStr) ||
         isPhoneHeader(cellStr) ||
@@ -343,13 +430,13 @@ function findHeaderRowIndex(rows: unknown[][]): number {
         matches++;
       }
     });
-    
+
     if (matches > maxMatches) {
       maxMatches = matches;
       bestIndex = i;
     }
   }
-  
+
   return bestIndex;
 }
 
@@ -357,14 +444,17 @@ function detectColumns(headers: string[]): Record<string, number> {
   const out: Record<string, number> = {};
   headers.forEach((h, i) => {
     const norm = (h ?? "").toString().trim().toLowerCase();
-    
+
     if (out["name"] === undefined && (norm === "cliente" || isNameHeader(norm))) {
       out["name"] = i;
     }
     if (out["phone"] === undefined && (norm === "telefone 1" || isPhoneHeader(norm))) {
       out["phone"] = i;
     }
-    if (out["phone2"] === undefined && (norm === "telefone 2" || (isPhoneHeader(norm) && i !== out["phone"]))) {
+    if (
+      out["phone2"] === undefined &&
+      (norm === "telefone 2" || (isPhoneHeader(norm) && i !== out["phone"]))
+    ) {
       out["phone2"] = i;
     }
     if (out["email"] === undefined && isEmailHeader(norm)) {
@@ -390,7 +480,8 @@ function parseAmount(v: unknown): number | null {
   if (v == null || v === "") return null;
   if (typeof v === "number") return Math.round(v * 100) / 100;
   const originalStr = String(v).trim();
-  const isNegative = originalStr.startsWith("-") || (originalStr.startsWith("(") && originalStr.endsWith(")"));
+  const isNegative =
+    originalStr.startsWith("-") || (originalStr.startsWith("(") && originalStr.endsWith(")"));
   const s = originalStr
     .replace(/[^\d,.-]/g, "")
     .replace(/\.(?=\d{3}(\D|$))/g, "")
@@ -499,16 +590,17 @@ function extractNameFromDescription(desc: string | null | undefined): string | n
 
   // 1) Common Pix/TED prefixes with explicit name boundaries
   const regexes = [
-    /(?:pix\s+recebido\s+de|pix\s+de|transferência\s+recebida\s+de|recebido\s+de|pix\s+recebido|ted\s+recebida|credito\s+pix|transf\s+recebida|transferencia|ted|doc)\s*:?\s*-?\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i
+    /(?:pix\s+recebido\s+de|pix\s+de|transferência\s+recebida\s+de|recebido\s+de|pix\s+recebido|ted\s+recebida|credito\s+pix|transf\s+recebida|transferencia|ted|doc)\s*:?\s*-?\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i,
   ];
 
   for (const re of regexes) {
     const match = clean.match(re);
     if (match) {
       const candidate = match[1].trim();
-      const words = candidate.split(/\s+/).filter(w => w.length >= 2);
-      const blacklist = /^(pix|ted|doc|tarifa|compra|saque|pagamento|recebido|transferencia|itau|bradesco|caixa|nubank|banco|itaucard|saldo|extrato|juros|tributo|mensalidade|taxa|retirada|deposito)$/i;
-      const validWords = words.filter(w => !blacklist.test(w));
+      const words = candidate.split(/\s+/).filter((w) => w.length >= 2);
+      const blacklist =
+        /^(pix|ted|doc|tarifa|compra|saque|pagamento|recebido|transferencia|itau|bradesco|caixa|nubank|banco|itaucard|saldo|extrato|juros|tributo|mensalidade|taxa|retirada|deposito)$/i;
+      const validWords = words.filter((w) => !blacklist.test(w));
       if (validWords.length >= 2) {
         return validWords.join(" ");
       }
@@ -516,7 +608,10 @@ function extractNameFromDescription(desc: string | null | undefined): string | n
   }
 
   // 2) Split by "-" if present (very common in Brazilian statements, e.g. "PIX RECEBIDO - MARIA SILVA")
-  const parts = clean.split("-").map(p => p.trim()).filter(Boolean);
+  const parts = clean
+    .split("-")
+    .map((p) => p.trim())
+    .filter(Boolean);
   if (parts.length >= 2) {
     const nameRegex = /^[A-Za-zÀ-ÿ\s'\.\-]+$/;
     const excludeKeywords =
@@ -524,7 +619,7 @@ function extractNameFromDescription(desc: string | null | undefined): string | n
 
     for (const part of parts) {
       if (nameRegex.test(part) && !excludeKeywords.test(part)) {
-        const words = part.split(/\s+/).filter(w => w.length > 1);
+        const words = part.split(/\s+/).filter((w) => w.length > 1);
         if (words.length >= 2) {
           return part;
         }
@@ -538,9 +633,9 @@ function extractNameFromDescription(desc: string | null | undefined): string | n
     const nameRegex = /^[A-Za-zÀ-ÿ\s'\.\-]+$/;
     const excludeKeywords =
       /(transfer[êe]ncia|recebido|recebida|enviado|enviada|pix|ted|doc|pagamento|compra|saque|dep[óo]sito|tarifa|juros|saldo|extrato|ag[êe]ncia|conta|nu\s+pagamentos|nubank|ita[úu]|bradesco|santander|caixa|banco|pagseguro|stone|picpay|mercado\s+pago|inter|original)/i;
-    
+
     if (nameRegex.test(clean) && !excludeKeywords.test(clean)) {
-      const validWords = words.filter(w => w.length >= 2);
+      const validWords = words.filter((w) => w.length >= 2);
       if (validWords.length >= 2) {
         return clean;
       }
@@ -587,12 +682,14 @@ function findServiceCombination(
 }
 
 function normalizeAndMapHeaders(rawHeaders: string[]): string[] {
-  const cleanHeaders = rawHeaders.map(h => String(h ?? "").trim());
-  const lowerHeaders = cleanHeaders.map(h => h.toLowerCase());
-  
-  let nameIndex = lowerHeaders.findIndex(h => h === "nome" || h === "name" || h === "cliente" || h === "client");
+  const cleanHeaders = rawHeaders.map((h) => String(h ?? "").trim());
+  const lowerHeaders = cleanHeaders.map((h) => h.toLowerCase());
+
+  let nameIndex = lowerHeaders.findIndex(
+    (h) => h === "nome" || h === "name" || h === "cliente" || h === "client",
+  );
   if (nameIndex === -1) {
-    nameIndex = lowerHeaders.findIndex(h => isNameHeader(h));
+    nameIndex = lowerHeaders.findIndex((h) => isNameHeader(h));
   }
 
   let phone1Index = -1;
@@ -620,8 +717,8 @@ function normalizeAndMapHeaders(rawHeaders: string[]): string[] {
     });
   }
 
-  const descIndex = lowerHeaders.findIndex(h => isDescriptionHeader(h));
-  
+  const descIndex = lowerHeaders.findIndex((h) => isDescriptionHeader(h));
+
   return cleanHeaders.map((h, i) => {
     if (i === nameIndex) return "cliente";
     if (i === phone1Index) return "telefone 1";
@@ -650,7 +747,11 @@ async function runImportParse(
       .select("id, name, price")
       .eq("company_id", job.company_id)
       .eq("active", true);
-    const activeServices = (servicesData ?? []) as Array<{ id: string; name: string; price: number }>;
+    const activeServices = (servicesData ?? []) as Array<{
+      id: string;
+      name: string;
+      price: number;
+    }>;
 
     const { data: clientsData } = await admin
       .from("clients")
@@ -690,7 +791,11 @@ async function runImportParse(
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array", cellDates: true });
       const sheet = wb.Sheets[wb.SheetNames[0]];
-      const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true, defval: null });
+      const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+        header: 1,
+        raw: true,
+        defval: null,
+      });
       if (aoa.length === 0) throw new Error("Planilha vazia");
       const hIdx = findHeaderRowIndex(aoa);
       headers = normalizeAndMapHeaders(aoa[hIdx] as string[]);
@@ -868,12 +973,7 @@ async function runImportParse(
         confidence = (confData as number) ?? 0;
       }
 
-      const status =
-        confidence >= 95
-          ? "matched"
-          : confidence >= 70
-            ? "review"
-            : "manual";
+      const status = confidence >= 95 ? "matched" : confidence >= 70 ? "review" : "manual";
 
       // Duplicate detection
       let isDuplicate = false;
@@ -973,11 +1073,11 @@ async function runImportParse(
         status: finalStatus,
         notes: isDuplicate
           ? "Possível duplicidade: já existe um lançamento com o mesmo valor e data."
-          : (isExpense
-              ? "Despesa automática detectada"
-              : offeringLabel
-                ? `Sugestão: ${offeringLabel}`
-                : null),
+          : isExpense
+            ? "Despesa automática detectada"
+            : offeringLabel
+              ? `Sugestão: ${offeringLabel}`
+              : null,
       });
       if (rowErr) {
         failed++;
@@ -1007,7 +1107,6 @@ async function runImportParse(
       .eq("id", import_id);
 
     return { total, matched, review, failed, revenue };
-
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     await admin
@@ -1043,9 +1142,10 @@ async function runImportApplyRow(
 
   const companyId = row.company_id as string;
 
-  const isExpense = row.parsed && typeof row.parsed === "object" && "isExpense" in (row.parsed as any)
-    ? (row.parsed as any).isExpense
-    : (isExpenseDescription(row.description) || (row.amount != null && row.amount < 0));
+  const isExpense =
+    row.parsed && typeof row.parsed === "object" && "isExpense" in (row.parsed as any)
+      ? (row.parsed as any).isExpense
+      : isExpenseDescription(row.description) || (row.amount != null && row.amount < 0);
   if (isExpense) {
     const { data: tx, error: txErr } = await admin
       .from("financial_transactions")
@@ -1188,13 +1288,14 @@ async function runImportApplyRow(
             company_id: companyId,
             name: "Atendimento Importado",
             duration_minutes: 60,
-            price: row.amount ?? 100.00,
+            price: row.amount ?? 100.0,
             return_days: 30,
-            active: true
+            active: true,
           })
           .select("id")
           .single();
-        if (serviceErr) throw new Error(`Não foi possível criar o serviço automático: ${serviceErr.message}`);
+        if (serviceErr)
+          throw new Error(`Não foi possível criar o serviço automático: ${serviceErr.message}`);
         serviceId = newService.id;
       }
     }
@@ -1267,10 +1368,12 @@ async function runImportApplyRow(
     await admin
       .from("clients")
       .update({
-        ...(shouldUpdateLastVisit ? {
-          last_visit: start.toISOString(),
-          next_return: nextReturnStr,
-        } : {}),
+        ...(shouldUpdateLastVisit
+          ? {
+              last_visit: start.toISOString(),
+              next_return: nextReturnStr,
+            }
+          : {}),
         total_spent: currentSpent + (row.amount ?? 0),
         appointments_count: currentCount + 1,
         status: "ACTIVE",
@@ -1278,16 +1381,14 @@ async function runImportApplyRow(
       .eq("id", clientId);
 
     // Create next return opportunity
-    await admin
-      .from("return_opportunities")
-      .insert({
-        company_id: companyId,
-        client_id: clientId,
-        service_id: serviceId,
-        expected_return_date: nextReturnStr,
-        estimated_value: row.amount ?? svc?.price ?? 0,
-        status: "ON_TIME",
-      });
+    await admin.from("return_opportunities").insert({
+      company_id: companyId,
+      client_id: clientId,
+      service_id: serviceId,
+      expected_return_date: nextReturnStr,
+      estimated_value: row.amount ?? svc?.price ?? 0,
+      status: "ON_TIME",
+    });
   }
 
   // IIL learning

@@ -114,7 +114,9 @@ export function MensageriaPage() {
                 variant="outline"
                 className="h-8 shadow-sm flex-shrink-0"
                 onClick={() => {
-                  navigator.clipboard.writeText(`${window.location.origin}/agendar/${profile.company!.slug!}`);
+                  navigator.clipboard.writeText(
+                    `${window.location.origin}/agendar/${profile.company!.slug!}`,
+                  );
                   toast.success("Link copiado!");
                 }}
               >
@@ -180,7 +182,10 @@ function formatMessageBody(body: string, companySlug: string) {
   if (!body) return "";
   let text = body;
   const linkAgendamento = `${window.location.origin}/agendar/${companySlug}`;
-  text = text.replace(/https:\/\/beauty-flow-retention\.lovable\.app\/agendar\/[a-zA-Z0-9_-]*/gi, linkAgendamento);
+  text = text.replace(
+    /https:\/\/beauty-flow-retention\.lovable\.app\/agendar\/[a-zA-Z0-9_-]*/gi,
+    linkAgendamento,
+  );
   text = text.replace(/https:\/\/beauty-flow-retention\.lovable\.app/gi, window.location.origin);
   text = text.replace(/\{\{\s*link_agendamento\s*\}\}/gi, linkAgendamento);
 
@@ -212,7 +217,8 @@ function Fila({ companyId }: { companyId: string }) {
   const [editing, setEditing] = useState<QueueRow | null>(null);
 
   const { data: profile } = useCurrentProfile();
-  const shouldRestrictRecurrence = profile?.role === "employee" && !profile?.permissions?.view_all_recurrence;
+  const shouldRestrictRecurrence =
+    profile?.role === "employee" && !profile?.permissions?.view_all_recurrence;
 
   const { data: myProfessional } = useQuery({
     enabled: !!companyId && shouldRestrictRecurrence && !!profile,
@@ -594,7 +600,8 @@ function TemplateDialog({
   const [name, setName] = useState(tpl?.name ?? "");
   const [type, setType] = useState(tpl?.type ?? "RETURN");
   const [body, setBody] = useState(
-    tpl?.body ?? "Olá {{primeiro_nome}}! Como você está? Gostaria de marcar seu retorno? Agende aqui: {{link_agendamento}}"
+    tpl?.body ??
+      "Olá {{primeiro_nome}}! Como você está? Gostaria de marcar seu retorno? Agende aqui: {{link_agendamento}}",
   );
   const [active, setActive] = useState(tpl?.active ?? true);
   const [cadence, setCadence] = useState((tpl?.cadence_offsets ?? [-7, -3, 0, 7]).join(","));
@@ -699,7 +706,8 @@ function Dashboard({ companyId, plan }: { companyId: string; plan: string }) {
   const limit = PLAN_LIMIT[plan] ?? 500;
 
   const { data: profile } = useCurrentProfile();
-  const shouldRestrictRecurrence = profile?.role === "employee" && !profile?.permissions?.view_all_recurrence;
+  const shouldRestrictRecurrence =
+    profile?.role === "employee" && !profile?.permissions?.view_all_recurrence;
 
   const { data: myProfessional } = useQuery({
     enabled: !!companyId && shouldRestrictRecurrence && !!profile,

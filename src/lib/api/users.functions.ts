@@ -136,8 +136,8 @@ export const deleteCompanyMember = createServerFn({ method: "POST" })
       .eq("id", data.targetUserId)
       .maybeSingle();
 
-    const isTargetOwner = 
-      targetRoleRow.role === "owner" || 
+    const isTargetOwner =
+      targetRoleRow.role === "owner" ||
       (companyRow?.email && targetProfile?.email?.toLowerCase() === companyRow.email.toLowerCase());
 
     if (isTargetOwner) {
@@ -216,8 +216,8 @@ export const updateUserPermissions = createServerFn({ method: "POST" })
       .eq("id", data.targetUserId)
       .maybeSingle();
 
-    const isTargetOwner = 
-      targetRoleRow.role === "owner" || 
+    const isTargetOwner =
+      targetRoleRow.role === "owner" ||
       (companyRow?.email && targetProfile?.email?.toLowerCase() === companyRow.email.toLowerCase());
 
     if (isTargetOwner) {
@@ -244,15 +244,16 @@ export const runAdminJobsTick = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    
+
     // Verify platform admin access
     const { data: adminCheck } = await supabase
       .from("platform_admins")
       .select("user_id")
       .eq("user_id", userId)
       .maybeSingle();
-      
-    if (!adminCheck) throw new Error("Acesso negado. Apenas administradores da plataforma podem rodar o worker.");
+
+    if (!adminCheck)
+      throw new Error("Acesso negado. Apenas administradores da plataforma podem rodar o worker.");
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { runWorker } = await import("@/lib/api/worker.server");

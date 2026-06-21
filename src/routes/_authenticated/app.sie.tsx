@@ -114,7 +114,11 @@ function SiePage() {
   }
 
   async function onDeleteImport(id: string, storagePath: string | null) {
-    if (!confirm("Tem certeza que deseja excluir esta importação? Isso removerá o histórico do arquivo, mas NÃO apagará os clientes ou agendamentos criados por ela.")) {
+    if (
+      !confirm(
+        "Tem certeza que deseja excluir esta importação? Isso removerá o histórico do arquivo, mas NÃO apagará os clientes ou agendamentos criados por ela.",
+      )
+    ) {
       return;
     }
     try {
@@ -313,11 +317,11 @@ function RowStatusBadge({ status, isDuplicate }: { status: string; isDuplicate?:
   const map: Record<string, { label: string; className: string }> = {
     pending: { label: "Pendente", className: "bg-gray-100 text-gray-800 border-gray-200" },
     matched: { label: "Mapeado", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-    review: { 
-      label: isDuplicate ? "Duplicado?" : "Revisar", 
-      className: isDuplicate 
-        ? "bg-amber-50 text-amber-700 border-amber-200 animate-pulse font-semibold" 
-        : "bg-amber-50 text-amber-700 border-amber-200" 
+    review: {
+      label: isDuplicate ? "Duplicado?" : "Revisar",
+      className: isDuplicate
+        ? "bg-amber-50 text-amber-700 border-amber-200 animate-pulse font-semibold"
+        : "bg-amber-50 text-amber-700 border-amber-200",
     },
     manual: { label: "Manual", className: "bg-blue-50 text-blue-700 border-blue-200" },
     applied: { label: "Aplicado", className: "bg-emerald-100 text-emerald-800 border-emerald-200" },
@@ -360,9 +364,12 @@ function ImportReview({ importId, status }: { importId: string; status: string }
     qc.invalidateQueries({ queryKey: ["sie-imports"] });
   }, [rows.data, qc]);
 
-  const checkableRows = rows.data?.filter((r) => r.status !== "applied" && r.status !== "skipped") ?? [];
-  const allChecked = checkableRows.length > 0 && checkableRows.every((r) => selectedRowIds.has(r.id));
-  const someChecked = checkableRows.length > 0 && checkableRows.some((r) => selectedRowIds.has(r.id)) && !allChecked;
+  const checkableRows =
+    rows.data?.filter((r) => r.status !== "applied" && r.status !== "skipped") ?? [];
+  const allChecked =
+    checkableRows.length > 0 && checkableRows.every((r) => selectedRowIds.has(r.id));
+  const someChecked =
+    checkableRows.length > 0 && checkableRows.some((r) => selectedRowIds.has(r.id)) && !allChecked;
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
@@ -390,15 +397,11 @@ function ImportReview({ importId, status }: { importId: string; status: string }
       ...currentParsed,
       isExpense: nextIsExpense,
     };
-    
+
     // Update local query cache optimistically
     qc.setQueryData(["sie-rows", importId], (old: Row[] | undefined) => {
       if (!old) return [];
-      return old.map((item) =>
-        item.id === row.id
-          ? { ...item, parsed: updatedParsed }
-          : item
-      );
+      return old.map((item) => (item.id === row.id ? { ...item, parsed: updatedParsed } : item));
     });
 
     try {
@@ -406,7 +409,7 @@ function ImportReview({ importId, status }: { importId: string; status: string }
         .from("import_rows")
         .update({ parsed: updatedParsed as any })
         .eq("id", row.id);
-      
+
       if (error) throw error;
       toast.success(`Lançamento alterado para ${nextIsExpense ? "Despesa" : "Receita"}`);
     } catch (e) {
@@ -498,12 +501,7 @@ function ImportReview({ importId, status }: { importId: string; status: string }
         </div>
         <div className="flex items-center gap-2">
           {selectedRowIds.size > 0 && (
-            <Button
-              size="sm"
-              variant="default"
-              disabled={busy != null}
-              onClick={approveSelected}
-            >
+            <Button size="sm" variant="default" disabled={busy != null} onClick={approveSelected}>
               {busy === "batch-selected" ? (
                 <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
               ) : (
@@ -543,7 +541,10 @@ function ImportReview({ importId, status }: { importId: string; status: string }
             {(rows.data ?? []).map((r) => {
               const isExpense = r.parsed?.isExpense ?? false;
               return (
-                <tr key={r.id} className="border-t animate-fade-in hover:bg-muted/10 transition-colors">
+                <tr
+                  key={r.id}
+                  className="border-t animate-fade-in hover:bg-muted/10 transition-colors"
+                >
                   <td className="p-1 w-8 text-center">
                     {r.status !== "applied" && r.status !== "skipped" ? (
                       <Checkbox
@@ -552,13 +553,25 @@ function ImportReview({ importId, status }: { importId: string; status: string }
                         aria-label={`Selecionar linha ${r.row_index}`}
                       />
                     ) : r.status === "applied" ? (
-                      <div className="text-emerald-500 font-bold text-center" title="Lançamento Aplicado">✓</div>
+                      <div
+                        className="text-emerald-500 font-bold text-center"
+                        title="Lançamento Aplicado"
+                      >
+                        ✓
+                      </div>
                     ) : (
-                      <div className="text-rose-500 font-bold text-center" title="Lançamento Recusado">✗</div>
+                      <div
+                        className="text-rose-500 font-bold text-center"
+                        title="Lançamento Recusado"
+                      >
+                        ✗
+                      </div>
                     )}
                   </td>
                   <td className="p-1 font-medium">{r.client_name || "—"}</td>
-                  <td className="p-1 tabular-nums">{r.client_phone ? formatPhoneBR(r.client_phone) : "—"}</td>
+                  <td className="p-1 tabular-nums">
+                    {r.client_phone ? formatPhoneBR(r.client_phone) : "—"}
+                  </td>
                   <td className="p-1 max-w-[200px]">
                     <div className="font-medium truncate" title={r.description ?? ""}>
                       {r.description ?? "—"}
@@ -566,11 +579,15 @@ function ImportReview({ importId, status }: { importId: string; status: string }
                     {r.notes && (
                       <div
                         className={`text-[10px] flex items-center gap-1 mt-0.5 ${
-                          r.parsed?.isDuplicate ? "text-amber-600 font-semibold" : "text-muted-foreground"
+                          r.parsed?.isDuplicate
+                            ? "text-amber-600 font-semibold"
+                            : "text-muted-foreground"
                         }`}
                         title={r.notes}
                       >
-                        {r.parsed?.isDuplicate && <AlertTriangle className="h-3 w-3 shrink-0 animate-bounce" />}
+                        {r.parsed?.isDuplicate && (
+                          <AlertTriangle className="h-3 w-3 shrink-0 animate-bounce" />
+                        )}
                         <span className="truncate">{r.notes}</span>
                       </div>
                     )}
@@ -610,15 +627,19 @@ function ImportReview({ importId, status }: { importId: string; status: string }
                           size="sm"
                           variant={r.parsed?.isDuplicate ? "default" : "ghost"}
                           className={
-                            r.parsed?.isDuplicate 
-                              ? "bg-amber-500 text-white hover:bg-amber-600 shadow-sm" 
+                            r.parsed?.isDuplicate
+                              ? "bg-amber-500 text-white hover:bg-amber-600 shadow-sm"
                               : "hover:bg-primary/10 hover:text-primary"
                           }
                           disabled={busy !== null}
                           onClick={() => approve(r.id)}
                           title="Confirmar lançamento"
                         >
-                          {busy === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Confirmar"}
+                          {busy === r.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            "Confirmar"
+                          )}
                         </Button>
                         <Button
                           size="sm"
@@ -628,7 +649,11 @@ function ImportReview({ importId, status }: { importId: string; status: string }
                           onClick={() => refuse(r.id)}
                           title="Recusar lançamento"
                         >
-                          {busy === `refuse-${r.id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : "Recusar"}
+                          {busy === `refuse-${r.id}` ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            "Recusar"
+                          )}
                         </Button>
                       </div>
                     )}

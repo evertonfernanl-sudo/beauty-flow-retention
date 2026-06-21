@@ -17,7 +17,7 @@ export const requestSystemResetCode = createServerFn({ method: "POST" })
 
     if (!currentRoleRow || (currentRoleRow.role !== "owner" && currentRoleRow.role !== "admin")) {
       throw new Error(
-        "Permissão negada. Apenas administradores e proprietários podem solicitar o reset do sistema."
+        "Permissão negada. Apenas administradores e proprietários podem solicitar o reset do sistema.",
       );
     }
 
@@ -41,20 +41,21 @@ export const requestSystemResetCode = createServerFn({ method: "POST" })
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 minutes
 
     // 4) Upsert code into company_features under feature = 'system_reset'
-    const { error: upsertError } = await supabaseAdmin
-      .from("company_features")
-      .upsert({
+    const { error: upsertError } = await supabaseAdmin.from("company_features").upsert(
+      {
         company_id: companyId,
         feature: "system_reset",
         enabled: true,
         config: {
           code,
           expiresAt,
-          email: userEmail
-        }
-      }, {
-        onConflict: "company_id,feature"
-      });
+          email: userEmail,
+        },
+      },
+      {
+        onConflict: "company_id,feature",
+      },
+    );
 
     if (upsertError) {
       throw new Error(`Falha ao salvar código de segurança: ${upsertError.message}`);
@@ -117,7 +118,7 @@ export const requestSystemResetCode = createServerFn({ method: "POST" })
       ok: true,
       emailSent,
       devMode,
-      code: devMode ? code : undefined
+      code: devMode ? code : undefined,
     };
   });
 
@@ -143,7 +144,7 @@ export const verifyAndResetSystem = createServerFn({ method: "POST" })
 
     if (!currentRoleRow || (currentRoleRow.role !== "owner" && currentRoleRow.role !== "admin")) {
       throw new Error(
-        "Permissão negada. Apenas administradores e proprietários podem zerar o sistema."
+        "Permissão negada. Apenas administradores e proprietários podem zerar o sistema.",
       );
     }
 
@@ -161,7 +162,11 @@ export const verifyAndResetSystem = createServerFn({ method: "POST" })
       throw new Error("Solicitação de reset não encontrada. Por favor, solicite um novo código.");
     }
 
-    const config = featureRow.config as { code?: string; expiresAt?: string; email?: string } | null;
+    const config = featureRow.config as {
+      code?: string;
+      expiresAt?: string;
+      email?: string;
+    } | null;
 
     if (!config || !config.code || !config.expiresAt) {
       throw new Error("Configuração de segurança corrompida. Por favor, solicite um novo código.");
@@ -176,10 +181,12 @@ export const verifyAndResetSystem = createServerFn({ method: "POST" })
       throw new Error("Código de segurança expirado. Solicite um novo código.");
     }
 
-    console.log(`[SYSTEM RESET] Commencing reset for company ${companyId} initiated by user ${userId}`);
+    console.log(
+      `[SYSTEM RESET] Commencing reset for company ${companyId} initiated by user ${userId}`,
+    );
 
     // 4) Delete all transactional data for the company in dependency order
-    
+
     // a) Financial Transactions
     await supabaseAdmin.from("financial_transactions").delete().eq("company_id", companyId);
 
@@ -224,7 +231,7 @@ export const verifyAndResetSystem = createServerFn({ method: "POST" })
         is_default: true,
         active: true,
         cadence_offsets: [-7, -3, 0, 7],
-        category: "retorno"
+        category: "retorno",
       },
       {
         company_id: companyId,
@@ -236,8 +243,8 @@ export const verifyAndResetSystem = createServerFn({ method: "POST" })
         is_default: true,
         active: true,
         cadence_offsets: [0, 7, 15],
-        category: "reativacao"
-      }
+        category: "reativacao",
+      },
     ]);
 
     // h) Notifications and audit logs
@@ -277,7 +284,7 @@ export const verifyAndResetSystem = createServerFn({ method: "POST" })
     await supabaseAdmin
       .from("company_features")
       .update({
-        config: {}
+        config: {},
       })
       .eq("company_id", companyId)
       .eq("feature", "system_reset");

@@ -94,8 +94,22 @@ function addDays(d: Date, n: number) {
   return c;
 }
 
+interface LoaderData {
+  company: {
+    id: string;
+    name: string;
+    slug: string | null;
+    logo_url: string | null;
+    address: string | null;
+    city: string | null;
+    state: string | null;
+    vertical: string | null;
+    phone?: string | null;
+  };
+}
+
 function BookingPage() {
-  const { company } = Route.useLoaderData() as any;
+  const { company } = Route.useLoaderData() as LoaderData;
   const [step, setStep] = useState<Step>("service");
 
   const [services, setServices] = useState<Service[]>([]);
@@ -161,9 +175,10 @@ function BookingPage() {
       const from = new Date(dateCursor);
       from.setHours(0, 0, 0, 0);
       const to = addDays(from, 7);
-      
+
       try {
-        const { data, error } = await supabase.rpc("get_public_busy_slots" as any, {
+        // @ts-expect-error get_public_busy_slots RPC type not regenerated yet
+        const { data, error } = await supabase.rpc("get_public_busy_slots", {
           p_company_id: company.id,
           p_from: from.toISOString(),
           p_to: to.toISOString(),
@@ -171,17 +186,25 @@ function BookingPage() {
         });
 
         if (error) throw error;
-        
+
+        interface PublicBusySlot {
+          start_datetime: string;
+          end_datetime: string;
+          professional_id: string;
+        }
+
+        const busySlots = (data as unknown as PublicBusySlot[]) ?? [];
+
         setBusy(
-          (data ?? []).map((r: any) => ({
-            start: r.start_datetime as string,
-            end: r.end_datetime as string,
+          busySlots.map((r) => ({
+            start: r.start_datetime,
+            end: r.end_datetime,
             professional_id: r.professional_id,
           })),
         );
-      } catch (err: any) {
+      } catch (err) {
         console.error(err);
-        toast.error(err.message || "Erro ao carregar horários ocupados.");
+        toast.error((err as Error).message || "Erro ao carregar horários ocupados.");
       } finally {
         setLoadingSlots(false);
       }
@@ -229,8 +252,9 @@ function BookingPage() {
     setSubmitting(true);
     try {
       const phoneNorm = toStoragePhone(phone) ?? phone;
-      
-      const { data, error } = await supabase.rpc("create_online_booking" as any, {
+
+      // @ts-expect-error create_online_booking RPC type not regenerated yet
+      const { data, error } = await supabase.rpc("create_online_booking", {
         p_data: {
           p_company_id: company.id,
           p_client_name: name.trim(),
@@ -240,16 +264,16 @@ function BookingPage() {
           p_professional_id: professional?.id ?? null,
           p_start_time: selectedTime,
           p_notes: notes.trim() || null,
-        }
+        },
       });
 
       if (error) throw error;
 
       setConfirmation({ when: new Date(selectedTime) });
       setStep("done");
-    } catch (e: any) {
+    } catch (e) {
       console.error(e);
-      toast.error(e?.message || "Não foi possível agendar. Tente outro horário.");
+      toast.error((e as Error).message || "Não foi possível agendar. Tente outro horário.");
     } finally {
       setSubmitting(false);
     }
@@ -266,7 +290,8 @@ function BookingPage() {
               className="h-8 w-8 -ml-1 rounded-full text-muted-foreground hover:text-foreground flex-shrink-0"
               onClick={() => {
                 if (step === "professional") setStep("service");
-                else if (step === "time") setStep(professionals.length > 0 ? "professional" : "service");
+                else if (step === "time")
+                  setStep(professionals.length > 0 ? "professional" : "service");
                 else if (step === "info") setStep("time");
               }}
             >
@@ -327,15 +352,15 @@ function BookingPage() {
               <>
                 <ul className="space-y-2">
                   {services.map((s) => {
-                    const isSelected = selectedServices.some(item => item.id === s.id);
+                    const isSelected = selectedServices.some((item) => item.id === s.id);
                     return (
                       <li key={s.id}>
                         <button
                           onClick={() => {
-                            setSelectedServices(prev => {
-                              const exists = prev.some(item => item.id === s.id);
+                            setSelectedServices((prev) => {
+                              const exists = prev.some((item) => item.id === s.id);
                               if (exists) {
-                                return prev.filter(item => item.id !== s.id);
+                                return prev.filter((item) => item.id !== s.id);
                               } else {
                                 return [...prev, s];
                               }
@@ -343,13 +368,17 @@ function BookingPage() {
                           }}
                           className="w-full text-left"
                         >
-                          <Card className={`p-4 transition flex items-center gap-3 border ${isSelected ? "border-primary bg-primary/5" : "hover:border-primary/40"}`}>
+                          <Card
+                            className={`p-4 transition flex items-center gap-3 border ${isSelected ? "border-primary bg-primary/5" : "hover:border-primary/40"}`}
+                          >
                             <div className="h-10 w-10 rounded-lg bg-secondary grid place-items-center text-primary">
                               <Scissors className="h-4 w-4" />
                             </div>
                             <div className="min-w-0 flex-1">
                               <p className="font-medium truncate">{s.name}</p>
-                              <p className="text-xs text-muted-foreground">{s.duration_minutes} min</p>
+                              <p className="text-xs text-muted-foreground">
+                                {s.duration_minutes} min
+                              </p>
                             </div>
                             <div className="flex items-center gap-2">
                               <span className="font-semibold text-primary tabular-nums">
@@ -375,7 +404,8 @@ function BookingPage() {
                     disabled={selectedServices.length === 0}
                     className="w-full h-11"
                   >
-                    Avançar com {selectedServices.length} {selectedServices.length === 1 ? "serviço" : "serviços"}
+                    Avançar com {selectedServices.length}{" "}
+                    {selectedServices.length === 1 ? "serviço" : "serviços"}
                   </Button>
                 </div>
               </>
@@ -518,7 +548,9 @@ function BookingPage() {
             <h2 className="text-lg font-semibold mb-3">Seus dados</h2>
             <Card className="p-4 mb-4 bg-accent/40 space-y-3">
               <div>
-                <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Serviços Selecionados</div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
+                  Serviços Selecionados
+                </div>
                 <div className="mt-1.5 space-y-2 max-h-40 overflow-y-auto">
                   {selectedServices.map((s) => (
                     <div key={s.id} className="flex justify-between items-center text-sm">
@@ -527,14 +559,20 @@ function BookingPage() {
                         <span className="truncate">{s.name}</span>
                       </div>
                       <span className="text-xs text-muted-foreground flex-shrink-0 ml-2">
-                        {s.duration_minutes} min · <span className="font-semibold text-foreground">{formatBRL(Number(s.price))}</span>
+                        {s.duration_minutes} min ·{" "}
+                        <span className="font-semibold text-foreground">
+                          {formatBRL(Number(s.price))}
+                        </span>
                       </span>
                     </div>
                   ))}
                 </div>
               </div>
               <div className="border-t pt-2 flex justify-between items-center text-xs uppercase tracking-wider text-muted-foreground font-semibold">
-                <span>Total ({selectedServices.length} {selectedServices.length === 1 ? "serviço" : "serviços"}) · {totalDuration} min</span>
+                <span>
+                  Total ({selectedServices.length}{" "}
+                  {selectedServices.length === 1 ? "serviço" : "serviços"}) · {totalDuration} min
+                </span>
                 <span className="text-sm font-bold text-foreground">{formatBRL(totalPrice)}</span>
               </div>
               <div className="border-t pt-2 space-y-1.5 text-sm">

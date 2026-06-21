@@ -47,7 +47,9 @@ export function useCurrentProfile() {
       if (profile?.company_id) {
         const { data: companyRow } = await supabase
           .from("companies")
-          .select("id, name, plan, onboarding_completed, vertical, whatsapp, whatsapp_template, email, slug")
+          .select(
+            "id, name, plan, onboarding_completed, vertical, whatsapp, whatsapp_template, email, slug",
+          )
           .eq("id", profile.company_id)
           .maybeSingle();
         company = (companyRow as CurrentProfile["company"]) ?? null;

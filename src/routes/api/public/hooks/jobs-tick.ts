@@ -23,7 +23,7 @@ function authorized(request: Request): boolean {
 
 async function handle(request: Request) {
   if (!authorized(request)) return json({ ok: false, error: "forbidden" }, 403);
-  
+
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { runWorker } = await import("@/lib/api/worker.server");
 

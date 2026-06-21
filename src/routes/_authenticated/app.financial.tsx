@@ -134,7 +134,7 @@ function FinancialPage() {
 
   const chartData = useMemo(() => {
     const rows = list.data ?? [];
-    
+
     if (period === "today") {
       const hours = ["08:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00"];
       const map = new Map<string, { date: string; Entradas: number; Saídas: number }>();
@@ -152,7 +152,7 @@ function FinancialPage() {
         else if (hr < 17) label = "16:00";
         else if (hr < 19) label = "18:00";
         else label = "20:00";
-        
+
         const val = map.get(label);
         if (val) {
           if (r.type === "INCOME") val.Entradas += Number(r.amount);
@@ -161,12 +161,12 @@ function FinancialPage() {
       }
       return [...map.values()];
     }
-    
+
     if (period === "week" || period === "month") {
       const map = new Map<string, { date: string; Entradas: number; Saídas: number }>();
       const start = new Date(range.from + "T00:00:00");
       const end = new Date(range.to + "T00:00:00");
-      
+
       let cur = new Date(start);
       while (cur <= end) {
         const key = cur.toISOString().slice(0, 10);
@@ -174,7 +174,7 @@ function FinancialPage() {
         map.set(key, { date: label, Entradas: 0, Saídas: 0 });
         cur.setDate(cur.getDate() + 1);
       }
-      
+
       for (const r of rows) {
         const key = r.transaction_date;
         const val = map.get(key);
@@ -185,14 +185,27 @@ function FinancialPage() {
       }
       return [...map.values()];
     }
-    
+
     if (period === "year") {
       const map = new Map<number, { date: string; Entradas: number; Saídas: number }>();
-      const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+      const monthNames = [
+        "Jan",
+        "Fev",
+        "Mar",
+        "Abr",
+        "Mai",
+        "Jun",
+        "Jul",
+        "Ago",
+        "Set",
+        "Out",
+        "Nov",
+        "Dez",
+      ];
       for (let m = 0; m < 12; m++) {
         map.set(m, { date: monthNames[m], Entradas: 0, Saídas: 0 });
       }
-      
+
       for (const r of rows) {
         const dt = new Date(r.transaction_date + "T00:00:00");
         const m = dt.getMonth();
@@ -204,7 +217,7 @@ function FinancialPage() {
       }
       return [...map.values()];
     }
-    
+
     return [];
   }, [list.data, period, range]);
 
@@ -237,8 +250,7 @@ function FinancialPage() {
   }, [list.data, typeFilter, search]);
 
   const goal = Number((profile?.company as any)?.monthly_revenue_goal ?? 0);
-  const goalPct =
-    goal > 0 ? Math.min(100, Math.round(((summary.income ?? 0) / goal) * 100)) : 0;
+  const goalPct = goal > 0 ? Math.min(100, Math.round(((summary.income ?? 0) / goal) * 100)) : 0;
 
   function exportCSV() {
     const rows = filtered.map((r: any) =>
@@ -271,11 +283,7 @@ function FinancialPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Tabs
-            value={period}
-            onValueChange={(v) => setPeriod(v as Period)}
-            className="w-auto"
-          >
+          <Tabs value={period} onValueChange={(v) => setPeriod(v as Period)} className="w-auto">
             <TabsList>
               <TabsTrigger value="today">Hoje</TabsTrigger>
               <TabsTrigger value="week">Semana</TabsTrigger>
@@ -327,7 +335,9 @@ function FinancialPage() {
       {summary.profit < 0 && (
         <Card className="p-4 border-destructive/40 bg-destructive/5 flex items-center gap-3 animate-pulse">
           <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
-          <p className="text-sm font-medium">Atenção: suas despesas superaram suas receitas neste período.</p>
+          <p className="text-sm font-medium">
+            Atenção: suas despesas superaram suas receitas neste período.
+          </p>
         </Card>
       )}
 
@@ -335,7 +345,10 @@ function FinancialPage() {
       <Card className="p-5 shadow-soft hover:shadow-md transition-shadow">
         <div className="flex items-center justify-between gap-3 mb-3">
           <div className="flex items-center gap-2">
-            <Target className="h-4 w-4 text-primary animate-spin" style={{ animationDuration: '6s' }} />
+            <Target
+              className="h-4 w-4 text-primary animate-spin"
+              style={{ animationDuration: "6s" }}
+            />
             <h2 className="font-semibold text-[15px]">Meta de faturamento do mês</h2>
           </div>
           <Button variant="ghost" size="sm" onClick={() => setGoalOpen(true)}>
@@ -350,7 +363,9 @@ function FinancialPage() {
               </p>
               <p className="text-sm text-muted-foreground">
                 de {formatBRL(goal)}{" "}
-                <span className="font-semibold text-primary">· {goalPct}% (período vs meta mensal)</span>
+                <span className="font-semibold text-primary">
+                  · {goalPct}% (período vs meta mensal)
+                </span>
               </p>
             </div>
             <Progress value={goalPct} className="h-2" />
@@ -364,7 +379,9 @@ function FinancialPage() {
 
       {/* Cash flow chart */}
       <Card className="p-5 shadow-soft hover:shadow-md transition-shadow">
-        <h2 className="font-semibold text-[15px] mb-3">Fluxo de caixa · {periodLabel(period).toLowerCase()}</h2>
+        <h2 className="font-semibold text-[15px] mb-3">
+          Fluxo de caixa · {periodLabel(period).toLowerCase()}
+        </h2>
         <div className="h-56">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData}>

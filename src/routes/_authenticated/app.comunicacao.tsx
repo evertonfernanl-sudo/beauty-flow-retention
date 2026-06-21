@@ -84,7 +84,9 @@ export function ComunicacaoPage() {
                 variant="outline"
                 className="h-8 shadow-sm flex-shrink-0"
                 onClick={() => {
-                  navigator.clipboard.writeText(`${window.location.origin}/agendar/${profile.company!.slug!}`);
+                  navigator.clipboard.writeText(
+                    `${window.location.origin}/agendar/${profile.company!.slug!}`,
+                  );
                   toast.success("Link copiado!");
                 }}
               >
@@ -329,7 +331,8 @@ function CampaignsPanel() {
   const [templateId, setTemplateId] = useState<string>("");
   const [body, setBody] = useState("");
 
-  const shouldRestrictRecurrence = profile?.role === "employee" && !profile?.permissions?.view_all_recurrence;
+  const shouldRestrictRecurrence =
+    profile?.role === "employee" && !profile?.permissions?.view_all_recurrence;
 
   const { data: myProfessional } = useQuery({
     enabled: !!companyId && shouldRestrictRecurrence,
@@ -370,7 +373,13 @@ function CampaignsPanel() {
   });
 
   const clientsQ = useQuery({
-    queryKey: ["campaign-clients", companyId, segment, shouldRestrictRecurrence, restrictedClientIds],
+    queryKey: [
+      "campaign-clients",
+      companyId,
+      segment,
+      shouldRestrictRecurrence,
+      restrictedClientIds,
+    ],
     enabled: !!companyId && (!shouldRestrictRecurrence || restrictedClientIds !== undefined),
     queryFn: async () => {
       let query = supabase
