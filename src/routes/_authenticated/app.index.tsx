@@ -20,6 +20,7 @@ import {
   DollarSign,
   RefreshCw,
   Receipt,
+  TrendingDown,
   TrendingUp,
   Users,
 } from "lucide-react";
@@ -208,8 +209,10 @@ function VisaoGeral() {
 
       return {
         revenue,
+        expense,
         profit,
         revenuePrev,
+        expensePrev,
         profitPrev,
         appointments: inPeriod.length,
         appointmentsPrev: inPrev.length,
@@ -255,13 +258,21 @@ function VisaoGeral() {
       </header>
 
       {/* KPI grid */}
-      <section className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <section className="grid gap-3 sm:gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
         <Kpi
           icon={DollarSign}
           label="Receita"
           value={loading ? null : formatBRL(data?.revenue ?? 0)}
           delta={pct(data?.revenue, data?.revenuePrev)}
           accent
+        />
+        <Kpi
+          icon={TrendingDown}
+          label="Despesa"
+          value={loading ? null : formatBRL(data?.expense ?? 0)}
+          delta={pct(data?.expense, data?.expensePrev)}
+          tone="warn"
+          invertDelta
         />
         <Kpi
           icon={TrendingUp}
@@ -493,6 +504,7 @@ function Kpi({
   delta,
   tone = "default",
   accent,
+  invertDelta = false,
 }: {
   icon: any;
   label: string;
@@ -500,8 +512,10 @@ function Kpi({
   delta?: number | null;
   tone?: "default" | "warn";
   accent?: boolean;
+  invertDelta?: boolean;
 }) {
   const positive = (delta ?? 0) >= 0;
+  const isGood = invertDelta ? !positive : positive;
   return (
     <Card
       className={`p-4 shadow-soft transition-all hover:shadow-md ${
@@ -528,7 +542,7 @@ function Kpi({
       {delta !== null && delta !== undefined && (
         <div
           className={`mt-2 inline-flex items-center gap-1 text-[11px] font-medium ${
-            positive ? "text-success" : "text-destructive"
+            isGood ? "text-success" : "text-destructive"
           }`}
         >
           {positive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
