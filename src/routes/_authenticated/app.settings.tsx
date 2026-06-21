@@ -463,17 +463,10 @@ function UsersTab({
     enabled: !!companyId,
     queryKey: ["members", companyId],
     queryFn: async () => {
-      let rolesRes = await supabase
+      const rolesRes = await supabase
         .from("user_roles")
         .select("user_id, role, permissions")
         .eq("company_id", companyId!);
-
-      if (rolesRes.error) {
-        rolesRes = await supabase
-          .from("user_roles")
-          .select("user_id, role")
-          .eq("company_id", companyId!);
-      }
 
       const roles = rolesRes.data;
       if (!roles?.length) return [];
@@ -788,7 +781,7 @@ function UsersTab({
                             company_id: companyId,
                             user_id: m.user_id,
                             name: m.profile?.name || "Profissional",
-                            email: m.profile?.email,
+                            email: m.profile?.email ?? null,
                             active: checked
                           });
                         if (error) {
