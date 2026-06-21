@@ -875,8 +875,64 @@ async function runImportParse(
             ? "review"
             : "manual";
 
-      if (status === "matched") matched++;
-      else if (status === "review") review++;
+      // Duplicate detection
+      let isDuplicate = false;
+      if (amount != null && occurred) {
+        if (isExpense) {
+          let query = admin
+            .from("financial_transactions")
+            .select("id")
+            .eq("company_id", job.company_id)
+            .eq("type", "EXPENSE")
+            .eq("amount", amount)
+            .eq("transaction_date", occurred);
+          if (description) {
+            query = query.ilike("description", description);
+          }
+          const { data: dupTx } = await query.limit(1);
+          if (dupTx && dupTx.length > 0) {
+            isDuplicate = true;
+          }
+        } else {
+          if (clientId) {
+            const startOfDay = `${occurred}T00:00:00.000Z`;
+            const endOfDay = `${occurred}T23:59:59.999Z`;
+            const { data: dupApp } = await admin
+              .from("appointments")
+              .select("id")
+              .eq("company_id", job.company_id)
+              .eq("client_id", clientId)
+              .eq("price", amount)
+              .gte("start_datetime", startOfDay)
+              .lte("start_datetime", endOfDay)
+              .limit(1);
+            if (dupApp && dupApp.length > 0) {
+              isDuplicate = true;
+            }
+          }
+          if (!isDuplicate) {
+            let query = admin
+              .from("financial_transactions")
+              .select("id")
+              .eq("company_id", job.company_id)
+              .eq("type", "INCOME")
+              .eq("amount", amount)
+              .eq("transaction_date", occurred);
+            if (description) {
+              query = query.ilike("description", description);
+            }
+            const { data: dupTx } = await query.limit(1);
+            if (dupTx && dupTx.length > 0) {
+              isDuplicate = true;
+            }
+          }
+        }
+      }
+
+      const finalStatus = isDuplicate ? "review" : status;
+
+      if (finalStatus === "matched") matched++;
+      else if (finalStatus === "review") review++;
 
       // Retain only mapped columns for raw data
       const cleanRaw: Record<string, unknown> = {};
@@ -901,6 +957,7 @@ async function runImportParse(
           occurred,
           paymentMethod,
           isExpense,
+          isDuplicate,
         } as never,
         client_name: name || null,
         client_phone: phoneApi,
@@ -913,12 +970,14 @@ async function runImportParse(
         resolved_offering_id: offeringId,
         resolved_offering_kind: offeringKind,
         confidence,
-        status,
-        notes: isExpense
-          ? "Despesa automática detectada"
-          : offeringLabel
-            ? `Sugestão: ${offeringLabel}`
-            : null,
+        status: finalStatus,
+        notes: isDuplicate
+          ? "Possível duplicidade: já existe um lançamento com o mesmo valor e data."
+          : (isExpense
+              ? "Despesa automática detectada"
+              : offeringLabel
+                ? `Sugestão: ${offeringLabel}`
+                : null),
       });
       if (rowErr) {
         failed++;

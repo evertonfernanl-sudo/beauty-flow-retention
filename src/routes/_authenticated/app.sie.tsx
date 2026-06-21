@@ -305,8 +305,32 @@ type Row = {
     occurred?: string;
     paymentMethod?: string;
     isExpense?: boolean;
+    isDuplicate?: boolean;
   };
 };
+
+function RowStatusBadge({ status, isDuplicate }: { status: string; isDuplicate?: boolean }) {
+  const map: Record<string, { label: string; className: string }> = {
+    pending: { label: "Pendente", className: "bg-gray-100 text-gray-800 border-gray-200" },
+    matched: { label: "Mapeado", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+    review: { 
+      label: isDuplicate ? "Duplicado?" : "Revisar", 
+      className: isDuplicate 
+        ? "bg-amber-50 text-amber-700 border-amber-200 animate-pulse font-semibold" 
+        : "bg-amber-50 text-amber-700 border-amber-200" 
+    },
+    manual: { label: "Manual", className: "bg-blue-50 text-blue-700 border-blue-200" },
+    applied: { label: "Aplicado", className: "bg-emerald-100 text-emerald-800 border-emerald-200" },
+    skipped: { label: "Recusado", className: "bg-rose-50 text-rose-700 border-rose-200" },
+    failed: { label: "Falhou", className: "bg-rose-100 text-rose-800 border-rose-200" },
+  };
+  const m = map[status] ?? { label: status, className: "bg-gray-100 text-gray-800" };
+  return (
+    <Badge variant="outline" className={m.className}>
+      {m.label}
+    </Badge>
+  );
+}
 
 function ImportReview({ importId, status }: { importId: string; status: string }) {
   const qc = useQueryClient();
@@ -336,7 +360,7 @@ function ImportReview({ importId, status }: { importId: string; status: string }
     qc.invalidateQueries({ queryKey: ["sie-imports"] });
   }, [rows.data, qc]);
 
-  const checkableRows = rows.data?.filter((r) => r.status !== "applied") ?? [];
+  const checkableRows = rows.data?.filter((r) => r.status !== "applied" && r.status !== "skipped") ?? [];
   const allChecked = checkableRows.length > 0 && checkableRows.every((r) => selectedRowIds.has(r.id));
   const someChecked = checkableRows.length > 0 && checkableRows.some((r) => selectedRowIds.has(r.id)) && !allChecked;
 
@@ -414,6 +438,23 @@ function ImportReview({ importId, status }: { importId: string; status: string }
       qc.invalidateQueries({ queryKey: ["sie-rows", importId] });
     } catch (e) {
       toast.error((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function refuse(id: string) {
+    setBusy(`refuse-${id}`);
+    try {
+      const { error } = await supabase
+        .from("import_rows")
+        .update({ status: "skipped" })
+        .eq("id", id);
+      if (error) throw error;
+      toast.success("Lançamento recusado.");
+      qc.invalidateQueries({ queryKey: ["sie-rows", importId] });
+    } catch (e) {
+      toast.error("Erro ao recusar: " + (e as Error).message);
     } finally {
       setBusy(null);
     }
@@ -502,22 +543,37 @@ function ImportReview({ importId, status }: { importId: string; status: string }
             {(rows.data ?? []).map((r) => {
               const isExpense = r.parsed?.isExpense ?? false;
               return (
-                <tr key={r.id} className="border-t">
+                <tr key={r.id} className="border-t animate-fade-in hover:bg-muted/10 transition-colors">
                   <td className="p-1 w-8 text-center">
-                    {r.status !== "applied" ? (
+                    {r.status !== "applied" && r.status !== "skipped" ? (
                       <Checkbox
                         checked={selectedRowIds.has(r.id)}
                         onCheckedChange={(checked) => handleSelectRow(r.id, !!checked)}
                         aria-label={`Selecionar linha ${r.row_index}`}
                       />
+                    ) : r.status === "applied" ? (
+                      <div className="text-emerald-500 font-bold text-center" title="Lançamento Aplicado">✓</div>
                     ) : (
-                      <div className="text-emerald-500 font-bold text-center">✓</div>
+                      <div className="text-rose-500 font-bold text-center" title="Lançamento Recusado">✗</div>
                     )}
                   </td>
-                  <td className="p-1">{r.client_name || "—"}</td>
-                  <td className="p-1">{r.client_phone ? formatPhoneBR(r.client_phone) : "—"}</td>
-                  <td className="p-1 max-w-[200px] truncate" title={r.description ?? ""}>
-                    {r.description ?? "—"}
+                  <td className="p-1 font-medium">{r.client_name || "—"}</td>
+                  <td className="p-1 tabular-nums">{r.client_phone ? formatPhoneBR(r.client_phone) : "—"}</td>
+                  <td className="p-1 max-w-[200px]">
+                    <div className="font-medium truncate" title={r.description ?? ""}>
+                      {r.description ?? "—"}
+                    </div>
+                    {r.notes && (
+                      <div
+                        className={`text-[10px] flex items-center gap-1 mt-0.5 ${
+                          r.parsed?.isDuplicate ? "text-amber-600 font-semibold" : "text-muted-foreground"
+                        }`}
+                        title={r.notes}
+                      >
+                        {r.parsed?.isDuplicate && <AlertTriangle className="h-3 w-3 shrink-0 animate-bounce" />}
+                        <span className="truncate">{r.notes}</span>
+                      </div>
+                    )}
                   </td>
                   <td className="p-1">
                     <div className="flex items-center gap-1.5">
@@ -525,7 +581,7 @@ function ImportReview({ importId, status }: { importId: string; status: string }
                         id={`type-switch-${r.id}`}
                         checked={isExpense}
                         onCheckedChange={() => toggleIsExpense(r)}
-                        disabled={r.status === "applied" || busy != null}
+                        disabled={r.status === "applied" || r.status === "skipped" || busy != null}
                       />
                       <Label
                         htmlFor={`type-switch-${r.id}`}
@@ -545,18 +601,36 @@ function ImportReview({ importId, status }: { importId: string; status: string }
                     <ConfidenceChip value={r.confidence} />
                   </td>
                   <td className="p-1">
-                    <Badge variant="outline">{r.status}</Badge>
+                    <RowStatusBadge status={r.status} isDuplicate={r.parsed?.isDuplicate} />
                   </td>
                   <td className="p-1 text-right">
-                    {r.status !== "applied" && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={busy === r.id}
-                        onClick={() => approve(r.id)}
-                      >
-                        {busy === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Aplicar"}
-                      </Button>
+                    {r.status !== "applied" && r.status !== "skipped" && (
+                      <div className="flex justify-end gap-1.5">
+                        <Button
+                          size="sm"
+                          variant={r.parsed?.isDuplicate ? "default" : "ghost"}
+                          className={
+                            r.parsed?.isDuplicate 
+                              ? "bg-amber-500 text-white hover:bg-amber-600 shadow-sm" 
+                              : "hover:bg-primary/10 hover:text-primary"
+                          }
+                          disabled={busy !== null}
+                          onClick={() => approve(r.id)}
+                          title="Confirmar lançamento"
+                        >
+                          {busy === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Confirmar"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 font-medium"
+                          disabled={busy !== null}
+                          onClick={() => refuse(r.id)}
+                          title="Recusar lançamento"
+                        >
+                          {busy === `refuse-${r.id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : "Recusar"}
+                        </Button>
+                      </div>
                     )}
                   </td>
                 </tr>
