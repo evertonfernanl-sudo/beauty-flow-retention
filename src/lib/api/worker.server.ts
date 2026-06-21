@@ -1078,11 +1078,23 @@ async function runImportApplyRow(
         .maybeSingle();
       if (fallbackService) {
         serviceId = fallbackService.id;
+      } else {
+        // Auto-create a default service if none exists
+        const { data: newService, error: serviceErr } = await admin
+          .from("services")
+          .insert({
+            company_id: companyId,
+            name: "Atendimento Importado",
+            duration_minutes: 60,
+            price: row.amount ?? 100.00,
+            return_days: 30,
+            active: true
+          })
+          .select("id")
+          .single();
+        if (serviceErr) throw new Error(`Não foi possível criar o serviço automático: ${serviceErr.message}`);
+        serviceId = newService.id;
       }
-    }
-
-    if (!serviceId) {
-      throw new Error("Não foi possível encontrar um serviço ativo para vincular ao agendamento");
     }
 
     const start = row.occurred_at ? new Date(`${row.occurred_at}T12:00:00Z`) : new Date();
@@ -1097,7 +1109,7 @@ async function runImportApplyRow(
         end_datetime: end.toISOString(),
         status: "COMPLETED",
         price: row.amount,
-        source: "import",
+        source: "ADMIN",
         completed_at: start.toISOString(),
         notes: (() => {
           let n = row.description ?? "";
