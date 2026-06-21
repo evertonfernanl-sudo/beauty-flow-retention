@@ -1046,21 +1046,64 @@ async function runImportApplyRow(
 
   if (!clientId) {
     const nameToUse = row.client_name || "Cliente Importado";
-    const { data: c, error: ce } = await admin
+    const phoneToUse = row.client_phone ?? null;
+    const phone2ToUse = row.client_phone2 ?? null;
+
+    // Search by exact name (case-insensitive) to prevent duplicate client registrations
+    const { data: byName } = await admin
       .from("clients")
-      .insert({
-        company_id: companyId,
-        name: nameToUse,
-        phone: row.client_phone ?? null,
-        phone2: row.client_phone2 ?? null,
-        status: "ACTIVE",
-        notes: "Criado pela importação",
-      })
       .select("id")
-      .single();
-    if (ce) throw new Error(`cliente: ${ce.message}`);
-    clientId = c.id;
-    createdClient = true;
+      .eq("company_id", companyId)
+      .ilike("name", nameToUse)
+      .limit(1);
+
+    if (byName && byName.length > 0) {
+      clientId = byName[0].id;
+    }
+
+    // If not found by name, and phone exists, check phone
+    if (!clientId && phoneToUse) {
+      const { data: byPhone } = await admin
+        .from("clients")
+        .select("id")
+        .eq("company_id", companyId)
+        .or(`phone.eq.${phoneToUse},phone2.eq.${phoneToUse}`)
+        .limit(1);
+      if (byPhone && byPhone.length > 0) {
+        clientId = byPhone[0].id;
+      }
+    }
+
+    // If not found by name/phone, and phone2 exists, check phone2
+    if (!clientId && phone2ToUse) {
+      const { data: byPhone2 } = await admin
+        .from("clients")
+        .select("id")
+        .eq("company_id", companyId)
+        .or(`phone.eq.${phone2ToUse},phone2.eq.${phone2ToUse}`)
+        .limit(1);
+      if (byPhone2 && byPhone2.length > 0) {
+        clientId = byPhone2[0].id;
+      }
+    }
+
+    if (!clientId) {
+      const { data: c, error: ce } = await admin
+        .from("clients")
+        .insert({
+          company_id: companyId,
+          name: nameToUse,
+          phone: phoneToUse,
+          phone2: phone2ToUse,
+          status: "ACTIVE",
+          notes: "Criado pela importação",
+        })
+        .select("id")
+        .single();
+      if (ce) throw new Error(`cliente: ${ce.message}`);
+      clientId = c.id;
+      createdClient = true;
+    }
   }
 
   let appointmentId: string | null = null;
@@ -1139,6 +1182,53 @@ async function runImportApplyRow(
       .select("id")
       .maybeSingle();
     transactionId = tx?.id ?? null;
+
+    // Fetch return days from service
+    const { data: svc } = await admin
+      .from("services")
+      .select("return_days, price")
+      .eq("id", serviceId)
+      .single();
+    const returnDays = svc?.return_days ?? 30;
+    const nextReturnDate = new Date(start.getTime() + returnDays * 24 * 60 * 60 * 1000);
+    const nextReturnStr = nextReturnDate.toISOString().slice(0, 10);
+
+    // Fetch current client spent and count
+    const { data: clientObj } = await admin
+      .from("clients")
+      .select("total_spent, appointments_count, last_visit")
+      .eq("id", clientId)
+      .single();
+
+    const currentSpent = Number(clientObj?.total_spent ?? 0);
+    const currentCount = Number(clientObj?.appointments_count ?? 0);
+    const currentLastVisit = clientObj?.last_visit ? new Date(clientObj.last_visit) : null;
+    const shouldUpdateLastVisit = !currentLastVisit || start > currentLastVisit;
+
+    await admin
+      .from("clients")
+      .update({
+        ...(shouldUpdateLastVisit ? {
+          last_visit: start.toISOString(),
+          next_return: nextReturnStr,
+        } : {}),
+        total_spent: currentSpent + (row.amount ?? 0),
+        appointments_count: currentCount + 1,
+        status: "ACTIVE",
+      })
+      .eq("id", clientId);
+
+    // Create next return opportunity
+    await admin
+      .from("return_opportunities")
+      .insert({
+        company_id: companyId,
+        client_id: clientId,
+        service_id: serviceId,
+        expected_return_date: nextReturnStr,
+        estimated_value: row.amount ?? svc?.price ?? 0,
+        status: "ON_TIME",
+      });
   }
 
   // IIL learning
