@@ -181,6 +181,17 @@ const HEADER_MAP: Record<string, RegExp> = {
 
 const isNameHeader = (h: string): boolean => {
   const norm = h.toLowerCase().trim();
+  if (norm.includes("label") || norm.includes("tipo")) {
+    return false;
+  }
+  const exactNames = [
+    "first name", "nome", "favorecido", "beneficiario", "beneficiário", "cliente", 
+    "fornecedor", "pagador", "recebedor", "sacado", "cedente", "contraparte", 
+    "nome favorecido", "nome cliente", "nome destinatario", "nome destinatário", 
+    "destinatario", "destinatário", "description", "receiver", "payee"
+  ];
+  if (exactNames.includes(norm)) return true;
+
   return (
     (norm.includes("nome") || norm.includes("name") || norm.includes("cliente") || norm.includes("client") || norm.includes("contato") || norm.includes("customer")) &&
     !norm.includes("sobre") &&
@@ -196,6 +207,15 @@ const isNameHeader = (h: string): boolean => {
 
 const isPhoneHeader = (h: string): boolean => {
   const norm = h.toLowerCase().trim();
+  if (norm.includes("label") || norm.includes("tipo") || norm.includes("descrição") || norm.includes("descricao")) {
+    return false;
+  }
+  const exactPhones = [
+    "phone 1 - value", "phone 2 - value", "telefone 1 - valor", "telefone 2 - valor",
+    "telefone 1", "telefone 2", "phone 1", "phone 2"
+  ];
+  if (exactPhones.includes(norm)) return true;
+
   return (
     norm.includes("tel") ||
     norm.includes("phone") ||
@@ -209,11 +229,27 @@ const isPhoneHeader = (h: string): boolean => {
 
 const isEmailHeader = (h: string): boolean => {
   const norm = h.toLowerCase().trim();
+  if (norm.includes("label") || norm.includes("tipo")) {
+    return false;
+  }
+  const exactEmails = [
+    "e-mail 1 - value", "email 1 - value", "e-mail 1", "email 1", "email 1 - valor", "e-mail 1 - valor"
+  ];
+  if (exactEmails.includes(norm)) return true;
+
   return norm.includes("email") || norm.includes("e-mail") || (norm.includes("mail") && !norm.includes("name"));
 };
 
 const isAmountHeader = (h: string): boolean => {
   const norm = h.toLowerCase().trim();
+  const exactAmounts = [
+    "valor", "valor r$", "valor (r$)", "valor movimento", "valor movimentado", 
+    "valor operação", "credito", "crédito", "credito (r$)", "crédito (r$)", 
+    "debito", "débito", "debito (r$)", "débito (r$)", "entrada", "saida", "saída", 
+    "amount", "transaction amount"
+  ];
+  if (exactAmounts.includes(norm)) return true;
+
   return (
     norm.includes("valor") ||
     norm.includes("preco") ||
@@ -228,6 +264,14 @@ const isAmountHeader = (h: string): boolean => {
 
 const isDateHeader = (h: string): boolean => {
   const norm = h.toLowerCase().trim();
+  const exactDates = [
+    "data", "data mov", "data movimentacao", "data movimentação", "data lancamento", 
+    "data lançamento", "data operação", "data operacao", "data transacao", 
+    "data transação", "data documento", "dt movimento", "dt mov", "dt lançamento", 
+    "dt lancamento", "movement date", "transaction date"
+  ];
+  if (exactDates.includes(norm)) return true;
+
   return (
     norm.includes("data") ||
     norm.includes("date") ||
@@ -240,6 +284,14 @@ const isDateHeader = (h: string): boolean => {
 
 const isDescriptionHeader = (h: string): boolean => {
   const norm = h.toLowerCase().trim();
+  const exactDescriptions = [
+    "descricao", "descrição", "historico", "histórico", "historico/complemento", 
+    "histórico/complemento", "complemento", "detalhes", "detalhamento", "narrativa", 
+    "observacao", "observação", "descricao lancamento", "descrição lançamento", 
+    "historico transacao", "histórico transação", "transaction description", "memo"
+  ];
+  if (exactDescriptions.includes(norm)) return true;
+
   return (
     norm.includes("descri") ||
     norm.includes("hist") ||
