@@ -179,12 +179,156 @@ const HEADER_MAP: Record<string, RegExp> = {
   payment: /^(pagamento|payment|metodo|método|forma)$/i,
 };
 
+const isNameHeader = (h: string): boolean => {
+  const norm = h.toLowerCase().trim();
+  return (
+    (norm.includes("nome") || norm.includes("name") || norm.includes("cliente") || norm.includes("client") || norm.includes("contato") || norm.includes("customer")) &&
+    !norm.includes("sobre") &&
+    !norm.includes("last") &&
+    !norm.includes("family") &&
+    !norm.includes("mae") &&
+    !norm.includes("mãe") &&
+    !norm.includes("pai") &&
+    !norm.includes("indicacao") &&
+    !norm.includes("indicação")
+  );
+};
+
+const isPhoneHeader = (h: string): boolean => {
+  const norm = h.toLowerCase().trim();
+  return (
+    norm.includes("tel") ||
+    norm.includes("phone") ||
+    norm.includes("cel") ||
+    norm.includes("whats") ||
+    norm.includes("móvel") ||
+    norm.includes("movel") ||
+    norm.includes("mobile")
+  );
+};
+
+const isEmailHeader = (h: string): boolean => {
+  const norm = h.toLowerCase().trim();
+  return norm.includes("email") || norm.includes("e-mail") || (norm.includes("mail") && !norm.includes("name"));
+};
+
+const isAmountHeader = (h: string): boolean => {
+  const norm = h.toLowerCase().trim();
+  return (
+    norm.includes("valor") ||
+    norm.includes("preco") ||
+    norm.includes("preço") ||
+    norm.includes("price") ||
+    norm.includes("amount") ||
+    norm.includes("total") ||
+    norm.includes("quantia") ||
+    norm.includes("vlr")
+  );
+};
+
+const isDateHeader = (h: string): boolean => {
+  const norm = h.toLowerCase().trim();
+  return (
+    norm.includes("data") ||
+    norm.includes("date") ||
+    norm.includes("dia") ||
+    norm.includes("dt") ||
+    norm.includes("quando") ||
+    norm.includes("occurred")
+  );
+};
+
+const isDescriptionHeader = (h: string): boolean => {
+  const norm = h.toLowerCase().trim();
+  return (
+    norm.includes("descri") ||
+    norm.includes("hist") ||
+    norm.includes("lanç") ||
+    norm.includes("lanc") ||
+    norm.includes("memo") ||
+    norm.includes("complemento") ||
+    norm.includes("obs") ||
+    norm.includes("observa") ||
+    norm.includes("servi") ||
+    norm.includes("produto")
+  );
+};
+
+const isPaymentHeader = (h: string): boolean => {
+  const norm = h.toLowerCase().trim();
+  return (
+    norm.includes("pagamento") ||
+    norm.includes("payment") ||
+    norm.includes("metodo") ||
+    norm.includes("método") ||
+    norm.includes("forma")
+  );
+};
+
+function findHeaderRowIndex(rows: unknown[][]): number {
+  let bestIndex = 0;
+  let maxMatches = 0;
+  
+  const limit = Math.min(rows.length, 15);
+  for (let i = 0; i < limit; i++) {
+    const row = rows[i];
+    if (!row || !Array.isArray(row)) continue;
+    
+    let matches = 0;
+    row.forEach(cell => {
+      const cellStr = String(cell ?? "").trim().toLowerCase();
+      if (!cellStr) return;
+      
+      if (
+        isNameHeader(cellStr) ||
+        isPhoneHeader(cellStr) ||
+        isEmailHeader(cellStr) ||
+        isAmountHeader(cellStr) ||
+        isDateHeader(cellStr) ||
+        isDescriptionHeader(cellStr) ||
+        isPaymentHeader(cellStr)
+      ) {
+        matches++;
+      }
+    });
+    
+    if (matches > maxMatches) {
+      maxMatches = matches;
+      bestIndex = i;
+    }
+  }
+  
+  return bestIndex;
+}
+
 function detectColumns(headers: string[]): Record<string, number> {
   const out: Record<string, number> = {};
   headers.forEach((h, i) => {
-    const norm = (h ?? "").toString().trim();
-    for (const [key, re] of Object.entries(HEADER_MAP)) {
-      if (out[key] === undefined && re.test(norm)) out[key] = i;
+    const norm = (h ?? "").toString().trim().toLowerCase();
+    
+    if (out["name"] === undefined && (norm === "cliente" || isNameHeader(norm))) {
+      out["name"] = i;
+    }
+    if (out["phone"] === undefined && (norm === "telefone 1" || isPhoneHeader(norm))) {
+      out["phone"] = i;
+    }
+    if (out["phone2"] === undefined && (norm === "telefone 2" || (isPhoneHeader(norm) && i !== out["phone"]))) {
+      out["phone2"] = i;
+    }
+    if (out["email"] === undefined && isEmailHeader(norm)) {
+      out["email"] = i;
+    }
+    if (out["amount"] === undefined && isAmountHeader(norm)) {
+      out["amount"] = i;
+    }
+    if (out["date"] === undefined && isDateHeader(norm)) {
+      out["date"] = i;
+    }
+    if (out["description"] === undefined && (norm === "descrição" || isDescriptionHeader(norm))) {
+      out["description"] = i;
+    }
+    if (out["payment"] === undefined && isPaymentHeader(norm)) {
+      out["payment"] = i;
     }
   });
   return out;
@@ -193,12 +337,16 @@ function detectColumns(headers: string[]): Record<string, number> {
 function parseAmount(v: unknown): number | null {
   if (v == null || v === "") return null;
   if (typeof v === "number") return Math.round(v * 100) / 100;
-  const s = String(v)
+  const originalStr = String(v).trim();
+  const isNegative = originalStr.startsWith("-") || (originalStr.startsWith("(") && originalStr.endsWith(")"));
+  const s = originalStr
     .replace(/[^\d,.-]/g, "")
     .replace(/\.(?=\d{3}(\D|$))/g, "")
     .replace(",", ".");
   const n = Number(s);
-  return isFinite(n) ? Math.round(n * 100) / 100 : null;
+  if (!isFinite(n)) return null;
+  const val = Math.round(n * 100) / 100;
+  return isNegative ? -Math.abs(val) : val;
 }
 
 function parseDate(v: unknown): string | null {
@@ -210,13 +358,14 @@ function parseDate(v: unknown): string | null {
     if (d) return `${d.y}-${String(d.m).padStart(2, "0")}-${String(d.d).padStart(2, "0")}`;
   }
   const s = String(v).trim();
-  const br = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  const datePart = s.split(/\s+/)[0];
+  const br = datePart.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
   if (br) {
     const [, dd, mm, yy] = br;
     const year = yy.length === 2 ? `20${yy}` : yy;
     return `${year}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
   }
-  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const iso = datePart.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (iso) return iso[0];
   const d = new Date(s);
   return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
@@ -369,53 +518,43 @@ function normalizeAndMapHeaders(rawHeaders: string[]): string[] {
   const cleanHeaders = rawHeaders.map(h => String(h ?? "").trim());
   const lowerHeaders = cleanHeaders.map(h => h.toLowerCase());
   
-  let nameIndex = -1;
-  const nameMatches = ["nome", "name"];
-  const firstNameMatches = ["first name", "given name", "nome próprio", "nome proprio", "cliente", "client"];
-  
-  nameIndex = lowerHeaders.findIndex(h => nameMatches.includes(h));
+  let nameIndex = lowerHeaders.findIndex(h => h === "nome" || h === "name" || h === "cliente" || h === "client");
   if (nameIndex === -1) {
-    nameIndex = lowerHeaders.findIndex(h => firstNameMatches.includes(h));
+    nameIndex = lowerHeaders.findIndex(h => isNameHeader(h));
   }
+
+  let phone1Index = -1;
+  let phone2Index = -1;
+
+  lowerHeaders.forEach((h, idx) => {
+    if (isPhoneHeader(h)) {
+      if (h.includes("1") || h.includes("value") || h.includes("valor")) {
+        if (phone1Index === -1) phone1Index = idx;
+      } else if (h.includes("2")) {
+        if (phone2Index === -1) phone2Index = idx;
+      }
+    }
+  });
+
+  if (phone1Index === -1 || phone2Index === -1) {
+    lowerHeaders.forEach((h, idx) => {
+      if (isPhoneHeader(h) && idx !== phone1Index && idx !== phone2Index) {
+        if (phone1Index === -1) {
+          phone1Index = idx;
+        } else if (phone2Index === -1) {
+          phone2Index = idx;
+        }
+      }
+    });
+  }
+
+  const descIndex = lowerHeaders.findIndex(h => isDescriptionHeader(h));
   
   return cleanHeaders.map((h, i) => {
-    const cleanLower = h.toLowerCase();
-    
-    if (i === nameIndex) {
-      return "cliente";
-    }
-    
-    if (
-      cleanLower === "phone 1 - value" || 
-      cleanLower === "telefone 1 - valor" || 
-      cleanLower === "phone 1" || 
-      cleanLower === "telefone 1" ||
-      cleanLower === "telefone" ||
-      cleanLower === "phone"
-    ) {
-      return "telefone 1";
-    }
-    
-    if (
-      cleanLower === "phone 2 - value" || 
-      cleanLower === "telefone 2 - valor" || 
-      cleanLower === "phone 2" || 
-      cleanLower === "telefone 2"
-    ) {
-      return "telefone 2";
-    }
-    
-    if (
-      cleanLower.includes("descri") ||
-      cleanLower.includes("hist") ||
-      cleanLower.includes("lanç") ||
-      cleanLower.includes("lanc") ||
-      cleanLower === "memo" ||
-      cleanLower === "complemento"
-    ) {
-      return "descrição";
-    }
-    
+    if (i === nameIndex) return "cliente";
+    if (i === phone1Index) return "telefone 1";
+    if (i === phone2Index) return "telefone 2";
+    if (i === descIndex) return "descrição";
     return h;
   });
 }
@@ -428,310 +567,328 @@ async function runImportParse(
 
   if (!import_id || !job.company_id) throw new Error("import.parse: missing import_id/company_id");
 
-  await admin
-    .from("imports")
-    .update({ status: "processing", started_at: new Date().toISOString() })
-    .eq("id", import_id);
+  try {
+    await admin
+      .from("imports")
+      .update({ status: "processing", started_at: new Date().toISOString() })
+      .eq("id", import_id);
 
-  const { data: servicesData } = await admin
-    .from("services")
-    .select("id, name, price")
-    .eq("company_id", job.company_id)
-    .eq("active", true);
-  const activeServices = (servicesData ?? []) as Array<{ id: string; name: string; price: number }>;
+    const { data: servicesData } = await admin
+      .from("services")
+      .select("id, name, price")
+      .eq("company_id", job.company_id)
+      .eq("active", true);
+    const activeServices = (servicesData ?? []) as Array<{ id: string; name: string; price: number }>;
 
-  const { data: clientsData } = await admin
-    .from("clients")
-    .select("id, name")
-    .eq("company_id", job.company_id);
-  const companyClients = (clientsData ?? []) as Array<{ id: string; name: string }>;
+    const { data: clientsData } = await admin
+      .from("clients")
+      .select("id, name")
+      .eq("company_id", job.company_id);
+    const companyClients = (clientsData ?? []) as Array<{ id: string; name: string }>;
 
-  const { data: imp, error: impErr } = await admin
-    .from("imports")
-    .select("id, source, storage_path, company_id")
-    .eq("id", import_id)
-    .single();
-  if (impErr || !imp) throw new Error(impErr?.message ?? "import not found");
-  if (!imp.storage_path) throw new Error("import sem storage_path");
+    const { data: imp, error: impErr } = await admin
+      .from("imports")
+      .select("id, source, storage_path, company_id")
+      .eq("id", import_id)
+      .single();
+    if (impErr || !imp) throw new Error(impErr?.message ?? "import not found");
+    if (!imp.storage_path) throw new Error("import sem storage_path");
 
-  const { data: file, error: dlErr } = await admin.storage
-    .from("imports")
-    .download(imp.storage_path);
-  if (dlErr || !file) throw new Error(`download falhou: ${dlErr?.message}`);
+    const { data: file, error: dlErr } = await admin.storage
+      .from("imports")
+      .download(imp.storage_path);
+    if (dlErr || !file) throw new Error(`download falhou: ${dlErr?.message}`);
 
-  let rows: Record<string, unknown>[] = [];
-  let headers: string[] = [];
+    let rows: Record<string, unknown>[] = [];
+    let headers: string[] = [];
 
-  if (imp.source === "csv") {
-    const text = await file.text();
-    const parsed = Papa.parse<string[]>(text, { skipEmptyLines: true });
-    const data = parsed.data as string[][];
-    if (data.length === 0) throw new Error("CSV vazio");
-    headers = normalizeAndMapHeaders(data[0]);
-    rows = data.slice(1).map((r) => {
-      const o: Record<string, unknown> = {};
-      headers.forEach((h, i) => (o[h] = r[i]));
-      return o;
-    });
-  } else if (imp.source === "xlsx") {
-    const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, { type: "array", cellDates: true });
-    const sheet = wb.Sheets[wb.SheetNames[0]];
-    const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true, defval: null });
-    if (aoa.length === 0) throw new Error("Planilha vazia");
-    headers = normalizeAndMapHeaders(aoa[0] as string[]);
-    rows = aoa.slice(1).map((r) => {
-      const o: Record<string, unknown> = {};
-      headers.forEach((h, i) => (o[h] = (r as unknown[])[i]));
-      return o;
-    });
-  } else if (imp.source === "pdf") {
-    const { extractText, getDocumentProxy } = await import("unpdf");
-    const buf = new Uint8Array(await file.arrayBuffer());
-    const pdf = await getDocumentProxy(buf);
-    const { text } = await extractText(pdf, { mergePages: true });
-    const fullText = Array.isArray(text) ? text.join("\n") : String(text ?? "");
-    if (!fullText.trim()) throw new Error("PDF sem texto extraível (pode ser escaneado).");
-    const parsed = parsePdfTextToRows(fullText);
-    headers = normalizeAndMapHeaders(parsed.headers);
-    rows = parsed.rows.map((r) => {
-      const o: Record<string, unknown> = {};
-      headers.forEach((h, i) => {
-        const origKey = parsed.headers[i];
-        o[h] = r[origKey];
+    if (imp.source === "csv") {
+      const text = await file.text();
+      const parsed = Papa.parse<string[]>(text, { skipEmptyLines: true, delimiter: "" });
+      const data = parsed.data as string[][];
+      if (data.length === 0) throw new Error("CSV vazio");
+      const hIdx = findHeaderRowIndex(data);
+      headers = normalizeAndMapHeaders(data[hIdx]);
+      rows = data.slice(hIdx + 1).map((r) => {
+        const o: Record<string, unknown> = {};
+        headers.forEach((h, i) => (o[h] = r[i]));
+        return o;
       });
-      return o;
-    });
-  } else {
-    throw new Error(`Fonte não suportada nesta fase: ${imp.source}`);
-  }
-
-  const cols = detectColumns(headers);
-  const idx = (k: string) => (cols[k] !== undefined ? headers[cols[k]] : null);
-
-  let total = 0,
-    matched = 0,
-    review = 0,
-    failed = 0,
-    revenue = 0;
-
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i];
-    const nameFromCol = idx("name") ? String(r[idx("name")!] ?? "").trim() : "";
-    const phoneRaw1 = idx("phone") ? String(r[idx("phone")!] ?? "").trim() : "";
-    const phoneRaw2 = idx("phone2") ? String(r[idx("phone2")!] ?? "").trim() : "";
-    const phoneRaw = phoneRaw1 || phoneRaw2;
-    const description = idx("description") ? String(r[idx("description")!] ?? "").trim() : null;
-    const amountRaw = parseAmount(idx("amount") ? r[idx("amount")!] : null);
-    const occurred = parseDate(idx("date") ? r[idx("date")!] : null);
-    const paymentMethod =
-      (idx("payment") ? String(r[idx("payment")!] ?? "").trim() : null) ||
-      detectPaymentMethod(description);
-
-    let name = nameFromCol;
-    let clientId: string | null = null;
-    let clientFound = false;
-
-    // Search description content to find the client name from the database (Brazilian bank statement match style)
-    if (!name && description && companyClients.length > 0) {
-      const descLower = description.toLowerCase();
-      const sortedClients = [...companyClients].sort((a, b) => b.name.length - a.name.length);
-      for (const client of sortedClients) {
-        const clientNameLower = client.name.toLowerCase().trim();
-        if (clientNameLower.length >= 4 && descLower.includes(clientNameLower)) {
-          name = client.name;
-          clientId = client.id;
-          clientFound = true;
-          break;
-        }
-      }
-    }
-
-    if (!clientFound && (name || phoneRaw)) {
-      const { data: dup } = await admin.rpc("find_duplicate_client", {
-        _company_id: job.company_id,
-        _name: name || "",
-        _phone: phoneRaw || "",
-        _threshold: 0.7,
+    } else if (imp.source === "xlsx") {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array", cellDates: true });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true, defval: null });
+      if (aoa.length === 0) throw new Error("Planilha vazia");
+      const hIdx = findHeaderRowIndex(aoa);
+      headers = normalizeAndMapHeaders(aoa[hIdx] as string[]);
+      rows = aoa.slice(hIdx + 1).map((r) => {
+        const o: Record<string, unknown> = {};
+        headers.forEach((h, i) => (o[h] = (r as unknown[])[i]));
+        return o;
       });
-      const first = Array.isArray(dup) ? dup[0] : null;
-      if (first) {
-        clientId = first.id;
-        clientFound = true;
-        if (!name) {
-          name = first.name;
-        }
-      }
-    }
-
-    if (!name && description) {
-      const extracted = extractNameFromDescription(description);
-      if (extracted) {
-        name = extracted;
-      }
-    }
-
-    const isExpense = isExpenseDescription(description) || (amountRaw != null && amountRaw < 0);
-    const amount = amountRaw != null ? Math.abs(amountRaw) : null;
-
-    if (!name && !phoneRaw && amount == null) continue;
-    total++;
-
-    // Normalize phone via RPC for consistency with rest of system
-    let phoneApi: string | null = null;
-    if (phoneRaw1) {
-      const { data: p } = await admin.rpc("normalize_phone", { _phone: phoneRaw1 });
-      phoneApi = (p as string | null) ?? null;
-    }
-    let phoneApi2: string | null = null;
-    if (phoneRaw2) {
-      const { data: p } = await admin.rpc("normalize_phone", { _phone: phoneRaw2 });
-      phoneApi2 = (p as string | null) ?? null;
-    }
-
-    // Offering prediction
-    let offeringId: string | null = null;
-    let offeringKind: string | null = null;
-    let offeringLabel: string | null = null;
-    let amountMatch = false;
-    let descMatch = false;
-    let tenantPattern = false;
-    if (!isExpense && amount != null) {
-      const { data: pred } = await admin.rpc("predict_offering_from_amount", {
-        _company_id: job.company_id,
-        _amount: amount,
+    } else if (imp.source === "pdf") {
+      const { extractText, getDocumentProxy } = await import("unpdf");
+      const buf = new Uint8Array(await file.arrayBuffer());
+      const pdf = await getDocumentProxy(buf);
+      const { text } = await extractText(pdf, { mergePages: true });
+      const fullText = Array.isArray(text) ? text.join("\n") : String(text ?? "");
+      if (!fullText.trim()) throw new Error("PDF sem texto extraível (pode ser escaneado).");
+      const parsed = parsePdfTextToRows(fullText);
+      headers = normalizeAndMapHeaders(parsed.headers);
+      rows = parsed.rows.map((r) => {
+        const o: Record<string, unknown> = {};
+        headers.forEach((h, i) => {
+          const origKey = parsed.headers[i];
+          o[h] = r[origKey];
+        });
+        return o;
       });
-      const p = Array.isArray(pred) ? pred[0] : null;
-      if (p?.entity_id) {
-        offeringId = p.entity_id;
-        offeringKind = p.entity_type;
-        offeringLabel = p.label;
-        amountMatch = true;
-        if (p.reason === "kb_amount") tenantPattern = true;
-      } else if (activeServices.length > 0) {
-        const matchedCombination = findServiceCombination(amount, activeServices);
-        if (matchedCombination && matchedCombination.length > 0) {
-          offeringId = matchedCombination[0].id;
-          offeringKind = "service";
-          offeringLabel = matchedCombination.map((s) => s.name).join(" + ");
-          amountMatch = true;
-        }
-      }
-    }
-    if (!isExpense && description) {
-      const { data: kb } = await admin
-        .from("import_knowledge_base")
-        .select("mapped_entity_id, mapped_entity_type, mapped_label, confidence")
-        .eq("company_id", job.company_id)
-        .eq("pattern_type", "description")
-        .eq("pattern_value", description.toLowerCase())
-        .order("confidence", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (kb?.mapped_entity_id) {
-        descMatch = true;
-        tenantPattern = true;
-        if (!offeringId) {
-          offeringId = kb.mapped_entity_id;
-          offeringKind = kb.mapped_entity_type;
-          offeringLabel = kb.mapped_label;
-        }
-      }
-    }
-
-    let confidence = 0;
-    if (isExpense) {
-      confidence = 95;
     } else {
-      const hasHistory = clientFound;
-      const { data: confData } = await admin.rpc("compute_import_confidence", {
-        _client_found: clientFound,
-        _amount_match: amountMatch,
-        _desc_match: descMatch,
-        _has_history: hasHistory,
-        _tenant_pattern: tenantPattern,
-      });
-      confidence = (confData as number) ?? 0;
+      throw new Error(`Fonte não suportada nesta fase: ${imp.source}`);
     }
 
-    const status =
-      confidence >= 95
-        ? "matched"
-        : confidence >= 70
-          ? "review"
-          : "manual";
+    const cols = detectColumns(headers);
+    const idx = (k: string) => (cols[k] !== undefined ? headers[cols[k]] : null);
 
-    if (status === "matched") matched++;
-    else if (status === "review") review++;
+    let total = 0,
+      matched = 0,
+      review = 0,
+      failed = 0,
+      revenue = 0;
 
-    // Retain only mapped columns for raw data
-    const cleanRaw: Record<string, unknown> = {};
-    for (const [key, index] of Object.entries(cols)) {
-      const hName = headers[index];
-      cleanRaw[hName] = r[hName];
-    }
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const nameFromCol = idx("name") ? String(r[idx("name")!] ?? "").trim() : "";
+      const phoneRaw1 = idx("phone") ? String(r[idx("phone")!] ?? "").trim() : "";
+      const phoneRaw2 = idx("phone2") ? String(r[idx("phone2")!] ?? "").trim() : "";
+      const phoneRaw = phoneRaw1 || phoneRaw2;
+      const description = idx("description") ? String(r[idx("description")!] ?? "").trim() : null;
+      const amountRaw = parseAmount(idx("amount") ? r[idx("amount")!] : null);
+      const occurred = parseDate(idx("date") ? r[idx("date")!] : null);
+      const paymentMethod =
+        (idx("payment") ? String(r[idx("payment")!] ?? "").trim() : null) ||
+        detectPaymentMethod(description);
 
-    const { error: rowErr } = await admin.from("import_rows").insert({
-      import_id,
-      company_id: job.company_id,
-      row_index: i,
-      raw: cleanRaw as never,
-      parsed: {
-        name,
-        phoneRaw: phoneRaw1,
-        phoneRaw2,
-        description,
-        amount,
-        occurred,
-        paymentMethod,
-        isExpense,
-      } as never,
-      client_name: name || null,
-      client_phone: phoneApi,
-      client_phone2: phoneApi2,
-      description,
-      amount,
-      occurred_at: occurred,
-      payment_method: paymentMethod,
-      resolved_client_id: clientId,
-      resolved_offering_id: offeringId,
-      resolved_offering_kind: offeringKind,
-      confidence,
-      status,
-      notes: isExpense
-        ? "Despesa automática detectada"
-        : offeringLabel
-          ? `Sugestão: ${offeringLabel}`
-          : null,
-    });
-    if (rowErr) {
-      failed++;
-      await admin.from("import_errors").insert({
+      let name = nameFromCol;
+      let clientId: string | null = null;
+      let clientFound = false;
+
+      // Search description content to find the client name from the database (Brazilian bank statement match style)
+      if (!name && description && companyClients.length > 0) {
+        const descLower = description.toLowerCase();
+        const sortedClients = [...companyClients].sort((a, b) => b.name.length - a.name.length);
+        for (const client of sortedClients) {
+          const clientNameLower = client.name.toLowerCase().trim();
+          if (clientNameLower.length >= 4 && descLower.includes(clientNameLower)) {
+            name = client.name;
+            clientId = client.id;
+            clientFound = true;
+            break;
+          }
+        }
+      }
+
+      if (!clientFound && (name || phoneRaw)) {
+        const { data: dup } = await admin.rpc("find_duplicate_client", {
+          _company_id: job.company_id,
+          _name: name || "",
+          _phone: phoneRaw || "",
+          _threshold: 0.7,
+        });
+        const first = Array.isArray(dup) ? dup[0] : null;
+        if (first) {
+          clientId = first.id;
+          clientFound = true;
+          if (!name) {
+            name = first.name;
+          }
+        }
+      }
+
+      if (!name && description) {
+        const extracted = extractNameFromDescription(description);
+        if (extracted) {
+          name = extracted;
+        }
+      }
+
+      const isExpense = isExpenseDescription(description) || (amountRaw != null && amountRaw < 0);
+      const amount = amountRaw != null ? Math.abs(amountRaw) : null;
+
+      if (!name && !phoneRaw && amount == null) continue;
+      total++;
+
+      // Normalize phone via RPC for consistency with rest of system
+      let phoneApi: string | null = null;
+      if (phoneRaw1) {
+        const { data: p } = await admin.rpc("normalize_phone", { _phone: phoneRaw1 });
+        phoneApi = (p as string | null) ?? null;
+      }
+      let phoneApi2: string | null = null;
+      if (phoneRaw2) {
+        const { data: p } = await admin.rpc("normalize_phone", { _phone: phoneRaw2 });
+        phoneApi2 = (p as string | null) ?? null;
+      }
+
+      // Offering prediction
+      let offeringId: string | null = null;
+      let offeringKind: string | null = null;
+      let offeringLabel: string | null = null;
+      let amountMatch = false;
+      let descMatch = false;
+      let tenantPattern = false;
+      if (!isExpense && amount != null) {
+        const { data: pred } = await admin.rpc("predict_offering_from_amount", {
+          _company_id: job.company_id,
+          _amount: amount,
+        });
+        const p = Array.isArray(pred) ? pred[0] : null;
+        if (p?.entity_id) {
+          offeringId = p.entity_id;
+          offeringKind = p.entity_type;
+          offeringLabel = p.label;
+          amountMatch = true;
+          if (p.reason === "kb_amount") tenantPattern = true;
+        } else if (activeServices.length > 0) {
+          const matchedCombination = findServiceCombination(amount, activeServices);
+          if (matchedCombination && matchedCombination.length > 0) {
+            offeringId = matchedCombination[0].id;
+            offeringKind = "service";
+            offeringLabel = matchedCombination.map((s) => s.name).join(" + ");
+            amountMatch = true;
+          }
+        }
+      }
+      if (!isExpense && description) {
+        const { data: kb } = await admin
+          .from("import_knowledge_base")
+          .select("mapped_entity_id, mapped_entity_type, mapped_label, confidence")
+          .eq("company_id", job.company_id)
+          .eq("pattern_type", "description")
+          .eq("pattern_value", description.toLowerCase())
+          .order("confidence", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (kb?.mapped_entity_id) {
+          descMatch = true;
+          tenantPattern = true;
+          if (!offeringId) {
+            offeringId = kb.mapped_entity_id;
+            offeringKind = kb.mapped_entity_type;
+            offeringLabel = kb.mapped_label;
+          }
+        }
+      }
+
+      let confidence = 0;
+      if (isExpense) {
+        confidence = 95;
+      } else {
+        const hasHistory = clientFound;
+        const { data: confData } = await admin.rpc("compute_import_confidence", {
+          _client_found: clientFound,
+          _amount_match: amountMatch,
+          _desc_match: descMatch,
+          _has_history: hasHistory,
+          _tenant_pattern: tenantPattern,
+        });
+        confidence = (confData as number) ?? 0;
+      }
+
+      const status =
+        confidence >= 95
+          ? "matched"
+          : confidence >= 70
+            ? "review"
+            : "manual";
+
+      if (status === "matched") matched++;
+      else if (status === "review") review++;
+
+      // Retain only mapped columns for raw data
+      const cleanRaw: Record<string, unknown> = {};
+      for (const [key, index] of Object.entries(cols)) {
+        const hName = headers[index];
+        if (hName !== undefined) {
+          cleanRaw[hName] = r[hName];
+        }
+      }
+
+      const { error: rowErr } = await admin.from("import_rows").insert({
         import_id,
         company_id: job.company_id,
-        code: "row_insert",
-        message: rowErr.message,
+        row_index: i,
+        raw: cleanRaw as never,
+        parsed: {
+          name,
+          phoneRaw: phoneRaw1,
+          phoneRaw2,
+          description,
+          amount,
+          occurred,
+          paymentMethod,
+          isExpense,
+        } as never,
+        client_name: name || null,
+        client_phone: phoneApi,
+        client_phone2: phoneApi2,
+        description,
+        amount,
+        occurred_at: occurred,
+        payment_method: paymentMethod,
+        resolved_client_id: clientId,
+        resolved_offering_id: offeringId,
+        resolved_offering_kind: offeringKind,
+        confidence,
+        status,
+        notes: isExpense
+          ? "Despesa automática detectada"
+          : offeringLabel
+            ? `Sugestão: ${offeringLabel}`
+            : null,
       });
-      continue;
+      if (rowErr) {
+        failed++;
+        await admin.from("import_errors").insert({
+          import_id,
+          company_id: job.company_id,
+          code: "row_insert",
+          message: rowErr.message,
+        });
+        continue;
+      }
+
+      if (amount && status === "matched" && !isExpense) revenue += Number(amount);
     }
 
-    if (amount && status === "matched" && !isExpense) revenue += Number(amount);
+    await admin
+      .from("imports")
+      .update({
+        status: "completed",
+        rows_total: total,
+        rows_matched: matched,
+        rows_review: review,
+        rows_failed: failed,
+        revenue_identified: revenue,
+        finished_at: new Date().toISOString(),
+      })
+      .eq("id", import_id);
+
+    return { total, matched, review, failed, revenue };
+
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await admin
+      .from("imports")
+      .update({
+        status: "failed",
+        last_error: msg,
+        finished_at: new Date().toISOString(),
+      })
+      .eq("id", import_id);
+    throw err;
   }
-
-  await admin
-    .from("imports")
-    .update({
-      status: "completed",
-      rows_total: total,
-      rows_matched: matched,
-      rows_review: review,
-      rows_failed: failed,
-      revenue_identified: revenue,
-      finished_at: new Date().toISOString(),
-    })
-    .eq("id", import_id);
-
-  return { total, matched, review, failed, revenue };
 }
 
 // ===================== SIE: import.apply_row =====================
