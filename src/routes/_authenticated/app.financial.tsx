@@ -82,6 +82,16 @@ const schema = z.object({
 type Period = "today" | "week" | "month" | "year";
 type TypeFilter = "all" | "INCOME" | "EXPENSE";
 
+function periodLabel(p: Period) {
+  const map: Record<Period, string> = {
+    today: "Hoje",
+    week: "Esta Semana",
+    month: "Este Mês",
+    year: "Este Ano",
+  };
+  return map[p];
+}
+
 function FinancialPage() {
   const { data: profile } = useCurrentProfile();
   const companyId = profile?.company?.id;
@@ -96,7 +106,7 @@ function FinancialPage() {
 
   const list = useQuery({
     enabled: !!companyId,
-    queryKey: ["financial", companyId, range.from],
+    queryKey: ["financial", companyId, range.from, range.to],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("financial_transactions")
@@ -111,27 +121,92 @@ function FinancialPage() {
     },
   });
 
-  const monthSummary = useQuery({
-    enabled: !!companyId,
-    queryKey: ["financial-month-summary", companyId],
-    queryFn: async () => {
-      const start = new Date();
-      start.setDate(1);
-      const { data } = await supabase
-        .from("financial_transactions")
-        .select("type, amount, transaction_date")
-        .eq("company_id", companyId!)
-        .gte("transaction_date", start.toISOString().slice(0, 10));
-      const rows = data ?? [];
-      const income = rows
-        .filter((r) => r.type === "INCOME")
-        .reduce((s, r) => s + Number(r.amount), 0);
-      const expense = rows
-        .filter((r) => r.type === "EXPENSE")
-        .reduce((s, r) => s + Number(r.amount), 0);
-      return { income, expense, profit: income - expense };
-    },
-  });
+  const summary = useMemo(() => {
+    const rows = list.data ?? [];
+    const income = rows
+      .filter((r) => r.type === "INCOME")
+      .reduce((s, r) => s + Number(r.amount), 0);
+    const expense = rows
+      .filter((r) => r.type === "EXPENSE")
+      .reduce((s, r) => s + Number(r.amount), 0);
+    return { income, expense, profit: income - expense };
+  }, [list.data]);
+
+  const chartData = useMemo(() => {
+    const rows = list.data ?? [];
+    
+    if (period === "today") {
+      const hours = ["08:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00"];
+      const map = new Map<string, { date: string; Entradas: number; Saídas: number }>();
+      for (const h of hours) {
+        map.set(h, { date: h, Entradas: 0, Saídas: 0 });
+      }
+      for (const r of rows) {
+        const dt = new Date(r.created_at || r.transaction_date);
+        const hr = dt.getHours();
+        let label = "12:00";
+        if (hr < 9) label = "08:00";
+        else if (hr < 11) label = "10:00";
+        else if (hr < 13) label = "12:00";
+        else if (hr < 15) label = "14:00";
+        else if (hr < 17) label = "16:00";
+        else if (hr < 19) label = "18:00";
+        else label = "20:00";
+        
+        const val = map.get(label);
+        if (val) {
+          if (r.type === "INCOME") val.Entradas += Number(r.amount);
+          else val.Saídas += Number(r.amount);
+        }
+      }
+      return [...map.values()];
+    }
+    
+    if (period === "week" || period === "month") {
+      const map = new Map<string, { date: string; Entradas: number; Saídas: number }>();
+      const start = new Date(range.from + "T00:00:00");
+      const end = new Date(range.to + "T00:00:00");
+      
+      let cur = new Date(start);
+      while (cur <= end) {
+        const key = cur.toISOString().slice(0, 10);
+        const label = cur.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+        map.set(key, { date: label, Entradas: 0, Saídas: 0 });
+        cur.setDate(cur.getDate() + 1);
+      }
+      
+      for (const r of rows) {
+        const key = r.transaction_date;
+        const val = map.get(key);
+        if (val) {
+          if (r.type === "INCOME") val.Entradas += Number(r.amount);
+          else val.Saídas += Number(r.amount);
+        }
+      }
+      return [...map.values()];
+    }
+    
+    if (period === "year") {
+      const map = new Map<number, { date: string; Entradas: number; Saídas: number }>();
+      const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+      for (let m = 0; m < 12; m++) {
+        map.set(m, { date: monthNames[m], Entradas: 0, Saídas: 0 });
+      }
+      
+      for (const r of rows) {
+        const dt = new Date(r.transaction_date + "T00:00:00");
+        const m = dt.getMonth();
+        const val = map.get(m);
+        if (val) {
+          if (r.type === "INCOME") val.Entradas += Number(r.amount);
+          else val.Saídas += Number(r.amount);
+        }
+      }
+      return [...map.values()];
+    }
+    
+    return [];
+  }, [list.data, period, range]);
 
   const recoverable = useQuery({
     enabled: !!companyId,
@@ -143,39 +218,6 @@ function FinancialPage() {
         .eq("company_id", companyId!)
         .maybeSingle();
       return data ?? { potential_revenue: 0, recovered_value_month: 0 };
-    },
-  });
-
-  const flow30 = useQuery({
-    enabled: !!companyId,
-    queryKey: ["financial-flow30", companyId],
-    queryFn: async () => {
-      const start = new Date();
-      start.setDate(start.getDate() - 29);
-      const { data } = await supabase
-        .from("financial_transactions")
-        .select("type, amount, transaction_date")
-        .eq("company_id", companyId!)
-        .gte("transaction_date", start.toISOString().slice(0, 10));
-      const map = new Map<string, { date: string; in: number; out: number }>();
-      for (let i = 0; i < 30; i++) {
-        const d = new Date(start);
-        d.setDate(start.getDate() + i);
-        const key = d.toISOString().slice(0, 10);
-        map.set(key, { date: key, in: 0, out: 0 });
-      }
-      for (const r of data ?? []) {
-        const e = map.get(r.transaction_date);
-        if (!e) continue;
-        if (r.type === "INCOME") e.in += Number(r.amount);
-        else e.out += Number(r.amount);
-      }
-      return [...map.values()].map((d) => ({
-        date: d.date.slice(5),
-        Entradas: d.in,
-        Saídas: d.out,
-        Saldo: d.in - d.out,
-      }));
     },
   });
 
@@ -196,7 +238,7 @@ function FinancialPage() {
 
   const goal = Number((profile?.company as any)?.monthly_revenue_goal ?? 0);
   const goalPct =
-    goal > 0 ? Math.min(100, Math.round(((monthSummary.data?.income ?? 0) / goal) * 100)) : 0;
+    goal > 0 ? Math.min(100, Math.round(((summary.income ?? 0) / goal) * 100)) : 0;
 
   function exportCSV() {
     const rows = filtered.map((r: any) =>
@@ -220,43 +262,55 @@ function FinancialPage() {
   }
 
   return (
-    <div className="space-y-6 pb-24">
-      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3">
+    <div className="space-y-6 pb-24 animate-fade-in">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight truncate">Financeiro</h1>
-          <p className="text-sm text-muted-foreground">
-            Quanto entrou, quanto saiu e quanto sobrou.
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Fluxo de caixa consolidado · {periodLabel(period).toLowerCase()}.
           </p>
         </div>
-        <NewTransactionDialog
-          open={open}
-          onOpenChange={setOpen}
-          companyId={companyId}
-          onSaved={() => {
-            qc.invalidateQueries({ queryKey: ["financial", companyId] });
-            qc.invalidateQueries({ queryKey: ["financial-month-summary", companyId] });
-            qc.invalidateQueries({ queryKey: ["financial-flow30", companyId] });
-          }}
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <Tabs
+            value={period}
+            onValueChange={(v) => setPeriod(v as Period)}
+            className="w-auto"
+          >
+            <TabsList>
+              <TabsTrigger value="today">Hoje</TabsTrigger>
+              <TabsTrigger value="week">Semana</TabsTrigger>
+              <TabsTrigger value="month">Mês</TabsTrigger>
+              <TabsTrigger value="year">Ano</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <NewTransactionDialog
+            open={open}
+            onOpenChange={setOpen}
+            companyId={companyId}
+            onSaved={() => {
+              qc.invalidateQueries({ queryKey: ["financial", companyId] });
+            }}
+          />
+        </div>
       </header>
 
       {/* 4 KPI cards */}
       <section className="grid gap-3 grid-cols-2 lg:grid-cols-4">
         <Kpi
-          label="Receitas (mês)"
-          value={formatBRL(monthSummary.data?.income ?? 0)}
+          label={`Receitas (${periodLabel(period).toLowerCase()})`}
+          value={formatBRL(summary.income ?? 0)}
           tone="success"
           icon={ArrowUp}
         />
         <Kpi
-          label="Despesas (mês)"
-          value={formatBRL(monthSummary.data?.expense ?? 0)}
+          label={`Despesas (${periodLabel(period).toLowerCase()})`}
+          value={formatBRL(summary.expense ?? 0)}
           tone="destructive"
           icon={ArrowDown}
         />
         <Kpi
-          label="Lucro (mês)"
-          value={formatBRL(monthSummary.data?.profit ?? 0)}
+          label={`Lucro (${periodLabel(period).toLowerCase()})`}
+          value={formatBRL(summary.profit ?? 0)}
           tone="primary"
           icon={DollarSign}
           highlight
@@ -270,18 +324,18 @@ function FinancialPage() {
       </section>
 
       {/* Negative balance alert */}
-      {monthSummary.data && monthSummary.data.profit < 0 && (
-        <Card className="p-4 border-destructive/40 bg-destructive/5 flex items-center gap-3">
+      {summary.profit < 0 && (
+        <Card className="p-4 border-destructive/40 bg-destructive/5 flex items-center gap-3 animate-pulse">
           <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
-          <p className="text-sm">Atenção: suas despesas superaram suas receitas neste mês.</p>
+          <p className="text-sm font-medium">Atenção: suas despesas superaram suas receitas neste período.</p>
         </Card>
       )}
 
       {/* Goal */}
-      <Card className="p-5 shadow-soft">
+      <Card className="p-5 shadow-soft hover:shadow-md transition-shadow">
         <div className="flex items-center justify-between gap-3 mb-3">
           <div className="flex items-center gap-2">
-            <Target className="h-4 w-4 text-primary" />
+            <Target className="h-4 w-4 text-primary animate-spin" style={{ animationDuration: '6s' }} />
             <h2 className="font-semibold text-[15px]">Meta de faturamento do mês</h2>
           </div>
           <Button variant="ghost" size="sm" onClick={() => setGoalOpen(true)}>
@@ -292,14 +346,14 @@ function FinancialPage() {
           <>
             <div className="flex items-baseline justify-between mb-2">
               <p className="text-2xl font-semibold tabular-nums">
-                {formatBRL(monthSummary.data?.income ?? 0)}
+                {formatBRL(summary.income ?? 0)}
               </p>
               <p className="text-sm text-muted-foreground">
                 de {formatBRL(goal)}{" "}
-                <span className="font-semibold text-primary">· {goalPct}%</span>
+                <span className="font-semibold text-primary">· {goalPct}% (período vs meta mensal)</span>
               </p>
             </div>
-            <Progress value={goalPct} />
+            <Progress value={goalPct} className="h-2" />
           </>
         ) : (
           <p className="text-sm text-muted-foreground">
@@ -309,11 +363,11 @@ function FinancialPage() {
       </Card>
 
       {/* Cash flow chart */}
-      <Card className="p-5 shadow-soft">
-        <h2 className="font-semibold text-[15px] mb-3">Fluxo de caixa · últimos 30 dias</h2>
+      <Card className="p-5 shadow-soft hover:shadow-md transition-shadow">
+        <h2 className="font-semibold text-[15px] mb-3">Fluxo de caixa · {periodLabel(period).toLowerCase()}</h2>
         <div className="h-56">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={flow30.data ?? []}>
+            <AreaChart data={chartData}>
               <defs>
                 <linearGradient id="g-in" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="hsl(var(--success))" stopOpacity={0.4} />
@@ -345,26 +399,9 @@ function FinancialPage() {
         </div>
       </Card>
 
-      {/* Period + type filters */}
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <Tabs
-            value={period}
-            onValueChange={(v) => setPeriod(v as Period)}
-            className="flex-1 min-w-[260px]"
-          >
-            <TabsList>
-              <TabsTrigger value="today">Hoje</TabsTrigger>
-              <TabsTrigger value="week">Semana</TabsTrigger>
-              <TabsTrigger value="month">Mês</TabsTrigger>
-              <TabsTrigger value="year">Ano</TabsTrigger>
-            </TabsList>
-          </Tabs>
-          <Button variant="outline" size="sm" onClick={exportCSV} className="gap-1">
-            <Download className="h-4 w-4" /> CSV
-          </Button>
-        </div>
-        <div className="flex flex-wrap gap-3">
+      {/* Filters section */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-muted/10 p-3 rounded-lg border">
+        <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[300px]">
           <Tabs value={typeFilter} onValueChange={(v) => setTypeFilter(v as TypeFilter)}>
             <TabsList>
               <TabsTrigger value="all">Todos</TabsTrigger>
@@ -372,16 +409,19 @@ function FinancialPage() {
               <TabsTrigger value="EXPENSE">Despesas</TabsTrigger>
             </TabsList>
           </Tabs>
-          <div className="relative flex-1 min-w-[200px]">
+          <div className="relative flex-1 max-w-md min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar descrição, categoria, valor…"
-              className="pl-9"
+              className="pl-9 bg-background"
             />
           </div>
         </div>
+        <Button variant="outline" size="sm" onClick={exportCSV} className="gap-1">
+          <Download className="h-4 w-4" /> Exportar CSV
+        </Button>
       </div>
 
       <Card className="p-4 shadow-soft">
