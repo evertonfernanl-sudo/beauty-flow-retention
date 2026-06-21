@@ -460,6 +460,7 @@ export type Database = {
           phone: string | null
           phone_api: string | null
           phone_original: string | null
+          phone2: string | null
           profession: string | null
           status: Database["public"]["Enums"]["client_status"]
           total_spent: number
@@ -481,6 +482,7 @@ export type Database = {
           phone?: string | null
           phone_api?: string | null
           phone_original?: string | null
+          phone2?: string | null
           profession?: string | null
           status?: Database["public"]["Enums"]["client_status"]
           total_spent?: number
@@ -502,6 +504,7 @@ export type Database = {
           phone?: string | null
           phone_api?: string | null
           phone_original?: string | null
+          phone2?: string | null
           profession?: string | null
           status?: Database["public"]["Enums"]["client_status"]
           total_spent?: number
@@ -2600,6 +2603,7 @@ export type Database = {
           company_id: string
           created_at: string
           id: string
+          permissions: Json
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
@@ -2607,6 +2611,7 @@ export type Database = {
           company_id: string
           created_at?: string
           id?: string
+          permissions?: Json
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
@@ -2614,6 +2619,7 @@ export type Database = {
           company_id?: string
           created_at?: string
           id?: string
+          permissions?: Json
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
         }
