@@ -1,4 +1,4 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, redirect, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -381,7 +381,14 @@ function RecoveryRow({ row, isVip, onOpen }: { row: any; isVip: boolean; onOpen:
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
-          <p className="font-medium truncate">{row.clients?.name}</p>
+          <Link
+            to="/app/clients/$clientId"
+            params={{ clientId: row.clients?.id }}
+            className="font-medium truncate hover:underline text-foreground"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {row.clients?.name}
+          </Link>
           {isVip && (
             <Badge className="bg-amber-100 text-amber-900 hover:bg-amber-100 border-amber-200 gap-1">
               <Crown className="h-3 w-3" />
@@ -563,7 +570,19 @@ function RecoverySheet({
     <Sheet open onOpenChange={(o) => !o && onClose()}>
       <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
         <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">{c?.name ?? "Cliente"}</SheetTitle>
+          <SheetTitle className="flex items-center gap-2">
+            {opp.data?.client_id ? (
+              <Link
+                to="/app/clients/$clientId"
+                params={{ clientId: opp.data.client_id }}
+                className="hover:underline text-foreground"
+              >
+                {c?.name ?? "Cliente"}
+              </Link>
+            ) : (
+              c?.name ?? "Cliente"
+            )}
+          </SheetTitle>
           <SheetDescription>
             {c?.phone ? (
               <a href={`tel:${c.phone}`} className="underline">
