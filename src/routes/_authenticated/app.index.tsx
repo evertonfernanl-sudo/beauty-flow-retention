@@ -662,7 +662,7 @@ function Kpi({
   const isGood = invertDelta ? !positive : positive;
   return (
     <Card
-      className={`p-4 shadow-soft transition-all hover:shadow-md ${
+      className={`p-4 shadow-soft transition-all hover:shadow-md min-w-0 overflow-hidden ${
         accent ? "border-primary/30 bg-gradient-to-br from-card to-accent/30" : ""
       }`}
     >
@@ -681,7 +681,7 @@ function Kpi({
       {value === null ? (
         <Skeleton className="h-7 w-24" />
       ) : (
-        <p className="text-lg sm:text-xl lg:text-2xl font-semibold tracking-tight tabular-nums truncate" title={value}>
+        <p className="text-base sm:text-lg font-semibold tracking-tight tabular-nums truncate" title={value}>
           {value}
         </p>
       )}

@@ -633,7 +633,7 @@ function Kpi({
         : "gradient-primary text-primary-foreground";
   return (
     <Card
-      className={`p-4 shadow-soft ${highlight ? "border-primary/30 bg-gradient-to-br from-card to-accent/30" : ""}`}
+      className={`p-4 shadow-soft min-w-0 overflow-hidden ${highlight ? "border-primary/30 bg-gradient-to-br from-card to-accent/30" : ""}`}
     >
       <div className="flex items-center justify-between min-w-0">
         <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground truncate mr-1" title={label}>
@@ -643,7 +643,7 @@ function Kpi({
           <Icon className="h-4 w-4" />
         </span>
       </div>
-      <p className={`mt-2 text-lg sm:text-xl lg:text-2xl font-semibold truncate ${color}`} title={value}>{value}</p>
+      <p className={`mt-2 text-base sm:text-lg font-semibold truncate ${color}`} title={value}>{value}</p>
     </Card>
   );
 }
