@@ -119,7 +119,7 @@ function AgendaPage() {
       let q = supabase
         .from("appointments")
         .select(
-          "id, start_datetime, end_datetime, status, price, notes, cancellation_reason, client_id, service_id, professional_id, clients(name, phone), services(name, duration_minutes, price)",
+          "id, start_datetime, end_datetime, status, price, notes, cancellation_reason, client_id, service_id, professional_id, clients(name, phone), services(name, duration_minutes, price), professionals(name)",
         )
         .eq("company_id", companyId!)
         .gte("start_datetime", start.toISOString())
@@ -572,7 +572,7 @@ function AppointmentRow({
   const isAdm = profile?.role === "owner" || profile?.role === "admin";
 
   return (
-    <li className="py-3 flex items-center justify-between gap-3">
+    <li className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b sm:border-b-0 last:border-b-0">
       <Link
         to="/app/clients/$clientId"
         params={{ clientId: a.client_id }}
@@ -588,10 +588,11 @@ function AppointmentRow({
           <p className="text-[10px] text-muted-foreground">{a.services?.duration_minutes}min</p>
         </div>
         <div className="min-w-0 flex-1">
-          <p className="font-medium truncate text-sm">{a.clients?.name}</p>
+          <p className="font-medium text-sm truncate">{a.clients?.name}</p>
           <div className="flex items-center gap-1.5 flex-wrap">
-            <p className="text-xs text-muted-foreground truncate">
+            <p className="text-xs text-muted-foreground">
               {a.services?.name} · {formatBRL(Number(a.price))}
+              {a.professionals?.name && ` · Prof: ${a.professionals.name}`}
             </p>
             {a.notes && (
               <span
@@ -604,19 +605,19 @@ function AppointmentRow({
           </div>
         </div>
       </Link>
-      <div className="flex items-center gap-1.5 shrink-0">
+      <div className="flex items-center justify-between sm:justify-end gap-1.5 shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0">
         <span className={`text-[11px] rounded-full px-2 py-0.5 ${statusStyle(a.status)}`}>
           {statusLabel(a.status)}
         </span>
         {a.status !== "COMPLETED" && a.status !== "CANCELLED" && (
-          <>
+          <div className="flex items-center gap-1.5">
             {a.status === "SCHEDULED" && (
               <Button size="sm" variant="ghost" onClick={() => onConfirm(a.id)} title="Confirmar">
                 <Check className="h-4 w-4" />
               </Button>
             )}
             <Button size="sm" variant="outline" onClick={() => onComplete(a.id)}>
-              <Check className="h-4 w-4 mr-1" /> Concluir
+              <Check className="h-4 w-4 sm:mr-1" /> <span className="hidden sm:inline">Concluir</span>
             </Button>
             <EditAppointment
               a={a}
@@ -627,7 +628,7 @@ function AppointmentRow({
               onChanged={onChanged}
             />
             {isAdm && <CancelAppointment a={a} onChanged={onChanged} />}
-          </>
+          </div>
         )}
       </div>
     </li>
