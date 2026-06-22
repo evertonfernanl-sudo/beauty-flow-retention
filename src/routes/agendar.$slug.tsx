@@ -35,10 +35,11 @@ export const Route = createFileRoute("/agendar/$slug")({
     };
   },
   loader: async ({ params }) => {
+    const cleanSlug = params.slug.toLowerCase().trim();
     const { data: company } = await supabase
       .from("companies")
       .select("id, name, slug, logo_url, address, city, state, vertical")
-      .eq("slug", params.slug)
+      .eq("slug", cleanSlug)
       .eq("active", true)
       .eq("onboarding_completed", true)
       .maybeSingle();
