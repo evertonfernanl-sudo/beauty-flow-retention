@@ -72,16 +72,71 @@ function VisaoGeral() {
   const { data: profile } = useCurrentProfile();
   const companyId = profile?.company?.id;
   const firstName = profile?.profile?.name?.split(" ")[0];
-  const [period, setPeriod] = useState<Period>("30d");
+  const [period, setPeriod] = useState<string>("30d");
+
+  // Query distinct months with transactions
+  const monthsWithTransactions = useQuery({
+    enabled: !!companyId,
+    queryKey: ["months-with-transactions", companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("financial_transactions")
+        .select("transaction_date")
+        .eq("company_id", companyId!)
+        .order("transaction_date", { ascending: false });
+
+      if (error) throw error;
+
+      const uniqueMonths = new Set<string>();
+      for (const row of data || []) {
+        if (row.transaction_date) {
+          uniqueMonths.add(row.transaction_date.slice(0, 7)); // e.g. "2026-03"
+        }
+      }
+
+      return Array.from(uniqueMonths).map((ym) => {
+        const [year, month] = ym.split("-").map(Number);
+        const date = new Date(year, month - 1, 1);
+        const label = date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+        return {
+          value: ym,
+          label: label.charAt(0).toUpperCase() + label.slice(1),
+        };
+      });
+    },
+  });
 
   const range = useMemo(() => {
-    const end = new Date();
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    start.setDate(start.getDate() - PERIOD_DAYS[period] + 1);
-    const prevStart = new Date(start);
-    prevStart.setDate(prevStart.getDate() - PERIOD_DAYS[period]);
-    return { start, end, prevStart };
+    if (period.includes("-")) {
+      // Specific month, e.g. "2026-03"
+      const [year, month] = period.split("-").map(Number);
+      const start = new Date(year, month - 1, 1, 0, 0, 0, 0);
+      const end = new Date(year, month, 0, 23, 59, 59, 999);
+      const prevStart = new Date(year, month - 2, 1, 0, 0, 0, 0);
+      const prevEnd = new Date(year, month - 1, 0, 23, 59, 59, 999);
+      return { start, end, prevStart, prevEnd };
+    } else {
+      // Default periods: "7d", "30d", etc.
+      const end = new Date();
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      start.setDate(start.getDate() - PERIOD_DAYS[period as Period] + 1);
+      const prevStart = new Date(start);
+      prevStart.setDate(prevStart.getDate() - PERIOD_DAYS[period as Period]);
+      const prevEnd = new Date(start);
+      prevEnd.setMilliseconds(prevEnd.getMilliseconds() - 1);
+      return { start, end, prevStart, prevEnd };
+    }
+  }, [period]);
+
+  const periodText = useMemo(() => {
+    if (period.includes("-")) {
+      const [year, month] = period.split("-").map(Number);
+      const date = new Date(year, month - 1, 1);
+      const label = date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+      return label.charAt(0).toUpperCase() + label.slice(1);
+    }
+    return PERIOD_LABEL[period as Period];
   }, [period]);
 
   const stats = useQuery({
@@ -89,21 +144,22 @@ function VisaoGeral() {
     queryKey: ["visao-geral", companyId, period],
     queryFn: async () => {
       const now = new Date();
-      const start6mo = new Date(now.getFullYear(), now.getMonth() - 5, 1)
-        .toISOString()
-        .slice(0, 10);
+      const start6mo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+      const minDate = range.prevStart < start6mo ? range.prevStart : start6mo;
+      const minDateKey = minDate.toISOString().slice(0, 10);
 
       const [tx, appts, clientsAll, returnsLate, services] = await Promise.all([
         supabase
           .from("financial_transactions")
           .select("type, amount, transaction_date")
           .eq("company_id", companyId!)
-          .gte("transaction_date", start6mo),
+          .gte("transaction_date", minDateKey),
         supabase
           .from("appointments")
           .select("id, price, status, start_datetime, service_id")
           .eq("company_id", companyId!)
-          .gte("start_datetime", range.prevStart.toISOString()),
+          .gte("start_datetime", range.prevStart.toISOString())
+          .lte("start_datetime", range.end.toISOString()),
         supabase.from("clients").select("id, status").eq("company_id", companyId!),
         supabase
           .from("return_opportunities")
@@ -121,7 +177,10 @@ function VisaoGeral() {
 
       // Financial — period vs prev
       const startKey = range.start.toISOString().slice(0, 10);
-      const prevKey = range.prevStart.toISOString().slice(0, 10);
+      const endKey = range.end.toISOString().slice(0, 10);
+      const prevStartKey = range.prevStart.toISOString().slice(0, 10);
+      const prevEndKey = range.prevEnd.toISOString().slice(0, 10);
+
       let revenue = 0,
         expense = 0,
         revenuePrev = 0,
@@ -129,10 +188,10 @@ function VisaoGeral() {
       for (const r of tx.data ?? []) {
         const d = r.transaction_date;
         const amt = Number(r.amount);
-        if (d >= startKey) {
+        if (d >= startKey && d <= endKey) {
           if (r.type === "INCOME") revenue += amt;
           else expense += amt;
-        } else if (d >= prevKey) {
+        } else if (d >= prevStartKey && d <= prevEndKey) {
           if (r.type === "INCOME") revenuePrev += amt;
           else expensePrev += amt;
         }
@@ -142,10 +201,13 @@ function VisaoGeral() {
 
       // Appointments — period vs prev
       const apptsAll = appts.data ?? [];
-      const inPeriod = apptsAll.filter((a) => new Date(a.start_datetime) >= range.start);
+      const inPeriod = apptsAll.filter((a) => {
+        const d = new Date(a.start_datetime);
+        return d >= range.start && d <= range.end;
+      });
       const inPrev = apptsAll.filter((a) => {
         const d = new Date(a.start_datetime);
-        return d >= range.prevStart && d < range.start;
+        return d >= range.prevStart && d <= range.prevEnd;
       });
       const completed = inPeriod.filter((a) => a.status === "COMPLETED");
       const completedPrev = inPrev.filter((a) => a.status === "COMPLETED");
@@ -179,9 +241,21 @@ function VisaoGeral() {
       // Appointments per day (within current period, capped to 60 points)
       const days: { label: string; count: number }[] = [];
       const dayMap = new Map<string, number>();
-      const totalDays = Math.min(PERIOD_DAYS[period], 60);
-      for (let i = totalDays - 1; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      
+      let totalDays = 30;
+      let startDay = new Date(range.start);
+      
+      if (period.includes("-")) {
+        const [year, month] = period.split("-").map(Number);
+        totalDays = new Date(year, month, 0).getDate();
+      } else {
+        totalDays = Math.min(PERIOD_DAYS[period as Period], 60);
+        startDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() - totalDays + 1);
+      }
+
+      for (let i = 0; i < totalDays; i++) {
+        const d = new Date(startDay);
+        d.setDate(startDay.getDate() + i);
         const key = d.toISOString().slice(0, 10);
         dayMap.set(key, 0);
         days.push({
@@ -192,6 +266,7 @@ function VisaoGeral() {
           count: 0,
         });
       }
+
       for (const a of inPeriod) {
         const key = a.start_datetime.slice(0, 10);
         if (dayMap.has(key)) dayMap.set(key, (dayMap.get(key) ?? 0) + 1);
@@ -240,11 +315,11 @@ function VisaoGeral() {
             <span className="text-primary"> 👋</span>
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Sua operação em um relance — {PERIOD_LABEL[period].toLowerCase()}.
+            Sua operação em um relance — {periodText ? periodText.toLowerCase() : ""}.
           </p>
         </div>
-        <Select value={period} onValueChange={(v) => setPeriod(v as Period)}>
-          <SelectTrigger className="w-[180px] h-9">
+        <Select value={period} onValueChange={(v) => setPeriod(v)}>
+          <SelectTrigger className="w-[200px] h-9">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -253,6 +328,19 @@ function VisaoGeral() {
                 {PERIOD_LABEL[p]}
               </SelectItem>
             ))}
+            {monthsWithTransactions.data && monthsWithTransactions.data.length > 0 && (
+              <>
+                <div className="h-px bg-muted my-1" />
+                <div className="px-2 py-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                  Filtrar por Mês
+                </div>
+                {monthsWithTransactions.data.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>
+                    {m.label}
+                  </SelectItem>
+                ))}
+              </>
+            )}
           </SelectContent>
         </Select>
       </header>
