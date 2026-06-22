@@ -74,7 +74,7 @@ const clientSchema = z.object({
   notes: z.string().max(1000).optional().or(z.literal("")),
 });
 
-type Filter = "ALL" | "ACTIVE" | "INACTIVE" | "LOST" | "RETURN" | "BIRTHDAY";
+type Filter = "ALL" | "ACTIVE" | "INACTIVE" | "LOST" | "RETURN" | "BIRTHDAY" | "AT_RISK";
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "ALL", label: "Todos" },
@@ -82,6 +82,7 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: "INACTIVE", label: "Inativos" },
   { id: "LOST", label: "Perdidos" },
   { id: "RETURN", label: "Retorno pendente" },
+  { id: "AT_RISK", label: "Em risco" },
   { id: "BIRTHDAY", label: "Aniversariantes" },
 ];
 
@@ -132,7 +133,26 @@ function ClientsPage() {
       if (s) q = q.or(`name.ilike.%${s}%,phone.ilike.%${s}%,email.ilike.%${s}%`);
       if (filter === "ACTIVE") q = q.eq("status", "ACTIVE");
       if (filter === "INACTIVE") q = q.eq("status", "INACTIVE");
-      if (filter === "LOST") q = q.eq("status", "LOST");
+      if (filter === "LOST") {
+        const date90DaysAgo = new Date();
+        date90DaysAgo.setDate(date90DaysAgo.getDate() - 90);
+        const iso90DaysAgo = date90DaysAgo.toISOString();
+        q = q.or(`status.eq.LOST,last_visit.lt.${iso90DaysAgo},and(last_visit.is.null,created_at.lt.${iso90DaysAgo})`);
+      }
+      if (filter === "AT_RISK") {
+        const { data: opps } = await supabase
+          .from("recovery_opportunities")
+          .select("client_id")
+          .eq("company_id", companyId!)
+          .in("status", ["OPEN", "IN_CONTACT"])
+          .eq("classification", "AT_RISK");
+        const clientIds = (opps ?? []).map((o: any) => o.client_id).filter(Boolean);
+        if (clientIds.length > 0) {
+          q = q.in("id", clientIds);
+        } else {
+          q = q.eq("id", "00000000-0000-0000-0000-000000000000");
+        }
+      }
       if (filter === "RETURN") {
         const { data: opps } = await supabase
           .from("recovery_opportunities")
@@ -528,6 +548,14 @@ function ClientsPage() {
           onSelectPendingCount={() => {
             setActiveTab("cadastro");
             setFilter("RETURN");
+          }}
+          onSelectAtRiskCount={() => {
+            setActiveTab("cadastro");
+            setFilter("AT_RISK");
+          }}
+          onSelectLostCount={() => {
+            setActiveTab("cadastro");
+            setFilter("LOST");
           }}
         />
       </TabsContent>

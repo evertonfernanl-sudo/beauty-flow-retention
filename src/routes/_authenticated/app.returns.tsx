@@ -58,7 +58,15 @@ export const Route = createFileRoute("/_authenticated/app/returns")({
 
 type Filter = "all" | "today" | "week" | "at_risk" | "lost" | "vip";
 
-export function RecoveryPage({ onSelectPendingCount }: { onSelectPendingCount?: () => void } = {}) {
+export function RecoveryPage({
+  onSelectPendingCount,
+  onSelectAtRiskCount,
+  onSelectLostCount,
+}: {
+  onSelectPendingCount?: () => void;
+  onSelectAtRiskCount?: () => void;
+  onSelectLostCount?: () => void;
+} = {}) {
   const { data: profile } = useCurrentProfile();
   const companyId = profile?.company?.id;
   const qc = useQueryClient();
@@ -211,6 +219,7 @@ export function RecoveryPage({ onSelectPendingCount }: { onSelectPendingCount?: 
           label="Em Risco"
           value={String(d?.at_risk_count ?? 0)}
           tone="warning"
+          onClick={onSelectAtRiskCount}
         />
         <Kpi
           loading={dash.isLoading}
@@ -218,6 +227,7 @@ export function RecoveryPage({ onSelectPendingCount }: { onSelectPendingCount?: 
           label="Perdidos"
           value={String(d?.lost_count ?? 0)}
           tone="destructive"
+          onClick={onSelectLostCount}
         />
         <Kpi
           loading={dash.isLoading}
