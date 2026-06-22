@@ -662,14 +662,14 @@ function Kpi({
   const isGood = invertDelta ? !positive : positive;
   return (
     <Card
-      className={`p-4 shadow-soft transition-all hover:shadow-md min-w-0 overflow-hidden ${
+      className={`p-4 xl:p-2.5 2xl:p-4 shadow-soft transition-all hover:shadow-md min-w-0 overflow-hidden ${
         accent ? "border-primary/30 bg-gradient-to-br from-card to-accent/30" : ""
       }`}
     >
-      <div className="flex items-center justify-between mb-3 min-w-0">
-        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground truncate mr-1" title={label}>
+      <div className="flex items-center justify-between mb-3 min-w-0 gap-1">
+        <p className="text-[11px] xl:text-[10px] 2xl:text-[11px] font-medium uppercase tracking-wider text-muted-foreground truncate" title={label}>
           {label}
-        </span>
+        </p>
         <div
           className={`grid h-7 w-7 place-items-center rounded-lg shrink-0 ${
             tone === "warn" ? "bg-warning/15 text-warning" : "bg-primary/10 text-primary"
@@ -681,13 +681,13 @@ function Kpi({
       {value === null ? (
         <Skeleton className="h-7 w-24" />
       ) : (
-        <p className="text-base sm:text-lg font-semibold tracking-tight tabular-nums truncate" title={value}>
+        <p className="text-base sm:text-lg lg:text-base xl:text-sm 2xl:text-base font-semibold tracking-tight tabular-nums truncate" title={value}>
           {value}
         </p>
       )}
       {delta !== null && delta !== undefined && (
         <div
-          className={`mt-2 flex items-center gap-1 text-[11px] font-medium ${
+          className={`mt-2 flex items-center gap-1 text-[11px] xl:text-[10px] 2xl:text-[11px] font-medium ${
             isGood ? "text-success" : "text-destructive"
           }`}
         >
