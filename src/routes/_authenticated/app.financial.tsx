@@ -380,19 +380,19 @@ function FinancialPage() {
       {/* 4 KPI cards */}
       <section className="grid gap-3 grid-cols-2 lg:grid-cols-4">
         <Kpi
-          label={`Receitas (${periodLabel(period).toLowerCase()})`}
+          label="Receitas"
           value={formatBRL(summary.income ?? 0)}
           tone="success"
           icon={ArrowUp}
         />
         <Kpi
-          label={`Despesas (${periodLabel(period).toLowerCase()})`}
+          label="Despesas"
           value={formatBRL(summary.expense ?? 0)}
           tone="destructive"
           icon={ArrowDown}
         />
         <Kpi
-          label={`Lucro (${periodLabel(period).toLowerCase()})`}
+          label="Lucro"
           value={formatBRL(summary.profit ?? 0)}
           tone="primary"
           icon={DollarSign}
@@ -635,15 +635,15 @@ function Kpi({
     <Card
       className={`p-4 shadow-soft ${highlight ? "border-primary/30 bg-gradient-to-br from-card to-accent/30" : ""}`}
     >
-      <div className="flex items-center justify-between">
-        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+      <div className="flex items-center justify-between min-w-0">
+        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground truncate mr-1" title={label}>
           {label}
         </p>
-        <span className={`grid h-8 w-8 place-items-center rounded-lg ${bg}`}>
+        <span className={`grid h-8 w-8 place-items-center rounded-lg shrink-0 ${bg}`}>
           <Icon className="h-4 w-4" />
         </span>
       </div>
-      <p className={`mt-2 text-xl sm:text-2xl font-semibold ${color}`}>{value}</p>
+      <p className={`mt-2 text-lg sm:text-xl lg:text-2xl font-semibold truncate ${color}`} title={value}>{value}</p>
     </Card>
   );
 }

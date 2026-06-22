@@ -666,12 +666,12 @@ function Kpi({
         accent ? "border-primary/30 bg-gradient-to-br from-card to-accent/30" : ""
       }`}
     >
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+      <div className="flex items-center justify-between mb-3 min-w-0">
+        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground truncate mr-1" title={label}>
           {label}
         </span>
         <div
-          className={`grid h-7 w-7 place-items-center rounded-lg ${
+          className={`grid h-7 w-7 place-items-center rounded-lg shrink-0 ${
             tone === "warn" ? "bg-warning/15 text-warning" : "bg-primary/10 text-primary"
           }`}
         >
@@ -681,17 +681,19 @@ function Kpi({
       {value === null ? (
         <Skeleton className="h-7 w-24" />
       ) : (
-        <p className="text-xl lg:text-2xl font-semibold tracking-tight tabular-nums">{value}</p>
+        <p className="text-lg sm:text-xl lg:text-2xl font-semibold tracking-tight tabular-nums truncate" title={value}>
+          {value}
+        </p>
       )}
       {delta !== null && delta !== undefined && (
         <div
-          className={`mt-2 inline-flex items-center gap-1 text-[11px] font-medium ${
+          className={`mt-2 flex items-center gap-1 text-[11px] font-medium ${
             isGood ? "text-success" : "text-destructive"
           }`}
         >
-          {positive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-          {Math.abs(Math.round(delta))}%
-          <span className="text-muted-foreground font-normal">vs. anterior</span>
+          {positive ? <ArrowUpRight className="h-3 w-3 shrink-0" /> : <ArrowDownRight className="h-3 w-3 shrink-0" />}
+          <span className="tabular-nums font-semibold shrink-0">{Math.abs(Math.round(delta))}%</span>
+          <span className="text-muted-foreground font-normal truncate">vs. ant</span>
         </div>
       )}
     </Card>
