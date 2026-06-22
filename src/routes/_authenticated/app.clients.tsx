@@ -124,6 +124,23 @@ function ClientsPage() {
     values: z.infer<typeof clientSchema>;
   } | null>(null);
 
+  const [historyClient, setHistoryClient] = useState<any | null>(null);
+
+  const historyQ = useQuery({
+    enabled: !!companyId && !!historyClient,
+    queryKey: ["client-history", historyClient?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("appointments")
+        .select("id, start_datetime, status, price, notes, services(name)")
+        .eq("client_id", historyClient!.id)
+        .eq("company_id", companyId!)
+        .order("start_datetime", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   const list = useQuery({
     enabled: !!companyId,
     queryKey: ["clients", companyId, search, filter],
@@ -387,7 +404,16 @@ function ClientsPage() {
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <p className="font-medium truncate">{c.name}</p>
+                          <span
+                            className="font-medium truncate hover:underline cursor-pointer text-primary"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setHistoryClient(c);
+                            }}
+                          >
+                            {c.name}
+                          </span>
                           <StatusBadge status={c.status} />
                           {isBirthdayMonth && (
                             <Badge variant="outline" className="gap-1 text-[10px]">
@@ -542,6 +568,64 @@ function ClientsPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <Dialog
+          open={!!historyClient}
+          onOpenChange={(o) => {
+            if (!o) setHistoryClient(null);
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Histórico de Atendimentos</DialogTitle>
+              <p className="text-sm text-muted-foreground">
+                Cliente: <strong className="text-foreground">{historyClient?.name}</strong>
+              </p>
+            </DialogHeader>
+
+            <div className="max-h-[60vh] overflow-y-auto py-2 pr-1 space-y-3">
+              {historyQ.isLoading ? (
+                <p className="text-sm text-muted-foreground py-8 text-center animate-pulse">
+                  Carregando histórico...
+                </p>
+              ) : !historyQ.data?.length ? (
+                <div className="py-12 text-center text-sm text-muted-foreground">
+                  Nenhum atendimento encontrado para esta cliente.
+                </div>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {historyQ.data.map((a: any) => (
+                    <li key={a.id} className="py-3 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="text-left w-14 shrink-0">
+                          <p className="text-xs font-semibold">
+                            {new Date(a.start_datetime).toLocaleDateString("pt-BR", {
+                              day: "2-digit",
+                              month: "2-digit",
+                            })}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {new Date(a.start_datetime).toLocaleTimeString("pt-BR", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </p>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm truncate">{a.services?.name ?? "Serviço não especificado"}</p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {a.notes ? a.notes : formatBRL(Number(a.price))}
+                          </p>
+                        </div>
+                      </div>
+                      <AppointmentStatusPill status={a.status} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </TabsContent>
       <TabsContent value="retorno" className="mt-0">
         <RecoveryPage
@@ -697,3 +781,25 @@ function StatusBadge({ status }: { status: string }) {
   const m = map[status] ?? map.ACTIVE;
   return <span className={`text-[10px] rounded-full px-2 py-0.5 ${m.cls}`}>{m.label}</span>;
 }
+
+function AppointmentStatusPill({ status }: { status: string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    SCHEDULED: {
+      label: "Agendado",
+      cls: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
+    },
+    CONFIRMED: {
+      label: "Confirmado",
+      cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+    },
+    COMPLETED: { label: "Concluído", cls: "bg-primary/15 text-primary" },
+    CANCELLED: { label: "Cancelado", cls: "bg-destructive/15 text-destructive" },
+    NO_SHOW: {
+      label: "Faltou",
+      cls: "bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300",
+    },
+  };
+  const m = map[status] ?? map.SCHEDULED;
+  return <span className={`text-[10px] rounded-full px-2 py-0.5 ${m.cls}`}>{m.label}</span>;
+}
+
