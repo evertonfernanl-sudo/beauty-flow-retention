@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentProfile } from "@/lib/hooks/use-current-profile";
@@ -52,7 +52,13 @@ import { toast } from "sonner";
 import { formatBRL } from "@/lib/format";
 import { RecoveryPage } from "./app.returns";
 
+const clientsSearchSchema = z.object({
+  tab: z.enum(["cadastro", "retorno"]).optional(),
+  filter: z.string().optional(),
+});
+
 export const Route = createFileRoute("/_authenticated/app/clients")({
+  validateSearch: (search) => clientsSearchSchema.parse(search),
   head: () => ({ meta: [{ title: "Clientes · BeautyFlow" }] }),
   component: ClientsPage,
 });
@@ -84,12 +90,27 @@ function ClientsPage() {
   const companyId = profile?.company?.id;
   const canManage = profile?.role === "owner" || profile?.role === "admin";
   const queryClient = useQueryClient();
+  const searchParams = Route.useSearch();
+  
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<Filter>("ALL");
+  const [activeTab, setActiveTab] = useState(searchParams.tab || "cadastro");
+  const [filter, setFilter] = useState<Filter>((searchParams.filter as Filter) || "ALL");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
   const [deleting, setDeleting] = useState<any | null>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (searchParams.tab) {
+      setActiveTab(searchParams.tab);
+    }
+  }, [searchParams.tab]);
+
+  useEffect(() => {
+    if (searchParams.filter) {
+      setFilter(searchParams.filter as Filter);
+    }
+  }, [searchParams.filter]);
   type DupMatch = {
     id: string;
     name: string;
@@ -204,7 +225,7 @@ function ClientsPage() {
   }, [list.data]);
 
   return (
-    <Tabs defaultValue="cadastro" className="space-y-6">
+    <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
       <TabsList>
         <TabsTrigger value="cadastro" className="gap-1.5">
           <Users className="h-3.5 w-3.5" /> Clientes

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentProfile } from "@/lib/hooks/use-current-profile";
@@ -51,7 +51,12 @@ import {
   CartesianGrid,
 } from "recharts";
 
+const financialSearchSchema = z.object({
+  type: z.enum(["all", "INCOME", "EXPENSE"]).optional(),
+});
+
 export const Route = createFileRoute("/_authenticated/app/financial")({
+  validateSearch: (search) => financialSearchSchema.parse(search),
   head: () => ({ meta: [{ title: "Financeiro · BeautyFlow" }] }),
   component: FinancialPage,
 });
@@ -115,9 +120,16 @@ function FinancialPage() {
       localStorage.setItem("beautyflow-selected-period", v);
     }
   };
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const searchParams = Route.useSearch();
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>(searchParams.type || "all");
   const [search, setSearch] = useState("");
   const [goalOpen, setGoalOpen] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.type) {
+      setTypeFilter(searchParams.type as TypeFilter);
+    }
+  }, [searchParams.type]);
 
   // Query distinct months with transactions
   const monthsWithTransactions = useQuery({

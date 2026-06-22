@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -409,6 +409,8 @@ function VisaoGeral() {
           value={loading ? null : formatBRL(data?.revenue ?? 0)}
           delta={pct(data?.revenue, data?.revenuePrev)}
           accent
+          to="/app/financial"
+          search={{ type: "INCOME" }}
         />
         <Kpi
           icon={TrendingDown}
@@ -417,6 +419,8 @@ function VisaoGeral() {
           delta={pct(data?.expense, data?.expensePrev)}
           tone="warn"
           invertDelta
+          to="/app/financial"
+          search={{ type: "EXPENSE" }}
         />
         <Kpi
           icon={TrendingUp}
@@ -424,29 +428,37 @@ function VisaoGeral() {
           value={loading ? null : formatBRL(data?.profit ?? 0)}
           delta={pct(data?.profit, data?.profitPrev)}
           tone={data && data.profit >= 0 ? "default" : "warn"}
+          to="/app/financial"
+          search={{ type: "all" }}
         />
         <Kpi
           icon={Calendar}
           label="Atendimentos"
           value={loading ? null : String(data?.appointments ?? 0)}
           delta={pct(data?.appointments, data?.appointmentsPrev)}
+          to="/app/agenda"
         />
         <Kpi
           icon={Receipt}
           label="Ticket médio"
           value={loading ? null : formatBRL(data?.ticket ?? 0)}
           delta={pct(data?.ticket, data?.ticketPrev)}
+          to="/app/financial"
         />
         <Kpi
           icon={Users}
           label="Clientes ativos"
           value={loading ? null : String(data?.activeClients ?? 0)}
+          to="/app/clients"
+          search={{ filter: "ACTIVE" }}
         />
         <Kpi
           icon={AlertCircle}
           label="Clientes p/ retorno"
           value={loading ? null : String(data?.lateReturns ?? 0)}
           tone={data && data.lateReturns > 0 ? "warn" : "default"}
+          to="/app/clients"
+          search={{ tab: "retorno" }}
         />
       </section>
 
@@ -649,6 +661,8 @@ function Kpi({
   tone = "default",
   accent,
   invertDelta = false,
+  to,
+  search,
 }: {
   icon: any;
   label: string;
@@ -657,14 +671,16 @@ function Kpi({
   tone?: "default" | "warn";
   accent?: boolean;
   invertDelta?: boolean;
+  to?: string;
+  search?: any;
 }) {
   const positive = (delta ?? 0) >= 0;
   const isGood = invertDelta ? !positive : positive;
-  return (
+  const content = (
     <Card
       className={`p-4 xl:p-2.5 2xl:p-4 shadow-soft transition-all hover:shadow-md min-w-0 overflow-hidden ${
         accent ? "border-primary/30 bg-gradient-to-br from-card to-accent/30" : ""
-      }`}
+      } ${to ? "hover:border-primary/40 cursor-pointer" : ""}`}
     >
       <div className="flex items-center justify-between mb-3 min-w-0 gap-1">
         <p className="text-[11px] xl:text-[10px] 2xl:text-[11px] font-medium uppercase tracking-wider text-muted-foreground truncate" title={label}>
@@ -698,4 +714,14 @@ function Kpi({
       )}
     </Card>
   );
+
+  if (to) {
+    return (
+      <Link to={to} search={search} className="block no-underline">
+        {content}
+      </Link>
+    );
+  }
+
+  return content;
 }
