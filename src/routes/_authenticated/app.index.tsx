@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCurrentProfile } from "@/lib/hooks/use-current-profile";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -45,13 +46,12 @@ export const Route = createFileRoute("/_authenticated/app/")({
   component: VisaoGeral,
 });
 
-type Period = "7d" | "30d" | "90d" | "365d";
-const PERIOD_DAYS: Record<Period, number> = { "7d": 7, "30d": 30, "90d": 90, "365d": 365 };
+type Period = "today" | "week" | "month" | "year";
 const PERIOD_LABEL: Record<Period, string> = {
-  "7d": "Últimos 7 dias",
-  "30d": "Últimos 30 dias",
-  "90d": "Últimos 90 dias",
-  "365d": "Último ano",
+  today: "Hoje",
+  week: "Últimos 7 dias",
+  month: "Este mês",
+  year: "Este ano",
 };
 const PIE = [
   "var(--color-primary)",
@@ -72,7 +72,20 @@ function VisaoGeral() {
   const { data: profile } = useCurrentProfile();
   const companyId = profile?.company?.id;
   const firstName = profile?.profile?.name?.split(" ")[0];
-  const [period, setPeriod] = useState<string>("30d");
+  
+  const [period, setPeriodState] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("beautyflow-selected-period") || "month";
+    }
+    return "month";
+  });
+
+  const setPeriod = (v: string) => {
+    setPeriodState(v);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("beautyflow-selected-period", v);
+    }
+  };
 
   // Query distinct months with transactions
   const monthsWithTransactions = useQuery({
@@ -80,10 +93,10 @@ function VisaoGeral() {
     queryKey: ["months-with-transactions", companyId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("financial_transactions")
-        .select("transaction_date")
-        .eq("company_id", companyId!)
-        .order("transaction_date", { ascending: false });
+          .from("financial_transactions")
+          .select("transaction_date")
+          .eq("company_id", companyId!)
+          .order("transaction_date", { ascending: false });
 
       if (error) throw error;
 
@@ -107,25 +120,48 @@ function VisaoGeral() {
   });
 
   const range = useMemo(() => {
+    const end = new Date();
     if (period.includes("-")) {
       // Specific month, e.g. "2026-03"
       const [year, month] = period.split("-").map(Number);
       const start = new Date(year, month - 1, 1, 0, 0, 0, 0);
-      const end = new Date(year, month, 0, 23, 59, 59, 999);
+      const endMonth = new Date(year, month, 0, 23, 59, 59, 999);
       const prevStart = new Date(year, month - 2, 1, 0, 0, 0, 0);
       const prevEnd = new Date(year, month - 1, 0, 23, 59, 59, 999);
-      return { start, end, prevStart, prevEnd };
+      return { start, end: endMonth, prevStart, prevEnd };
     } else {
-      // Default periods: "7d", "30d", etc.
-      const end = new Date();
       const start = new Date();
       start.setHours(0, 0, 0, 0);
-      start.setDate(start.getDate() - PERIOD_DAYS[period as Period] + 1);
-      const prevStart = new Date(start);
-      prevStart.setDate(prevStart.getDate() - PERIOD_DAYS[period as Period]);
-      const prevEnd = new Date(start);
-      prevEnd.setMilliseconds(prevEnd.getMilliseconds() - 1);
-      return { start, end, prevStart, prevEnd };
+      
+      if (period === "today") {
+        const prevStart = new Date(start);
+        prevStart.setDate(prevStart.getDate() - 1);
+        const prevEnd = new Date(end);
+        prevEnd.setDate(prevEnd.getDate() - 1);
+        return { start, end, prevStart, prevEnd };
+      } else if (period === "week") {
+        start.setDate(start.getDate() - 6);
+        const prevStart = new Date(start);
+        prevStart.setDate(prevStart.getDate() - 7);
+        const prevEnd = new Date(start);
+        prevEnd.setMilliseconds(prevEnd.getMilliseconds() - 1);
+        return { start, end, prevStart, prevEnd };
+      } else if (period === "year") {
+        start.setMonth(0, 1);
+        const prevStart = new Date(start);
+        prevStart.setFullYear(prevStart.getFullYear() - 1);
+        const prevEnd = new Date(start);
+        prevEnd.setMilliseconds(prevEnd.getMilliseconds() - 1);
+        return { start, end, prevStart, prevEnd };
+      } else {
+        // "month" (default fallback)
+        start.setDate(1);
+        const prevStart = new Date(start);
+        prevStart.setMonth(prevStart.getMonth() - 1);
+        const prevEnd = new Date(start);
+        prevEnd.setMilliseconds(prevEnd.getMilliseconds() - 1);
+        return { start, end, prevStart, prevEnd };
+      }
     }
   }, [period]);
 
@@ -136,7 +172,7 @@ function VisaoGeral() {
       const label = date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
       return label.charAt(0).toUpperCase() + label.slice(1);
     }
-    return PERIOD_LABEL[period as Period];
+    return PERIOD_LABEL[period as Period] || period;
   }, [period]);
 
   const stats = useQuery({
@@ -248,9 +284,20 @@ function VisaoGeral() {
       if (period.includes("-")) {
         const [year, month] = period.split("-").map(Number);
         totalDays = new Date(year, month, 0).getDate();
+      } else if (period === "today") {
+        totalDays = 1;
+        startDay = new Date(range.start);
+      } else if (period === "week") {
+        totalDays = 7;
+        startDay = new Date(range.start);
+      } else if (period === "year") {
+        totalDays = 60;
+        startDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 59);
       } else {
-        totalDays = Math.min(PERIOD_DAYS[period as Period], 60);
-        startDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() - totalDays + 1);
+        // "month"
+        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        totalDays = daysInMonth;
+        startDay = new Date(range.start);
       }
 
       for (let i = 0; i < totalDays; i++) {
@@ -318,31 +365,40 @@ function VisaoGeral() {
             Sua operação em um relance — {periodText ? periodText.toLowerCase() : ""}.
           </p>
         </div>
-        <Select value={period} onValueChange={(v) => setPeriod(v)}>
-          <SelectTrigger className="w-[200px] h-9">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {(Object.keys(PERIOD_LABEL) as Period[]).map((p) => (
-              <SelectItem key={p} value={p}>
-                {PERIOD_LABEL[p]}
-              </SelectItem>
-            ))}
-            {monthsWithTransactions.data && monthsWithTransactions.data.length > 0 && (
-              <>
-                <div className="h-px bg-muted my-1" />
-                <div className="px-2 py-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                  Filtrar por Mês
-                </div>
-                {monthsWithTransactions.data.map((m) => (
+        <Tabs
+          value={period.includes("-") ? "custom-month" : period}
+          onValueChange={(v) => {
+            if (v !== "custom-month") {
+              setPeriod(v);
+            }
+          }}
+          className="w-auto"
+        >
+          <TabsList>
+            <TabsTrigger value="today">Hoje</TabsTrigger>
+            <TabsTrigger value="week">Semana</TabsTrigger>
+            <TabsTrigger value="month">Mês</TabsTrigger>
+            <TabsTrigger value="year">Ano</TabsTrigger>
+            <Select value={period.includes("-") ? period : ""} onValueChange={(v) => setPeriod(v)}>
+              <SelectTrigger
+                className={`h-7 border-0 bg-transparent shadow-none px-3 py-1 text-sm font-medium ring-offset-background transition-all focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 ${
+                  period.includes("-")
+                    ? "bg-background text-foreground shadow-sm font-semibold"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <SelectValue placeholder="Outros meses" />
+              </SelectTrigger>
+              <SelectContent>
+                {monthsWithTransactions.data?.map((m) => (
                   <SelectItem key={m.value} value={m.value}>
                     {m.label}
                   </SelectItem>
                 ))}
-              </>
-            )}
-          </SelectContent>
-        </Select>
+              </SelectContent>
+            </Select>
+          </TabsList>
+        </Tabs>
       </header>
 
       {/* KPI grid */}

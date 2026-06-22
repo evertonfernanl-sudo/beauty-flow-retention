@@ -102,7 +102,19 @@ function FinancialPage() {
   const companyId = profile?.company?.id;
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [period, setPeriod] = useState<string>("month");
+  const [period, setPeriodState] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("beautyflow-selected-period") || "month";
+    }
+    return "month";
+  });
+
+  const setPeriod = (v: string) => {
+    setPeriodState(v);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("beautyflow-selected-period", v);
+    }
+  };
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [search, setSearch] = useState("");
   const [goalOpen, setGoalOpen] = useState(false);
@@ -320,30 +332,40 @@ function FinancialPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Select value={period} onValueChange={(v) => setPeriod(v)}>
-            <SelectTrigger className="w-[180px] h-9">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="today">Hoje</SelectItem>
-              <SelectItem value="week">Semana</SelectItem>
-              <SelectItem value="month">Mês</SelectItem>
-              <SelectItem value="year">Ano</SelectItem>
-              {monthsWithTransactions.data && monthsWithTransactions.data.length > 0 && (
-                <>
-                  <div className="h-px bg-muted my-1" />
-                  <div className="px-2 py-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                    Filtrar por Mês
-                  </div>
-                  {monthsWithTransactions.data.map((m) => (
+          <Tabs
+            value={period.includes("-") ? "custom-month" : period}
+            onValueChange={(v) => {
+              if (v !== "custom-month") {
+                setPeriod(v);
+              }
+            }}
+            className="w-auto"
+          >
+            <TabsList>
+              <TabsTrigger value="today">Hoje</TabsTrigger>
+              <TabsTrigger value="week">Semana</TabsTrigger>
+              <TabsTrigger value="month">Mês</TabsTrigger>
+              <TabsTrigger value="year">Ano</TabsTrigger>
+              <Select value={period.includes("-") ? period : ""} onValueChange={(v) => setPeriod(v)}>
+                <SelectTrigger
+                  className={`h-7 border-0 bg-transparent shadow-none px-3 py-1 text-sm font-medium ring-offset-background transition-all focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 ${
+                    period.includes("-")
+                      ? "bg-background text-foreground shadow-sm font-semibold"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <SelectValue placeholder="Outros meses" />
+                </SelectTrigger>
+                <SelectContent>
+                  {monthsWithTransactions.data?.map((m) => (
                     <SelectItem key={m.value} value={m.value}>
                       {m.label}
                     </SelectItem>
                   ))}
-                </>
-              )}
-            </SelectContent>
-          </Select>
+                </SelectContent>
+              </Select>
+            </TabsList>
+          </Tabs>
           <NewTransactionDialog
             open={open}
             onOpenChange={setOpen}
