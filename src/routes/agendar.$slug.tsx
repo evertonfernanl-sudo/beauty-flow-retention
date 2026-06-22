@@ -287,7 +287,6 @@ function BookingPage() {
     try {
       const phoneNorm = toStoragePhone(phone) ?? phone;
 
-      // @ts-expect-error create_online_booking RPC type not regenerated yet
       const { data, error } = await supabase.rpc("create_online_booking", {
         p_data: {
           p_company_id: company.id,
