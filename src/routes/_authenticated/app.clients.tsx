@@ -205,30 +205,40 @@ function ClientsPage() {
   });
 
   const clientsWithOpp = useMemo(() => {
+    const RETURN_CLASSES = new Set(["ATTENTION", "LATE", "ON_TIME"]);
     return (list.data ?? []).map((c: any) => {
-      const activeOpp = c.recovery_opportunities?.find(
-        (o: any) => o.status === "OPEN" || o.status === "IN_CONTACT"
-      );
+      const activeOpps = (c.recovery_opportunities ?? [])
+        .filter((o: any) => o.status === "OPEN" || o.status === "IN_CONTACT")
+        .sort((a: any, b: any) => {
+          const da = a.expected_return_date ? new Date(a.expected_return_date).getTime() : Infinity;
+          const db = b.expected_return_date ? new Date(b.expected_return_date).getTime() : Infinity;
+          return da - db;
+        });
+      const activeReturnOpps = activeOpps.filter((o: any) => RETURN_CLASSES.has(o.classification));
+      const activeAtRiskOpps = activeOpps.filter((o: any) => o.classification === "AT_RISK");
+      const activeLostOpps = activeOpps.filter((o: any) => o.classification === "LOST");
       return {
         ...c,
-        activeOpp,
+        activeOpps,
+        activeReturnOpps,
+        activeAtRiskOpps,
+        activeLostOpps,
+        activeOpp: activeOpps[0],
       };
     });
   }, [list.data]);
 
   const stats = useMemo(() => {
-    const returnClients = clientsWithOpp.filter((c) => {
-      return c.activeOpp && (c.activeOpp.classification === "ATTENTION" || c.activeOpp.classification === "LATE" || c.activeOpp.classification === "ON_TIME");
-    });
-    const atRiskClients = clientsWithOpp.filter((c) => {
-      return c.activeOpp && c.activeOpp.classification === "AT_RISK";
-    });
+    const sumPotential = (opps: any[]) =>
+      opps.reduce((acc, o) => acc + Number(o.potential_value || 0), 0);
+
+    const returnClients = clientsWithOpp.filter((c) => c.activeReturnOpps.length > 0);
+    const atRiskClients = clientsWithOpp.filter((c) => c.activeAtRiskOpps.length > 0);
 
     const opportunitiesCount = returnClients.length;
-    const recoveredValue = returnClients.reduce((acc, c) => acc + Number(c.activeOpp?.potential_value || 0), 0);
-    const ticketAverage = opportunitiesCount > 0 ? recoveredValue / opportunitiesCount : 0;
-
-    const atRiskValue = atRiskClients.reduce((acc, c) => acc + Number(c.activeOpp?.potential_value || 0), 0);
+    const recoveredValue = returnClients.reduce((acc, c) => acc + sumPotential(c.activeReturnOpps), 0);
+    const ticketAverage = returnClients.length > 0 ? recoveredValue / returnClients.length : 0;
+    const atRiskValue = atRiskClients.reduce((acc, c) => acc + sumPotential(c.activeAtRiskOpps), 0);
 
     return {
       opportunitiesCount,
@@ -256,19 +266,18 @@ function ClientsPage() {
       if (filter === "ACTIVE") return c.status === "ACTIVE";
       if (filter === "INACTIVE") return c.status === "INACTIVE";
       if (filter === "RETURN") {
-        return c.activeOpp && (c.activeOpp.classification === "ATTENTION" || c.activeOpp.classification === "LATE" || c.activeOpp.classification === "ON_TIME");
+        return c.activeReturnOpps.length > 0;
       }
       if (filter === "AT_RISK") {
-        return c.activeOpp && c.activeOpp.classification === "AT_RISK";
+        return c.activeAtRiskOpps.length > 0;
       }
       if (filter === "LOST") {
         const date90DaysAgo = new Date();
         date90DaysAgo.setDate(date90DaysAgo.getDate() - 90);
-        const isLostOpp = c.activeOpp && c.activeOpp.classification === "LOST";
-        const isLostInactivity = c.last_visit 
-          ? new Date(c.last_visit) < date90DaysAgo 
+        const isLostInactivity = c.last_visit
+          ? new Date(c.last_visit) < date90DaysAgo
           : new Date(c.created_at) < date90DaysAgo;
-        return c.status === "LOST" || isLostOpp || isLostInactivity;
+        return c.status === "LOST" || c.activeLostOpps.length > 0 || isLostInactivity;
       }
       if (filter === "BIRTHDAY") {
         const month = new Date().getMonth() + 1;
@@ -712,12 +721,25 @@ function ClientsPage() {
                         const daysSince = c.last_visit 
                           ? Math.floor((Date.now() - new Date(c.last_visit).getTime()) / 86400000) 
                           : null;
-                        const serviceName = c.activeOpp?.services?.name ?? "—";
-                        const valueToDisplay = c.activeOpp 
-                          ? Number(c.activeOpp.potential_value || 0) 
+                        const oppsForFilter: any[] =
+                          filter === "RETURN" ? c.activeReturnOpps
+                          : filter === "AT_RISK" ? c.activeAtRiskOpps
+                          : filter === "LOST" ? c.activeLostOpps
+                          : c.activeOpps;
+                        const uniqueServiceNames = Array.from(
+                          new Set(
+                            oppsForFilter
+                              .map((o: any) => o.services?.name)
+                              .filter((n: any): n is string => !!n)
+                          )
+                        );
+                        const serviceName = uniqueServiceNames.length > 0 ? uniqueServiceNames.join(", ") : "—";
+                        const valueToDisplay = oppsForFilter.length > 0
+                          ? oppsForFilter.reduce((acc: number, o: any) => acc + Number(o.potential_value || 0), 0)
                           : (c.appointments_count > 0 ? Number(c.total_spent || 0) / c.appointments_count : 0);
-                        const nextActionDate = c.activeOpp?.expected_return_date 
-                          ? new Date(c.activeOpp.expected_return_date).toLocaleDateString("pt-BR") 
+                        const nextOppDate = oppsForFilter[0]?.expected_return_date;
+                        const nextActionDate = nextOppDate
+                          ? new Date(nextOppDate).toLocaleDateString("pt-BR")
                           : (c.next_return ? new Date(c.next_return).toLocaleDateString("pt-BR") : "—");
                         const link = profile?.company?.slug
                           ? `${window.location.origin}/agendar/${profile.company.slug}`
