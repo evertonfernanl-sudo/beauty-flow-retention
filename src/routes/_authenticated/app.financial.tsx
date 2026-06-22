@@ -345,30 +345,30 @@ function FinancialPage() {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <Tabs
-            value={period.includes("-") ? "custom-month" : period}
+            value={["today", "week", "year"].includes(period) ? period : ""}
             onValueChange={(v) => {
-              if (v !== "custom-month") {
-                setPeriod(v);
-              }
+              setPeriod(v);
             }}
             className="w-auto"
           >
             <TabsList>
               <TabsTrigger value="today">Hoje</TabsTrigger>
               <TabsTrigger value="week">Semana</TabsTrigger>
-              <TabsTrigger value="month">Mês</TabsTrigger>
-              <TabsTrigger value="year">Ano</TabsTrigger>
-              <Select value={period.includes("-") ? period : ""} onValueChange={(v) => setPeriod(v)}>
+              <Select
+                value={period === "month" || period.includes("-") ? period : ""}
+                onValueChange={(v) => setPeriod(v)}
+              >
                 <SelectTrigger
                   className={`h-7 border-0 bg-transparent shadow-none px-3 py-1 text-sm font-medium ring-offset-background transition-all focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 ${
-                    period.includes("-")
+                    period === "month" || period.includes("-")
                       ? "bg-background text-foreground shadow-sm font-semibold"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  <SelectValue placeholder="Outros meses" />
+                  <SelectValue placeholder="Mês" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="month">Este mês</SelectItem>
                   {monthsWithTransactions.data?.map((m) => (
                     <SelectItem key={m.value} value={m.value}>
                       {m.label}
@@ -376,6 +376,7 @@ function FinancialPage() {
                   ))}
                 </SelectContent>
               </Select>
+              <TabsTrigger value="year">Ano</TabsTrigger>
             </TabsList>
           </Tabs>
           <NewTransactionDialog
