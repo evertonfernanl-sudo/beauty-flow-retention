@@ -1424,7 +1424,7 @@ function SecurityTab({ isAdmin, email }: { isAdmin: boolean; email?: string }) {
     try {
       setResetting(true);
       const { verifyAndResetSystem } = await import("@/lib/api/security.functions");
-      const res = await verifyAndResetSystem({ code: verificationCode.trim() });
+      const res = await verifyAndResetSystem({ data: { code: verificationCode.trim() } });
 
       if (res.ok) {
         toast.success("Sistema zerado com sucesso!");

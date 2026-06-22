@@ -212,12 +212,11 @@ function BookingPage() {
       const to = addDays(from, 7);
 
       try {
-        // @ts-expect-error get_public_busy_slots RPC type not regenerated yet
         const { data, error } = await supabase.rpc("get_public_busy_slots", {
           p_company_id: company.id,
           p_from: from.toISOString(),
           p_to: to.toISOString(),
-          p_professional_id: professional?.id || null,
+          p_professional_id: professional?.id ?? undefined,
         });
 
         if (error) throw error;
@@ -288,7 +287,6 @@ function BookingPage() {
     try {
       const phoneNorm = toStoragePhone(phone) ?? phone;
 
-      // @ts-expect-error create_online_booking RPC type not regenerated yet
       const { data, error } = await supabase.rpc("create_online_booking", {
         p_data: {
           p_company_id: company.id,
