@@ -74,10 +74,13 @@ function VisaoGeral() {
   const firstName = profile?.profile?.name?.split(" ")[0];
   
   const [period, setPeriodState] = useState<string>(() => {
+    const currentYM = new Date().toISOString().slice(0, 7);
     if (typeof window !== "undefined") {
-      return localStorage.getItem("beautyflow-selected-period") || "month";
+      const stored = localStorage.getItem("beautyflow-selected-period");
+      if (stored === "month") return currentYM;
+      return stored || currentYM;
     }
-    return "month";
+    return currentYM;
   });
 
   const setPeriod = (v: string) => {
@@ -101,13 +104,18 @@ function VisaoGeral() {
       if (error) throw error;
 
       const uniqueMonths = new Set<string>();
+      const currentYM = new Date().toISOString().slice(0, 7);
+      uniqueMonths.add(currentYM);
+
       for (const row of data || []) {
         if (row.transaction_date) {
           uniqueMonths.add(row.transaction_date.slice(0, 7)); // e.g. "2026-03"
         }
       }
 
-      return Array.from(uniqueMonths).map((ym) => {
+      const sortedMonths = Array.from(uniqueMonths).sort((a, b) => b.localeCompare(a));
+
+      return sortedMonths.map((ym) => {
         const [year, month] = ym.split("-").map(Number);
         const date = new Date(year, month - 1, 1);
         const label = date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
@@ -375,12 +383,12 @@ function VisaoGeral() {
             <TabsTrigger value="today">Hoje</TabsTrigger>
             <TabsTrigger value="week">Semana</TabsTrigger>
             <Select
-              value={period === "month" || period.includes("-") ? period : ""}
+              value={period.includes("-") ? period : ""}
               onValueChange={(v) => setPeriod(v)}
             >
               <SelectTrigger
                 className={`h-7 border-0 bg-transparent shadow-none px-3 py-1 text-sm font-medium ring-offset-background transition-all focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 ${
-                  period === "month" || period.includes("-")
+                  period.includes("-")
                     ? "bg-background text-foreground shadow-sm font-semibold"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
@@ -388,7 +396,6 @@ function VisaoGeral() {
                 <SelectValue placeholder="Mês" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="month">Este mês</SelectItem>
                 {monthsWithTransactions.data?.map((m) => (
                   <SelectItem key={m.value} value={m.value}>
                     {m.label}
