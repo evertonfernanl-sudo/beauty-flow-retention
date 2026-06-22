@@ -266,19 +266,18 @@ function ClientsPage() {
       if (filter === "ACTIVE") return c.status === "ACTIVE";
       if (filter === "INACTIVE") return c.status === "INACTIVE";
       if (filter === "RETURN") {
-        return c.activeOpp && (c.activeOpp.classification === "ATTENTION" || c.activeOpp.classification === "LATE" || c.activeOpp.classification === "ON_TIME");
+        return c.activeReturnOpps.length > 0;
       }
       if (filter === "AT_RISK") {
-        return c.activeOpp && c.activeOpp.classification === "AT_RISK";
+        return c.activeAtRiskOpps.length > 0;
       }
       if (filter === "LOST") {
         const date90DaysAgo = new Date();
         date90DaysAgo.setDate(date90DaysAgo.getDate() - 90);
-        const isLostOpp = c.activeOpp && c.activeOpp.classification === "LOST";
-        const isLostInactivity = c.last_visit 
-          ? new Date(c.last_visit) < date90DaysAgo 
+        const isLostInactivity = c.last_visit
+          ? new Date(c.last_visit) < date90DaysAgo
           : new Date(c.created_at) < date90DaysAgo;
-        return c.status === "LOST" || isLostOpp || isLostInactivity;
+        return c.status === "LOST" || c.activeLostOpps.length > 0 || isLostInactivity;
       }
       if (filter === "BIRTHDAY") {
         const month = new Date().getMonth() + 1;
