@@ -721,12 +721,25 @@ function ClientsPage() {
                         const daysSince = c.last_visit 
                           ? Math.floor((Date.now() - new Date(c.last_visit).getTime()) / 86400000) 
                           : null;
-                        const serviceName = c.activeOpp?.services?.name ?? "—";
-                        const valueToDisplay = c.activeOpp 
-                          ? Number(c.activeOpp.potential_value || 0) 
+                        const oppsForFilter: any[] =
+                          filter === "RETURN" ? c.activeReturnOpps
+                          : filter === "AT_RISK" ? c.activeAtRiskOpps
+                          : filter === "LOST" ? c.activeLostOpps
+                          : c.activeOpps;
+                        const uniqueServiceNames = Array.from(
+                          new Set(
+                            oppsForFilter
+                              .map((o: any) => o.services?.name)
+                              .filter((n: any): n is string => !!n)
+                          )
+                        );
+                        const serviceName = uniqueServiceNames.length > 0 ? uniqueServiceNames.join(", ") : "—";
+                        const valueToDisplay = oppsForFilter.length > 0
+                          ? oppsForFilter.reduce((acc: number, o: any) => acc + Number(o.potential_value || 0), 0)
                           : (c.appointments_count > 0 ? Number(c.total_spent || 0) / c.appointments_count : 0);
-                        const nextActionDate = c.activeOpp?.expected_return_date 
-                          ? new Date(c.activeOpp.expected_return_date).toLocaleDateString("pt-BR") 
+                        const nextOppDate = oppsForFilter[0]?.expected_return_date;
+                        const nextActionDate = nextOppDate
+                          ? new Date(nextOppDate).toLocaleDateString("pt-BR")
                           : (c.next_return ? new Date(c.next_return).toLocaleDateString("pt-BR") : "—");
                         const link = profile?.company?.slug
                           ? `${window.location.origin}/agendar/${profile.company.slug}`
