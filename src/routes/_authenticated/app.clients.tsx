@@ -205,30 +205,40 @@ function ClientsPage() {
   });
 
   const clientsWithOpp = useMemo(() => {
+    const RETURN_CLASSES = new Set(["ATTENTION", "LATE", "ON_TIME"]);
     return (list.data ?? []).map((c: any) => {
-      const activeOpp = c.recovery_opportunities?.find(
-        (o: any) => o.status === "OPEN" || o.status === "IN_CONTACT"
-      );
+      const activeOpps = (c.recovery_opportunities ?? [])
+        .filter((o: any) => o.status === "OPEN" || o.status === "IN_CONTACT")
+        .sort((a: any, b: any) => {
+          const da = a.expected_return_date ? new Date(a.expected_return_date).getTime() : Infinity;
+          const db = b.expected_return_date ? new Date(b.expected_return_date).getTime() : Infinity;
+          return da - db;
+        });
+      const activeReturnOpps = activeOpps.filter((o: any) => RETURN_CLASSES.has(o.classification));
+      const activeAtRiskOpps = activeOpps.filter((o: any) => o.classification === "AT_RISK");
+      const activeLostOpps = activeOpps.filter((o: any) => o.classification === "LOST");
       return {
         ...c,
-        activeOpp,
+        activeOpps,
+        activeReturnOpps,
+        activeAtRiskOpps,
+        activeLostOpps,
+        activeOpp: activeOpps[0],
       };
     });
   }, [list.data]);
 
   const stats = useMemo(() => {
-    const returnClients = clientsWithOpp.filter((c) => {
-      return c.activeOpp && (c.activeOpp.classification === "ATTENTION" || c.activeOpp.classification === "LATE" || c.activeOpp.classification === "ON_TIME");
-    });
-    const atRiskClients = clientsWithOpp.filter((c) => {
-      return c.activeOpp && c.activeOpp.classification === "AT_RISK";
-    });
+    const sumPotential = (opps: any[]) =>
+      opps.reduce((acc, o) => acc + Number(o.potential_value || 0), 0);
+
+    const returnClients = clientsWithOpp.filter((c) => c.activeReturnOpps.length > 0);
+    const atRiskClients = clientsWithOpp.filter((c) => c.activeAtRiskOpps.length > 0);
 
     const opportunitiesCount = returnClients.length;
-    const recoveredValue = returnClients.reduce((acc, c) => acc + Number(c.activeOpp?.potential_value || 0), 0);
-    const ticketAverage = opportunitiesCount > 0 ? recoveredValue / opportunitiesCount : 0;
-
-    const atRiskValue = atRiskClients.reduce((acc, c) => acc + Number(c.activeOpp?.potential_value || 0), 0);
+    const recoveredValue = returnClients.reduce((acc, c) => acc + sumPotential(c.activeReturnOpps), 0);
+    const ticketAverage = returnClients.length > 0 ? recoveredValue / returnClients.length : 0;
+    const atRiskValue = atRiskClients.reduce((acc, c) => acc + sumPotential(c.activeAtRiskOpps), 0);
 
     return {
       opportunitiesCount,
