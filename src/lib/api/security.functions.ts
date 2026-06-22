@@ -62,63 +62,60 @@ export const requestSystemResetCode = createServerFn({ method: "POST" })
     }
 
     // 5) Try to send email via Resend API
-    let emailSent = false;
-    let devMode = true;
-
-    if (process.env.RESEND_API_KEY) {
-      devMode = false;
-      try {
-        const res = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-          },
-          body: JSON.stringify({
-            from: "BeautyFlow <onboarding@resend.dev>",
-            to: userEmail,
-            subject: "Código de Segurança - Zerar Sistema BeautyFlow",
-            html: `
-              <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
-                <h2 style="color: #ec4899; text-align: center;">Zerar Sistema BeautyFlow</h2>
-                <p>Olá, <strong>${userProfile.name || "Administrador"}</strong>.</p>
-                <p>Você solicitou a exclusão definitiva e o reset de todos os dados do seu sistema BeautyFlow.</p>
-                <p>Para confirmar esta ação, insira o código de segurança de 6 dígitos abaixo no sistema:</p>
-                <div style="background-color: #f8fafc; padding: 15px; border-radius: 6px; text-align: center; margin: 20px 0;">
-                  <span style="font-size: 32px; font-weight: bold; letter-spacing: 4px; font-family: monospace; color: #1e293b;">${code}</span>
-                </div>
-                <p style="color: #64748b; font-size: 14px;">Este código é válido por <strong>15 minutos</strong>.</p>
-                <p style="color: #ef4444; font-size: 14px; font-weight: bold; margin-top: 20px;">Atenção: Esta ação é irreversível e apagará todos os clientes, agendamentos, serviços, profissionais, lançamentos financeiros e outros dados.</p>
-                <p style="color: #64748b; font-size: 12px; margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 15px;">Se você não solicitou este reset, ignore este e-mail e altere sua senha de acesso imediatamente.</p>
-              </div>
-            `,
-          }),
-        });
-
-        if (res.ok) {
-          emailSent = true;
-        } else {
-          const errText = await res.text();
-          console.error("Resend API response error:", errText);
-        }
-      } catch (err) {
-        console.error("Failed to send email via Resend:", err);
-      }
+    if (!process.env.RESEND_API_KEY) {
+      throw new Error(
+        "Chave de API do Resend (RESEND_API_KEY) não configurada no servidor. Adicione-a ao seu arquivo .env para habilitar o envio de e-mails de segurança."
+      );
     }
 
-    // Always log to console in dev mode or as fallback
-    console.log(`\n--- [SECURITY RESET CODE] ---`);
+    try {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        },
+        body: JSON.stringify({
+          from: "BeautyFlow <onboarding@resend.dev>",
+          to: userEmail,
+          subject: "Código de Segurança - Zerar Sistema BeautyFlow",
+          html: `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+              <h2 style="color: #ec4899; text-align: center;">Zerar Sistema BeautyFlow</h2>
+              <p>Olá, <strong>${userProfile.name || "Administrador"}</strong>.</p>
+              <p>Você solicitou a exclusão definitiva e o reset de todos os dados do seu sistema BeautyFlow.</p>
+              <p>Para confirmar esta ação, insira o código de segurança de 6 dígitos abaixo no sistema:</p>
+              <div style="background-color: #f8fafc; padding: 15px; border-radius: 6px; text-align: center; margin: 20px 0;">
+                <span style="font-size: 32px; font-weight: bold; letter-spacing: 4px; font-family: monospace; color: #1e293b;">${code}</span>
+              </div>
+              <p style="color: #64748b; font-size: 14px;">Este código é válido por <strong>15 minutos</strong>.</p>
+              <p style="color: #ef4444; font-size: 14px; font-weight: bold; margin-top: 20px;">Atenção: Esta ação é irreversível e apagará todos os clientes, agendamentos, serviços, profissionais, lançamentos financeiros e outros dados.</p>
+              <p style="color: #64748b; font-size: 12px; margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 15px;">Se você não solicitou este reset, ignore este e-mail e altere sua senha de acesso imediatamente.</p>
+            </div>
+          `,
+        }),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error("Resend API response error:", errText);
+        throw new Error(`Falha no serviço Resend: ${errText}`);
+      }
+    } catch (err: any) {
+      console.error("Failed to send email via Resend:", err);
+      throw new Error(err.message || "Erro ao enviar e-mail via Resend.");
+    }
+
+    // Always log to console for debugging/audit logs
+    console.log(`\n--- [SECURITY RESET CODE SENT] ---`);
     console.log(`Company ID: ${companyId}`);
     console.log(`User ID: ${userId} (${userEmail})`);
     console.log(`Verification Code: ${code}`);
     console.log(`Expires At: ${expiresAt}`);
-    console.log(`-----------------------------\n`);
+    console.log(`----------------------------------\n`);
 
     return {
       ok: true,
-      emailSent,
-      devMode,
-      code: devMode ? code : undefined,
     };
   });
 

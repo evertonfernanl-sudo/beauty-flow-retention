@@ -37,12 +37,33 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
   });
 }
 
+function applyNoCacheHeaders(response: Response, url: string): Response {
+  const newHeaders = new Headers(response.headers)
+
+  if (url.includes("/agendar/")) {
+    newHeaders.set(
+      "Cache-Control",
+      "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
+    )
+    newHeaders.set("Pragma", "no-cache")
+    newHeaders.set("Expires", "0")
+    newHeaders.set("Surrogate-Control", "no-store")
+  }
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: newHeaders,
+  })
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
-      return await normalizeCatastrophicSsrResponse(response);
+      const normalized = await normalizeCatastrophicSsrResponse(response);
+      return applyNoCacheHeaders(normalized, request.url);
     } catch (error) {
       console.error(error);
       return new Response(renderErrorPage(), {

@@ -1378,7 +1378,6 @@ function SecurityTab({ isAdmin, email }: { isAdmin: boolean; email?: string }) {
   const [requestingCode, setRequestingCode] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [verificationCode, setVerificationCode] = useState("");
-  const [devCode, setDevCode] = useState<string | null>(null);
 
   const qc = useQueryClient();
 
@@ -1401,19 +1400,13 @@ function SecurityTab({ isAdmin, email }: { isAdmin: boolean; email?: string }) {
   async function handleStartReset() {
     try {
       setRequestingCode(true);
-      setDevCode(null);
       setVerificationCode("");
 
       const { requestSystemResetCode } = await import("@/lib/api/security.functions");
       const res = await requestSystemResetCode();
 
       if (res.ok) {
-        if (res.devMode && res.code) {
-          setDevCode(res.code);
-          toast.success("Código gerado em modo de desenvolvimento!");
-        } else {
-          toast.success(`Código de verificação enviado para ${email || "seu e-mail"}!`);
-        }
+        toast.success(`Código de verificação enviado para ${email || "seu e-mail"}!`);
         setResetDialogOpen(true);
       }
     } catch (err: any) {
@@ -1437,7 +1430,6 @@ function SecurityTab({ isAdmin, email }: { isAdmin: boolean; email?: string }) {
         toast.success("Sistema zerado com sucesso!");
         setResetDialogOpen(false);
         setVerificationCode("");
-        setDevCode(null);
 
         // Invalidate queries to refresh UI and show empty state
         qc.invalidateQueries();
@@ -1558,14 +1550,7 @@ function SecurityTab({ isAdmin, email }: { isAdmin: boolean; email?: string }) {
               />
             </div>
 
-            {devCode && (
-              <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-900/30 p-3 rounded-lg text-xs text-yellow-800 dark:text-yellow-400">
-                <span className="font-semibold">Modo de Teste:</span> Código gerado:{" "}
-                <code className="font-mono bg-yellow-100 dark:bg-yellow-900/40 px-1.5 py-0.5 rounded font-bold">
-                  {devCode}
-                </code>
-              </div>
-            )}
+
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
             <Button

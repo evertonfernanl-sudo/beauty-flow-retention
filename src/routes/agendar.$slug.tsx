@@ -22,6 +22,34 @@ import { formatBRL } from "@/lib/format";
 import { toStoragePhone, formatPhoneBR } from "@/lib/phone";
 import { toast } from "sonner";
 
+export function normalizeSlug(slug: string) {
+  return decodeURIComponent(slug || "")
+    .toLowerCase()
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // remove acentos
+    .replace(/[^a-z0-9-]/g, "") // remove lixo invisível (WhatsApp, espaços, etc.)
+}
+
+export async function logError(data: {
+  slug?: string
+  error: string
+}) {
+  try {
+    const path = typeof window !== "undefined" ? window.location.pathname : ""
+    const user_agent = typeof navigator !== "undefined" ? navigator.userAgent : "SSR"
+
+    await (supabase as any).from("app_logs").insert({
+      slug: data.slug || null,
+      error: data.error,
+      path,
+      user_agent,
+    })
+  } catch {
+    console.warn("log failed (non-critical)")
+  }
+}
+
 export const Route = createFileRoute("/agendar/$slug")({
   head: (ctx) => {
     const company = (ctx as { loaderData?: { company?: { name?: string } } }).loaderData?.company;
@@ -35,7 +63,7 @@ export const Route = createFileRoute("/agendar/$slug")({
     };
   },
   loader: async ({ params }) => {
-    const cleanSlug = params.slug.toLowerCase().trim();
+    const cleanSlug = normalizeSlug(params.slug);
     const { data: company } = await supabase
       .from("companies")
       .select("id, name, slug, logo_url, address, city, state, vertical")
@@ -43,7 +71,13 @@ export const Route = createFileRoute("/agendar/$slug")({
       .eq("active", true)
       .eq("onboarding_completed", true)
       .maybeSingle();
-    if (!company) throw notFound();
+    if (!company) {
+      await logError({
+        slug: params.slug,
+        error: "COMPANY_NOT_FOUND",
+      });
+      throw notFound();
+    }
     return { company };
   },
   notFoundComponent: () => (
