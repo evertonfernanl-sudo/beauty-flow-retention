@@ -79,17 +79,22 @@ const schema = z.object({
   transaction_date: z.string().min(1),
 });
 
-type Period = "today" | "week" | "month" | "year";
 type TypeFilter = "all" | "INCOME" | "EXPENSE";
 
-function periodLabel(p: Period) {
-  const map: Record<Period, string> = {
+function periodLabel(p: string) {
+  if (p.includes("-")) {
+    const [year, month] = p.split("-").map(Number);
+    const date = new Date(year, month - 1, 1);
+    const label = date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  }
+  const map: Record<string, string> = {
     today: "Hoje",
     week: "Esta Semana",
     month: "Este Mês",
     year: "Este Ano",
   };
-  return map[p];
+  return map[p] ?? p;
 }
 
 function FinancialPage() {
@@ -97,10 +102,42 @@ function FinancialPage() {
   const companyId = profile?.company?.id;
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [period, setPeriod] = useState<Period>("month");
+  const [period, setPeriod] = useState<string>("month");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [search, setSearch] = useState("");
   const [goalOpen, setGoalOpen] = useState(false);
+
+  // Query distinct months with transactions
+  const monthsWithTransactions = useQuery({
+    enabled: !!companyId,
+    queryKey: ["months-with-transactions", companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("financial_transactions")
+        .select("transaction_date")
+        .eq("company_id", companyId!)
+        .order("transaction_date", { ascending: false });
+
+      if (error) throw error;
+
+      const uniqueMonths = new Set<string>();
+      for (const row of data || []) {
+        if (row.transaction_date) {
+          uniqueMonths.add(row.transaction_date.slice(0, 7)); // e.g. "2026-03"
+        }
+      }
+
+      return Array.from(uniqueMonths).map((ym) => {
+        const [year, month] = ym.split("-").map(Number);
+        const date = new Date(year, month - 1, 1);
+        const label = date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+        return {
+          value: ym,
+          label: label.charAt(0).toUpperCase() + label.slice(1),
+        };
+      });
+    },
+  });
 
   const range = useMemo(() => periodRange(period), [period]);
 
@@ -162,7 +199,7 @@ function FinancialPage() {
       return [...map.values()];
     }
 
-    if (period === "week" || period === "month") {
+    if (period === "week" || period === "month" || period.includes("-")) {
       const map = new Map<string, { date: string; Entradas: number; Saídas: number }>();
       const start = new Date(range.from + "T00:00:00");
       const end = new Date(range.to + "T00:00:00");
@@ -283,14 +320,30 @@ function FinancialPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Tabs value={period} onValueChange={(v) => setPeriod(v as Period)} className="w-auto">
-            <TabsList>
-              <TabsTrigger value="today">Hoje</TabsTrigger>
-              <TabsTrigger value="week">Semana</TabsTrigger>
-              <TabsTrigger value="month">Mês</TabsTrigger>
-              <TabsTrigger value="year">Ano</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <Select value={period} onValueChange={(v) => setPeriod(v)}>
+            <SelectTrigger className="w-[180px] h-9">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="today">Hoje</SelectItem>
+              <SelectItem value="week">Semana</SelectItem>
+              <SelectItem value="month">Mês</SelectItem>
+              <SelectItem value="year">Ano</SelectItem>
+              {monthsWithTransactions.data && monthsWithTransactions.data.length > 0 && (
+                <>
+                  <div className="h-px bg-muted my-1" />
+                  <div className="px-2 py-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                    Filtrar por Mês
+                  </div>
+                  {monthsWithTransactions.data.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </>
+              )}
+            </SelectContent>
+          </Select>
           <NewTransactionDialog
             open={open}
             onOpenChange={setOpen}
@@ -505,8 +558,19 @@ function FinancialPage() {
   );
 }
 
-function periodRange(p: Period) {
+function periodRange(p: string) {
   const now = new Date();
+
+  if (p.includes("-")) {
+    const [year, month] = p.split("-").map(Number);
+    const from = new Date(year, month - 1, 1);
+    const to = new Date(year, month, 0); // Last day of month
+    return {
+      from: from.toISOString().slice(0, 10),
+      to: to.toISOString().slice(0, 10),
+    };
+  }
+
   const to = now.toISOString().slice(0, 10);
   const from = new Date(now);
   if (p === "today") {

@@ -528,7 +528,7 @@ function VisaoGeral() {
         <Card className="p-5 shadow-soft lg:col-span-3">
           <div className="mb-4">
             <h2 className="font-semibold text-[15px]">Atendimentos por dia</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">{PERIOD_LABEL[period]}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{periodText}</p>
           </div>
           <div className="h-56">
             {loading ? (
