@@ -50,7 +50,20 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { formatBRL } from "@/lib/format";
-import { RecoveryPage } from "./app.returns";
+import { Checkbox } from "@/components/ui/checkbox";
+import { whatsappLink } from "@/lib/phone";
+import { ComunicacaoPage } from "./app.comunicacao";
+import { MensageriaPage } from "./app.mensageria";
+import {
+  Clock,
+  AlertCircle,
+  TrendingDown,
+  Send,
+  Calendar,
+  Copy,
+  MessageCircle,
+  Sparkles,
+} from "lucide-react";
 
 const clientsSearchSchema = z.object({
   tab: z.enum(["cadastro", "retorno"]).optional(),
@@ -94,6 +107,12 @@ function ClientsPage() {
   const searchParams = Route.useSearch();
   
   const [search, setSearch] = useState("");
+  const [mainTab, setMainTab] = useState<"oportunidades" | "comunicacao" | "mensageria">(() => {
+    if (searchParams.tab === "comunicacao") return "comunicacao";
+    if (searchParams.tab === "mensageria") return "mensageria";
+    return "oportunidades";
+  });
+
   const [activeTab, setActiveTab] = useState(searchParams.tab || "cadastro");
   const [filter, setFilter] = useState<Filter>((searchParams.filter as Filter) || "ALL");
   const [open, setOpen] = useState(false);
@@ -101,9 +120,14 @@ function ClientsPage() {
   const [deleting, setDeleting] = useState<any | null>(null);
   const navigate = useNavigate();
 
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     if (searchParams.tab) {
       setActiveTab(searchParams.tab);
+      if (searchParams.tab === "comunicacao") setMainTab("comunicacao");
+      else if (searchParams.tab === "mensageria") setMainTab("mensageria");
+      else setMainTab("oportunidades");
     }
   }, [searchParams.tab]);
 
@@ -112,6 +136,20 @@ function ClientsPage() {
       setFilter(searchParams.filter as Filter);
     }
   }, [searchParams.filter]);
+
+  useEffect(() => {
+    setSelected(new Set());
+  }, [filter, search]);
+
+  useEffect(() => {
+    if (!companyId) return;
+    supabase.rpc("refresh_return_opportunities").then(() =>
+      supabase.rpc("refresh_recovery_opportunities", { _company: companyId }).then(() => {
+        queryClient.invalidateQueries({ queryKey: ["clients", companyId] });
+      })
+    );
+  }, [companyId, queryClient]);
+
   type DupMatch = {
     id: string;
     name: string;
@@ -143,61 +181,165 @@ function ClientsPage() {
 
   const list = useQuery({
     enabled: !!companyId,
-    queryKey: ["clients", companyId, search, filter],
+    queryKey: ["clients", companyId],
     queryFn: async () => {
-      let q = supabase.from("clients").select("*").eq("company_id", companyId!).order("name");
-      const s = search.trim();
-      if (s) q = q.or(`name.ilike.%${s}%,phone.ilike.%${s}%,email.ilike.%${s}%`);
-      if (filter === "ACTIVE") q = q.eq("status", "ACTIVE");
-      if (filter === "INACTIVE") q = q.eq("status", "INACTIVE");
-      if (filter === "LOST") {
-        const date90DaysAgo = new Date();
-        date90DaysAgo.setDate(date90DaysAgo.getDate() - 90);
-        const iso90DaysAgo = date90DaysAgo.toISOString();
-        q = q.or(`status.eq.LOST,last_visit.lt.${iso90DaysAgo},and(last_visit.is.null,created_at.lt.${iso90DaysAgo})`);
-      }
-      if (filter === "AT_RISK") {
-        const { data: opps } = await supabase
-          .from("recovery_opportunities")
-          .select("client_id")
-          .eq("company_id", companyId!)
-          .in("status", ["OPEN", "IN_CONTACT"])
-          .eq("classification", "AT_RISK");
-        const clientIds = (opps ?? []).map((o: any) => o.client_id).filter(Boolean);
-        if (clientIds.length > 0) {
-          q = q.in("id", clientIds);
-        } else {
-          q = q.eq("id", "00000000-0000-0000-0000-000000000000");
-        }
-      }
-      if (filter === "RETURN") {
-        const { data: opps } = await supabase
-          .from("recovery_opportunities")
-          .select("client_id")
-          .eq("company_id", companyId!)
-          .in("status", ["OPEN", "IN_CONTACT"]);
-        const clientIds = (opps ?? []).map((o: any) => o.client_id).filter(Boolean);
-        if (clientIds.length > 0) {
-          q = q.or(`next_return.not.is.null,id.in.(${clientIds.join(",")})`);
-        } else {
-          q = q.not("next_return", "is", null);
-        }
-      }
-      if (filter === "BIRTHDAY") {
-        const month = new Date().getMonth() + 1;
-        q = q.not("birthday", "is", null);
-        // filter month client-side below
-        const { data, error } = await q;
-        if (error) throw error;
-        return (data ?? []).filter(
-          (c) => c.birthday && new Date(c.birthday).getMonth() + 1 === month,
-        );
-      }
-      const { data, error } = await q;
+      const { data, error } = await supabase
+        .from("clients")
+        .select(`
+          *,
+          recovery_opportunities(
+            id,
+            classification,
+            status,
+            expected_return_date,
+            potential_value,
+            days_late,
+            services(name)
+          )
+        `)
+        .eq("company_id", companyId!)
+        .order("name");
       if (error) throw error;
       return data ?? [];
     },
   });
+
+  const clientsWithOpp = useMemo(() => {
+    return (list.data ?? []).map((c: any) => {
+      const activeOpp = c.recovery_opportunities?.find(
+        (o: any) => o.status === "OPEN" || o.status === "IN_CONTACT"
+      );
+      return {
+        ...c,
+        activeOpp,
+      };
+    });
+  }, [list.data]);
+
+  const stats = useMemo(() => {
+    const returnClients = clientsWithOpp.filter((c) => {
+      return c.activeOpp && (c.activeOpp.classification === "ATTENTION" || c.activeOpp.classification === "LATE" || c.activeOpp.classification === "ON_TIME");
+    });
+    const atRiskClients = clientsWithOpp.filter((c) => {
+      return c.activeOpp && c.activeOpp.classification === "AT_RISK";
+    });
+
+    const opportunitiesCount = returnClients.length;
+    const recoveredValue = returnClients.reduce((acc, c) => acc + Number(c.activeOpp?.potential_value || 0), 0);
+    const ticketAverage = opportunitiesCount > 0 ? recoveredValue / opportunitiesCount : 0;
+
+    const atRiskValue = atRiskClients.reduce((acc, c) => acc + Number(c.activeOpp?.potential_value || 0), 0);
+
+    return {
+      opportunitiesCount,
+      recoveredValue,
+      ticketAverage,
+      atRiskValue,
+    };
+  }, [clientsWithOpp]);
+
+  const searched = useMemo(() => {
+    const s = search.trim().toLowerCase();
+    const rows = clientsWithOpp;
+    if (!s) return rows;
+    return rows.filter(
+      (c) =>
+        c.name?.toLowerCase().includes(s) ||
+        c.phone?.toLowerCase().includes(s) ||
+        c.email?.toLowerCase().includes(s)
+    );
+  }, [clientsWithOpp, search]);
+
+  const filtered = useMemo(() => {
+    return searched.filter((c) => {
+      if (filter === "ALL") return true;
+      if (filter === "ACTIVE") return c.status === "ACTIVE";
+      if (filter === "INACTIVE") return c.status === "INACTIVE";
+      if (filter === "RETURN") {
+        return c.activeOpp && (c.activeOpp.classification === "ATTENTION" || c.activeOpp.classification === "LATE" || c.activeOpp.classification === "ON_TIME");
+      }
+      if (filter === "AT_RISK") {
+        return c.activeOpp && c.activeOpp.classification === "AT_RISK";
+      }
+      if (filter === "LOST") {
+        const date90DaysAgo = new Date();
+        date90DaysAgo.setDate(date90DaysAgo.getDate() - 90);
+        const isLostOpp = c.activeOpp && c.activeOpp.classification === "LOST";
+        const isLostInactivity = c.last_visit 
+          ? new Date(c.last_visit) < date90DaysAgo 
+          : new Date(c.created_at) < date90DaysAgo;
+        return c.status === "LOST" || isLostOpp || isLostInactivity;
+      }
+      if (filter === "BIRTHDAY") {
+        const month = new Date().getMonth() + 1;
+        return c.birthday && new Date(c.birthday).getMonth() + 1 === month;
+      }
+      return true;
+    });
+  }, [searched, filter]);
+
+  const allSelected = filtered.length > 0 && filtered.every((c) => selected.has(c.id));
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (allSelected) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filtered.map((c) => c.id)));
+    }
+  }
+
+  const waTemplate =
+    profile?.company?.whatsapp_template ?? "Olá {{nome}}! Vamos marcar seu próximo horário?";
+
+  function bulkOpen() {
+    const rows = filtered.filter((c) => selected.has(c.id) && c.phone);
+    if (rows.length === 0) {
+      toast.error("Selecione clientes com WhatsApp.");
+      return;
+    }
+    const link = profile?.company?.slug
+      ? `${window.location.origin}/agendar/${profile.company.slug}`
+      : "";
+    let opened = 0;
+    for (const c of rows) {
+      let msg = waTemplate
+        .replace(/\{\{\s*(nome|primeiro_nome)\s*\}\}/gi, c.name.split(" ")[0])
+        .replace(/\{\{\s*cliente\s*\}\}/gi, c.name)
+        .replace(/\{\{\s*empresa\s*\}\}/gi, profile?.company?.name ?? "");
+
+      if (link) {
+        if (msg.includes("{{link_agendamento}}")) {
+          msg = msg.replace(/\{\{\s*link_agendamento\s*\}\}/gi, link);
+        } else if (msg.includes("{{link}}")) {
+          msg = msg.replace(/\{\{\s*link\s*\}\}/gi, link);
+        } else {
+          msg = msg + `\n\nAgende seu horário aqui: ${link}`;
+        }
+      }
+
+      const url = whatsappLink(c.phone, msg);
+      if (url) {
+        window.open(url, "_blank", "noopener,noreferrer");
+        opened++;
+      }
+    }
+    toast.success(`${opened} conversa(s) aberta(s) no WhatsApp`);
+  }
+
+  const counts = useMemo(() => {
+    return {
+      total: clientsWithOpp.length,
+    };
+  }, [clientsWithOpp]);
 
   const form = useForm<z.infer<typeof clientSchema>>({
     resolver: zodResolver(clientSchema),
@@ -266,384 +408,576 @@ function ClientsPage() {
     queryClient.invalidateQueries({ queryKey: ["clients", companyId] });
   }
 
-  const counts = useMemo(() => {
-    const d = list.data ?? [];
-    return {
-      total: d.length,
-    };
-  }, [list.data]);
-
   return (
-    <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-      <TabsList>
-        <TabsTrigger value="cadastro" className="gap-1.5">
-          <Users className="h-3.5 w-3.5" /> Clientes
-        </TabsTrigger>
-        <TabsTrigger value="retorno" className="gap-1.5">
-          <Heart className="h-3.5 w-3.5" /> Clientes para retorno
-        </TabsTrigger>
-      </TabsList>
-      <TabsContent value="cadastro" className="space-y-6 mt-0">
-        <header className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Clientes</h1>
-            <p className="text-sm text-muted-foreground">
-              {counts.total} cliente(s) — o coração do seu negócio.
-            </p>
-          </div>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-1" /> Nova cliente
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Nova cliente</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={form.handleSubmit(onCreate)} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Nome *</Label>
-                  <Input id="name" {...form.register("name")} autoFocus />
-                  {form.formState.errors.name && (
-                    <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">WhatsApp *</Label>
-                    <Input id="phone" placeholder="(11) 99999-9999" {...form.register("phone")} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phone2">Telefone 2</Label>
-                    <Input id="phone2" placeholder="(11) 99999-9999" {...form.register("phone2")} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="birthday">Aniversário</Label>
-                    <Input id="birthday" type="date" {...form.register("birthday")} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="instagram">Instagram</Label>
-                    <Input id="instagram" placeholder="@usuario" {...form.register("instagram")} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="profession">Profissão</Label>
-                    <Input id="profession" {...form.register("profession")} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">E-mail</Label>
-                    <Input id="email" type="email" {...form.register("email")} />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="notes">Observações</Label>
-                  <Textarea id="notes" rows={3} {...form.register("notes")} />
-                </div>
-                <DialogFooter>
-                  <Button type="submit" disabled={form.formState.isSubmitting}>
-                    Salvar
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
-        </header>
+    <div className="grid lg:grid-cols-[240px_1fr] gap-8 items-start">
+      {/* Side Panel / Navigation Panel */}
+      <aside className="flex flex-row lg:flex-col overflow-x-auto lg:overflow-x-visible gap-1 pb-4 lg:pb-0 border-b lg:border-b-0 lg:border-r border-border lg:pr-6 shrink-0 lg:sticky lg:top-20">
+        <div className="hidden lg:block mb-4 px-3">
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+            Central de Comunicação
+          </p>
+        </div>
 
-        <Card className="p-4 space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por nome, telefone ou e-mail..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {FILTERS.map((f) => (
-              <button
-                key={f.id}
-                onClick={() => setFilter(f.id)}
-                className={`text-xs rounded-full px-3 py-1.5 border transition ${
-                  filter === f.id
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-background hover:bg-muted border-border text-muted-foreground"
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-
-          {list.isLoading ? (
-            <p className="text-sm text-muted-foreground py-12 text-center">Carregando…</p>
-          ) : !list.data?.length ? (
-            <div className="py-16 text-center">
-              <div className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-full bg-secondary text-primary">
-                <Users className="h-5 w-5" />
-              </div>
-              <p className="mt-3 font-medium">Nenhuma cliente encontrada.</p>
-              <p className="text-sm text-muted-foreground">Ajuste a busca ou cadastre uma nova.</p>
-            </div>
-          ) : (
-            <ul className="divide-y -mx-4">
-              {list.data.map((c: any) => {
-                const isBirthdayMonth =
-                  c.birthday && new Date(c.birthday).getMonth() === new Date().getMonth();
-                return (
-                  <li key={c.id} className="flex items-center hover:bg-muted/40 transition">
-                    <Link
-                      to="/app/clients/$clientId"
-                      params={{ clientId: c.id }}
-                      className="flex items-center justify-between gap-4 px-4 py-3 flex-1 min-w-0"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className="font-medium truncate hover:underline cursor-pointer text-primary"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setHistoryClient(c);
-                            }}
-                          >
-                            {c.name}
-                          </span>
-                          <StatusBadge status={c.status} />
-                          {isBirthdayMonth && (
-                            <Badge variant="outline" className="gap-1 text-[10px]">
-                              <Cake className="h-3 w-3" /> Aniversariante
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {c.phone ?? "—"} · {c.appointments_count} atend. ·{" "}
-                          {c.last_visit
-                            ? `última ${new Date(c.last_visit).toLocaleDateString("pt-BR")}`
-                            : "sem atendimentos"}
-                        </p>
-                      </div>
-                      <div className="text-right hidden sm:block">
-                        <p className="text-sm font-medium">{formatBRL(Number(c.total_spent))}</p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {c.next_return
-                            ? `retorno: ${new Date(c.next_return).toLocaleDateString("pt-BR")}`
-                            : "—"}
-                        </p>
-                      </div>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                    </Link>
-                    {canManage && (
-                      <div className="pr-2">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={(e) => e.stopPropagation()}
-                              aria-label="Ações"
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onSelect={() => setEditing(c)}>
-                              <Pencil className="h-4 w-4 mr-2" /> Editar
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onSelect={() => setDeleting(c)}
-                              className="text-destructive focus:text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" /> Excluir
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Card>
-
-        <AlertDialog
-          open={!!duplicate}
-          onOpenChange={(o) => {
-            if (!o) setDuplicate(null);
+        <Button
+          variant={mainTab === "oportunidades" ? "secondary" : "ghost"}
+          className={`justify-start gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-colors w-auto lg:w-full shrink-0 ${
+            mainTab === "oportunidades"
+              ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
+              : "text-muted-foreground hover:bg-muted/50"
+          }`}
+          onClick={() => {
+            setMainTab("oportunidades");
+            navigate({ search: { tab: "cadastro", filter: "ALL" } as any });
           }}
         >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Cliente já existe?</AlertDialogTitle>
-              <AlertDialogDescription asChild>
-                <div className="space-y-2">
-                  <p>
-                    Encontramos um cadastro parecido por{" "}
-                    <strong>{duplicate?.match.reason === "phone" ? "telefone" : "nome"}</strong>
-                    {duplicate ? ` (${duplicate.match.confidence}% de confiança)` : ""}:
-                  </p>
-                  <div className="rounded-md border bg-muted/40 p-3 text-sm">
-                    <div className="font-medium text-foreground">{duplicate?.match.name}</div>
-                    {duplicate?.match.phone && (
-                      <div className="text-muted-foreground">{duplicate.match.phone}</div>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Use o cadastro existente para evitar histórico duplicado.
-                  </p>
-                </div>
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter className="gap-2">
-              <AlertDialogCancel onClick={() => setDuplicate(null)}>Cancelar</AlertDialogCancel>
-              <Button
-                variant="secondary"
-                onClick={() => duplicate && persistClient(duplicate.values)}
-              >
-                Criar mesmo assim
-              </Button>
-              <AlertDialogAction
-                onClick={() => {
-                  if (!duplicate) return;
-                  const id = duplicate.match.id;
-                  setDuplicate(null);
-                  setOpen(false);
-                  navigate({ to: "/app/clients/$clientId", params: { clientId: id } });
-                }}
-              >
-                Usar cadastro existente
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+          <Users
+            className={`h-4 w-4 shrink-0 ${mainTab === "oportunidades" ? "text-primary" : ""}`}
+          />
+          <span>Ações de hoje</span>
+        </Button>
 
-        <EditClientDialog
-          client={editing}
-          onClose={() => setEditing(null)}
-          onSaved={() => {
-            setEditing(null);
-            queryClient.invalidateQueries({ queryKey: ["clients", companyId] });
-          }}
-        />
-
-        <AlertDialog
-          open={!!deleting}
-          onOpenChange={(o) => {
-            if (!o) setDeleting(null);
+        <Button
+          variant={mainTab === "comunicacao" ? "secondary" : "ghost"}
+          className={`justify-start gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-colors w-auto lg:w-full shrink-0 ${
+            mainTab === "comunicacao"
+              ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
+              : "text-muted-foreground hover:bg-muted/50"
+          }`}
+          onClick={() => {
+            setMainTab("comunicacao");
+            navigate({ search: { tab: "comunicacao" } as any });
           }}
         >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Excluir cliente?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Tem certeza que deseja excluir <strong>{deleting?.name}</strong>? Esta ação não pode
-                ser desfeita e removerá todo o histórico associado.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Não</AlertDialogCancel>
-              <AlertDialogAction
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                onClick={async () => {
-                  if (!deleting) return;
-                  const { error } = await supabase.from("clients").delete().eq("id", deleting.id);
-                  if (error) {
-                    toast.error(error.message);
-                    return;
-                  }
-                  toast.success("Cliente excluída");
-                  setDeleting(null);
-                  queryClient.invalidateQueries({ queryKey: ["clients", companyId] });
-                }}
-              >
-                Sim, excluir
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+          <MessageCircle
+            className={`h-4 w-4 shrink-0 ${mainTab === "comunicacao" ? "text-primary" : ""}`}
+          />
+          <span>Comunicação</span>
+        </Button>
 
-        <Dialog
-          open={!!historyClient}
-          onOpenChange={(o) => {
-            if (!o) setHistoryClient(null);
+        <Button
+          variant={mainTab === "mensageria" ? "secondary" : "ghost"}
+          className={`justify-start gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-colors w-auto lg:w-full shrink-0 ${
+            mainTab === "mensageria"
+              ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
+              : "text-muted-foreground hover:bg-muted/50"
+          }`}
+          onClick={() => {
+            setMainTab("mensageria");
+            navigate({ search: { tab: "mensageria" } as any });
           }}
         >
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Histórico de Atendimentos</DialogTitle>
-              <p className="text-sm text-muted-foreground">
-                Cliente: <strong className="text-foreground">{historyClient?.name}</strong>
-              </p>
-            </DialogHeader>
+          <Send className={`h-4 w-4 shrink-0 ${mainTab === "mensageria" ? "text-primary" : ""}`} />
+          <span>Mensageria (MIE)</span>
+        </Button>
+      </aside>
 
-            <div className="max-h-[60vh] overflow-y-auto py-2 pr-1 space-y-3">
-              {historyQ.isLoading ? (
-                <p className="text-sm text-muted-foreground py-8 text-center animate-pulse">
-                  Carregando histórico...
+      {/* Main Content Area */}
+      <div className="flex-1 min-w-0">
+        {mainTab === "oportunidades" && (
+          <div className="space-y-6">
+            <header className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-semibold tracking-tight">Clientes & Recorrência</h1>
+                <p className="text-sm text-muted-foreground">
+                  {counts.total} cliente(s) cadastrados — o coração do seu negócio.
                 </p>
-              ) : !historyQ.data?.length ? (
-                <div className="py-12 text-center text-sm text-muted-foreground">
-                  Nenhum atendimento encontrado para esta cliente.
+              </div>
+              <div className="flex items-center gap-2">
+                <Dialog open={open} onOpenChange={setOpen}>
+                  <DialogTrigger asChild>
+                    <Button>
+                      <Plus className="h-4 w-4 mr-1" /> Nova cliente
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Nova cliente</DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={form.handleSubmit(onCreate)} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="name">Nome *</Label>
+                        <Input id="name" {...form.register("name")} autoFocus />
+                        {form.formState.errors.name && (
+                          <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <Label htmlFor="phone">WhatsApp *</Label>
+                          <Input id="phone" placeholder="(11) 99999-9999" {...form.register("phone")} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="phone2">Telefone 2</Label>
+                          <Input id="phone2" placeholder="(11) 99999-9999" {...form.register("phone2")} />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <Label htmlFor="birthday">Aniversário</Label>
+                          <Input id="birthday" type="date" {...form.register("birthday")} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="instagram">Instagram</Label>
+                          <Input id="instagram" placeholder="@usuario" {...form.register("instagram")} />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <Label htmlFor="profession">Profissão</Label>
+                          <Input id="profession" {...form.register("profession")} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="email">E-mail</Label>
+                          <Input id="email" type="email" {...form.register("email")} />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="notes">Observações</Label>
+                        <Textarea id="notes" rows={3} {...form.register("notes")} />
+                      </div>
+                      <DialogFooter>
+                        <Button type="submit" disabled={form.formState.isSubmitting}>
+                          Salvar
+                        </Button>
+                      </DialogFooter>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+
+                <Button variant="outline" asChild>
+                  <Link to="/app/agenda">
+                    <Calendar className="h-4 w-4 mr-1" /> Agendar
+                  </Link>
+                </Button>
+              </div>
+            </header>
+
+            {companyId && profile?.company?.slug && (
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 bg-muted/40 rounded-xl border border-primary/10 shadow-soft max-w-2xl">
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">
+                    Seu Link Público de Agendamento
+                  </h4>
+                  <div className="flex items-center gap-2">
+                    <code className="text-xs select-all bg-background border px-3 py-1.5 rounded-lg truncate flex-1 font-mono text-muted-foreground">
+                      {`${window.location.origin}/agendar/${profile.company.slug}`}
+                    </code>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 shadow-sm flex-shrink-0"
+                      onClick={() => {
+                        navigator.clipboard.writeText(
+                          `${window.location.origin}/agendar/${profile.company!.slug!}`,
+                        );
+                        toast.success("Link copiado com sucesso");
+                      }}
+                    >
+                      <Copy className="h-3.5 w-3.5 mr-1.5" />
+                      Copiar
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* KPI Cards Grid */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card
+                className="p-4 shadow-soft hover:bg-muted/10 transition cursor-pointer"
+                onClick={() => setFilter("RETURN")}
+              >
+                <div className="flex items-center justify-between text-muted-foreground text-[11px] font-medium uppercase tracking-wider">
+                  <span>OPORTUNIDADES</span>
+                  <span className="grid h-7 w-7 place-items-center rounded-lg bg-secondary text-primary">
+                    <Users className="h-3.5 w-3.5" />
+                  </span>
+                </div>
+                <p className="mt-2 text-2xl font-semibold">{list.isLoading ? "—" : stats.opportunitiesCount}</p>
+              </Card>
+
+              <Card
+                className="p-4 shadow-soft hover:bg-muted/10 transition cursor-pointer"
+                onClick={() => setFilter("RETURN")}
+              >
+                <div className="flex items-center justify-between text-muted-foreground text-[11px] font-medium uppercase tracking-wider">
+                  <span>RECEITA RECUPERÁVEL</span>
+                  <span className="grid h-7 w-7 place-items-center rounded-lg bg-secondary text-primary">
+                    <TrendingDown className="h-3.5 w-3.5" />
+                  </span>
+                </div>
+                <p className="mt-2 text-2xl font-semibold text-emerald-600">{list.isLoading ? "—" : formatBRL(stats.recoveredValue)}</p>
+              </Card>
+
+              <Card
+                className="p-4 shadow-soft hover:bg-muted/10 transition cursor-pointer"
+                onClick={() => setFilter("AT_RISK")}
+              >
+                <div className="flex items-center justify-between text-muted-foreground text-[11px] font-medium uppercase tracking-wider">
+                  <span>RECEITA EM RISCO</span>
+                  <span className="grid h-7 w-7 place-items-center rounded-lg bg-secondary text-primary">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                  </span>
+                </div>
+                <p className="mt-2 text-2xl font-semibold text-destructive">{list.isLoading ? "—" : formatBRL(stats.atRiskValue)}</p>
+              </Card>
+
+              <Card
+                className="p-4 shadow-soft hover:bg-muted/10 transition cursor-pointer"
+                onClick={() => setFilter("RETURN")}
+              >
+                <div className="flex items-center justify-between text-muted-foreground text-[11px] font-medium uppercase tracking-wider">
+                  <span>TICKET MÉDIO</span>
+                  <span className="grid h-7 w-7 place-items-center rounded-lg bg-secondary text-primary">
+                    <Clock className="h-3.5 w-3.5" />
+                  </span>
+                </div>
+                <p className="mt-2 text-2xl font-semibold">{list.isLoading ? "—" : formatBRL(stats.ticketAverage)}</p>
+              </Card>
+            </div>
+
+            <Card className="p-4 space-y-4 shadow-soft">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por nome, telefone ou e-mail..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {FILTERS.map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => setFilter(f.id)}
+                    className={`text-xs rounded-full px-3 py-1.5 border transition ${
+                      filter === f.id
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background hover:bg-muted border-border text-muted-foreground"
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Bulk Actions Bar */}
+              {filtered.length > 0 && (
+                <div className="flex items-center justify-between gap-3 border-b pb-3 pt-1">
+                  <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
+                    <Checkbox checked={allSelected} onCheckedChange={toggleAll} />
+                    Selecionar todos na listagem ({filtered.length})
+                  </label>
+                  <Button size="sm" onClick={bulkOpen} disabled={selected.size === 0}>
+                    <MessageCircle className="h-3.5 w-3.5 mr-1.5" />
+                    Enviar WhatsApp para {selected.size} selecionado{selected.size === 1 ? "" : "s"}
+                  </Button>
+                </div>
+              )}
+
+              {list.isLoading ? (
+                <p className="text-sm text-muted-foreground py-12 text-center">Carregando…</p>
+              ) : filtered.length === 0 ? (
+                <div className="py-16 text-center">
+                  <div className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-full bg-secondary text-primary">
+                    <Users className="h-5 w-5" />
+                  </div>
+                  <p className="mt-3 font-medium">Nenhuma cliente encontrada.</p>
+                  <p className="text-sm text-muted-foreground">Ajuste a busca ou aplique outro filtro.</p>
                 </div>
               ) : (
-                <ul className="divide-y divide-border">
-                  {historyQ.data.map((a: any) => (
-                    <li key={a.id} className="py-3 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="text-left w-14 shrink-0">
-                          <p className="text-xs font-semibold">
-                            {new Date(a.start_datetime).toLocaleDateString("pt-BR", {
-                              day: "2-digit",
-                              month: "2-digit",
-                            })}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground">
-                            {new Date(a.start_datetime).toLocaleTimeString("pt-BR", {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </p>
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-medium text-sm truncate">{a.services?.name ?? "Serviço não especificado"}</p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {a.notes ? a.notes : formatBRL(Number(a.price))}
-                          </p>
-                        </div>
-                      </div>
-                      <AppointmentStatusPill status={a.status} />
-                    </li>
-                  ))}
-                </ul>
+                <div className="overflow-x-auto -mx-4 lg:mx-0">
+                  <div className="min-w-[1100px] divide-y">
+                    {/* Header */}
+                    <div className="hidden lg:grid grid-cols-[30px_1.8fr_1.2fr_1.2fr_1.2fr_1fr_1fr_1fr_1.2fr_1.2fr] gap-4 px-4 py-3 text-xs font-semibold text-muted-foreground bg-muted/20 items-center">
+                      <div className="w-5"></div>
+                      <div>Nome</div>
+                      <div>Telefone</div>
+                      <div>Último Atend.</div>
+                      <div>Serviço Realizado</div>
+                      <div>Valor</div>
+                      <div>Sem Retorno</div>
+                      <div>Status</div>
+                      <div>Próxima Ação</div>
+                      <div className="text-right">Ações</div>
+                    </div>
+
+                    {/* List Items */}
+                    <ul className="divide-y">
+                      {filtered.map((c: any) => {
+                        const isBirthdayMonth =
+                          c.birthday && new Date(c.birthday).getMonth() === new Date().getMonth();
+                        const daysSince = c.last_visit 
+                          ? Math.floor((Date.now() - new Date(c.last_visit).getTime()) / 86400000) 
+                          : null;
+                        const serviceName = c.activeOpp?.services?.name ?? "—";
+                        const valueToDisplay = c.activeOpp 
+                          ? Number(c.activeOpp.potential_value || 0) 
+                          : (c.appointments_count > 0 ? Number(c.total_spent || 0) / c.appointments_count : 0);
+                        const nextActionDate = c.activeOpp?.expected_return_date 
+                          ? new Date(c.activeOpp.expected_return_date).toLocaleDateString("pt-BR") 
+                          : (c.next_return ? new Date(c.next_return).toLocaleDateString("pt-BR") : "—");
+                        const link = profile?.company?.slug
+                          ? `${window.location.origin}/agendar/${profile.company.slug}`
+                          : "";
+                        const waMsg = waTemplate
+                          .replace(/\{\{\s*(nome|primeiro_nome)\s*\}\}/gi, c.name.split(" ")[0])
+                          .replace(/\{\{\s*cliente\s*\}\}/gi, c.name)
+                          .replace(/\{\{\s*empresa\s*\}\}/gi, profile?.company?.name ?? "")
+                          .replace(/\{\{\s*link_agendamento\s*\}\}/gi, link)
+                          .replace(/\{\{\s*link\s*\}\}/gi, link);
+                        const individualWa = whatsappLink(c.phone, waMsg);
+
+                        return (
+                          <li key={c.id} className="grid grid-cols-[30px_1.8fr_1.2fr_1.2fr_1.2fr_1fr_1fr_1fr_1.2fr_1.2fr] gap-4 px-4 py-3 hover:bg-muted/40 transition items-center text-sm">
+                            <div>
+                              <Checkbox checked={selected.has(c.id)} onCheckedChange={() => toggle(c.id)} />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span
+                                  className="font-medium hover:underline cursor-pointer text-primary truncate block"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setHistoryClient(c);
+                                  }}
+                                >
+                                  {c.name}
+                                </span>
+                                {isBirthdayMonth && (
+                                  <Badge variant="outline" className="gap-1 text-[9px] py-0 px-1 leading-none h-4 shrink-0">
+                                    <Cake className="h-2.5 w-2.5" /> Aniv.
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                            <div className="text-muted-foreground truncate">{c.phone ?? "—"}</div>
+                            <div className="text-muted-foreground truncate">
+                              {c.last_visit ? new Date(c.last_visit).toLocaleDateString("pt-BR") : "sem atend."}
+                            </div>
+                            <div className="truncate font-medium text-muted-foreground">{serviceName}</div>
+                            <div className="font-medium tabular-nums text-muted-foreground">{formatBRL(valueToDisplay)}</div>
+                            <div className="text-muted-foreground font-medium">{daysSince !== null ? `${daysSince}d` : "—"}</div>
+                            <div>
+                              <StatusBadge status={c.status} />
+                            </div>
+                            <div className="text-muted-foreground truncate">{nextActionDate}</div>
+                            <div className="flex items-center justify-end gap-1">
+                              {individualWa ? (
+                                <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-500/10" asChild>
+                                  <a href={individualWa} target="_blank" rel="noopener noreferrer" aria-label="WhatsApp">
+                                    <MessageCircle className="h-4 w-4" />
+                                  </a>
+                                </Button>
+                              ) : (
+                                <span className="w-8" />
+                              )}
+                              <Button size="icon" variant="ghost" className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/5" asChild>
+                                <Link to="/app/agenda" aria-label="Agendar">
+                                  <Calendar className="h-4 w-4" />
+                                </Link>
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground" onClick={() => setHistoryClient(c)} aria-label="Ver Histórico">
+                                <Clock className="h-4 w-4" />
+                              </Button>
+                              {canManage && (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      aria-label="Ações"
+                                    >
+                                      <MoreVertical className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onSelect={() => setEditing(c)}>
+                                      <Pencil className="h-4 w-4 mr-2" /> Editar
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onSelect={() => setDeleting(c)}
+                                      className="text-destructive focus:text-destructive"
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" /> Excluir
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                </div>
               )}
-            </div>
-          </DialogContent>
-        </Dialog>
-      </TabsContent>
-      <TabsContent value="retorno" className="mt-0">
-        <RecoveryPage
-          onSelectPendingCount={() => {
-            setActiveTab("cadastro");
-            setFilter("RETURN");
-          }}
-          onSelectAtRiskCount={() => {
-            setActiveTab("cadastro");
-            setFilter("AT_RISK");
-          }}
-          onSelectLostCount={() => {
-            setActiveTab("cadastro");
-            setFilter("LOST");
-          }}
-        />
-      </TabsContent>
-    </Tabs>
+            </Card>
+          </div>
+        )}
+
+        {mainTab === "comunicacao" && <ComunicacaoPage />}
+        {mainTab === "mensageria" && <MensageriaPage />}
+      </div>
+
+      <AlertDialog
+        open={!!duplicate}
+        onOpenChange={(o) => {
+          if (!o) setDuplicate(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cliente já existe?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  Encontramos um cadastro parecido por{" "}
+                  <strong>{duplicate?.match.reason === "phone" ? "telefone" : "nome"}</strong>
+                  {duplicate ? ` (${duplicate.match.confidence}% de confiança)` : ""}:
+                </p>
+                <div className="rounded-md border bg-muted/40 p-3 text-sm">
+                  <div className="font-medium text-foreground">{duplicate?.match.name}</div>
+                  {duplicate?.match.phone && (
+                    <div className="text-muted-foreground">{duplicate.match.phone}</div>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Use o cadastro existente para evitar histórico duplicado.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel onClick={() => setDuplicate(null)}>Cancelar</AlertDialogCancel>
+            <Button
+              variant="secondary"
+              onClick={() => duplicate && persistClient(duplicate.values)}
+            >
+              Criar mesmo assim
+            </Button>
+            <AlertDialogAction
+              onClick={() => {
+                if (!duplicate) return;
+                const id = duplicate.match.id;
+                setDuplicate(null);
+                setOpen(false);
+                navigate({ to: "/app/clients/$clientId", params: { clientId: id } });
+              }}
+            >
+              Usar cadastro existente
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <EditClientDialog
+        client={editing}
+        onClose={() => setEditing(null)}
+        onSaved={() => {
+          setEditing(null);
+          queryClient.invalidateQueries({ queryKey: ["clients", companyId] });
+        }}
+      />
+
+      <AlertDialog
+        open={!!deleting}
+        onOpenChange={(o) => {
+          if (!o) setDeleting(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir cliente?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir <strong>{deleting?.name}</strong>? Esta ação não pode
+              ser desfeita e removerá todo o histórico associado.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Não</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async () => {
+                if (!deleting) return;
+                const { error } = await supabase.from("clients").delete().eq("id", deleting.id);
+                if (error) {
+                  toast.error(error.message);
+                  return;
+                }
+                toast.success("Cliente excluída");
+                setDeleting(null);
+                queryClient.invalidateQueries({ queryKey: ["clients", companyId] });
+              }}
+            >
+              Sim, excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog
+        open={!!historyClient}
+        onOpenChange={(o) => {
+          if (!o) setHistoryClient(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Histórico de Atendimentos</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Cliente: <strong className="text-foreground">{historyClient?.name}</strong>
+            </p>
+          </DialogHeader>
+
+          <div className="max-h-[60vh] overflow-y-auto py-2 pr-1 space-y-3">
+            {historyQ.isLoading ? (
+              <p className="text-sm text-muted-foreground py-8 text-center animate-pulse">
+                Carregando histórico...
+              </p>
+            ) : !historyQ.data?.length ? (
+              <div className="py-12 text-center text-sm text-muted-foreground">
+                Nenhum atendimento encontrado para esta cliente.
+              </div>
+            ) : (
+              <ul className="divide-y divide-border">
+                {historyQ.data.map((a: any) => (
+                  <li key={a.id} className="py-3 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="text-left w-14 shrink-0">
+                        <p className="text-xs font-semibold">
+                          {new Date(a.start_datetime).toLocaleDateString("pt-BR", {
+                            day: "2-digit",
+                            month: "2-digit",
+                          })}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {new Date(a.start_datetime).toLocaleTimeString("pt-BR", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-sm truncate">{a.services?.name ?? "Serviço não especificado"}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {a.notes ? a.notes : formatBRL(Number(a.price))}
+                        </p>
+                      </div>
+                    </div>
+                    <AppointmentStatusPill status={a.status} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
 

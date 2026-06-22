@@ -1,4 +1,4 @@
-import { createFileRoute, useRouterState } from "@tanstack/react-router";
+import { createFileRoute, useRouterState, redirect } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -30,8 +30,10 @@ import { ComunicacaoPage } from "./app.comunicacao";
 import { MensageriaPage } from "./app.mensageria";
 
 export const Route = createFileRoute("/_authenticated/app/recorrencia")({
-  head: () => ({ meta: [{ title: "Recorrência · BeautyFlow" }] }),
-  component: RecorrenciaPage,
+  beforeLoad: ({ search }) => {
+    throw redirect({ to: "/app/clients", search });
+  },
+  component: () => null,
 });
 
 type TabKey = "retorno" | "recompra" | "renovacao" | "risco" | "perdidos";
