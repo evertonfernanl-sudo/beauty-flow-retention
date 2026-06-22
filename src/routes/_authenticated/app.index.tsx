@@ -198,11 +198,10 @@ function VisaoGeral() {
           .lte("start_datetime", range.end.toISOString()),
         supabase.from("clients").select("id, status").eq("company_id", companyId!),
         supabase
-          .from("return_opportunities")
+          .from("recovery_opportunities")
           .select("id", { count: "exact", head: true })
           .eq("company_id", companyId!)
-          .eq("converted", false)
-          .in("status", ["DUE", "LATE"]),
+          .in("status", ["OPEN", "IN_CONTACT"]),
         supabase
           .from("service_metrics")
           .select("name, total_completed, total_revenue")
@@ -459,7 +458,7 @@ function VisaoGeral() {
           value={loading ? null : String(data?.lateReturns ?? 0)}
           tone={data && data.lateReturns > 0 ? "warn" : "default"}
           to="/app/clients"
-          search={{ tab: "retorno" }}
+          search={{ tab: "cadastro", filter: "RETURN" }}
         />
       </section>
 
@@ -683,8 +682,8 @@ function Kpi({
         accent ? "border-primary/30 bg-gradient-to-br from-card to-accent/30" : ""
       } ${to ? "hover:border-primary/40 cursor-pointer" : ""}`}
     >
-      <div className="flex items-center justify-between mb-3 min-w-0 gap-1">
-        <p className="text-[11px] xl:text-[10px] 2xl:text-[11px] font-medium uppercase tracking-wider text-muted-foreground truncate" title={label}>
+      <div className="flex items-start justify-between mb-3 min-w-0 gap-1">
+        <p className="text-[11px] xl:text-[10px] 2xl:text-[11px] font-medium uppercase tracking-wider text-muted-foreground whitespace-normal break-words flex-1 min-w-0" title={label}>
           {label}
         </p>
         <div

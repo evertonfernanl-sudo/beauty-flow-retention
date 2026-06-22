@@ -133,7 +133,19 @@ function ClientsPage() {
       if (filter === "ACTIVE") q = q.eq("status", "ACTIVE");
       if (filter === "INACTIVE") q = q.eq("status", "INACTIVE");
       if (filter === "LOST") q = q.eq("status", "LOST");
-      if (filter === "RETURN") q = q.not("next_return", "is", null);
+      if (filter === "RETURN") {
+        const { data: opps } = await supabase
+          .from("recovery_opportunities")
+          .select("client_id")
+          .eq("company_id", companyId!)
+          .in("status", ["OPEN", "IN_CONTACT"]);
+        const clientIds = (opps ?? []).map((o: any) => o.client_id).filter(Boolean);
+        if (clientIds.length > 0) {
+          q = q.or(`next_return.not.is.null,id.in.(${clientIds.join(",")})`);
+        } else {
+          q = q.not("next_return", "is", null);
+        }
+      }
       if (filter === "BIRTHDAY") {
         const month = new Date().getMonth() + 1;
         q = q.not("birthday", "is", null);
@@ -512,7 +524,12 @@ function ClientsPage() {
         </AlertDialog>
       </TabsContent>
       <TabsContent value="retorno" className="mt-0">
-        <RecoveryPage />
+        <RecoveryPage
+          onSelectPendingCount={() => {
+            setActiveTab("cadastro");
+            setFilter("RETURN");
+          }}
+        />
       </TabsContent>
     </Tabs>
   );

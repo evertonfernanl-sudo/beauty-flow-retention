@@ -58,7 +58,7 @@ export const Route = createFileRoute("/_authenticated/app/returns")({
 
 type Filter = "all" | "today" | "week" | "at_risk" | "lost" | "vip";
 
-export function RecoveryPage() {
+export function RecoveryPage({ onSelectPendingCount }: { onSelectPendingCount?: () => void } = {}) {
   const { data: profile } = useCurrentProfile();
   const companyId = profile?.company?.id;
   const qc = useQueryClient();
@@ -196,6 +196,7 @@ export function RecoveryPage() {
           icon={ClipboardList}
           label="Clientes para Retorno"
           value={String(d?.pending_count ?? 0)}
+          onClick={onSelectPendingCount}
         />
         <Kpi
           loading={dash.isLoading}
@@ -329,6 +330,7 @@ function Kpi({
   value,
   highlight,
   tone,
+  onClick,
 }: {
   loading?: boolean;
   icon: any;
@@ -336,6 +338,7 @@ function Kpi({
   value: string;
   highlight?: boolean;
   tone?: "warning" | "destructive";
+  onClick?: () => void;
 }) {
   const valColor =
     tone === "destructive"
@@ -347,7 +350,10 @@ function Kpi({
           : "";
   return (
     <Card
-      className={`p-4 shadow-soft ${highlight ? "border-primary/30 bg-gradient-to-br from-card to-accent/30" : ""}`}
+      className={`p-4 shadow-soft ${highlight ? "border-primary/30 bg-gradient-to-br from-card to-accent/30" : ""} ${
+        onClick ? "cursor-pointer hover:border-primary/40 transition-colors" : ""
+      }`}
+      onClick={onClick}
     >
       <div className="flex items-start justify-between">
         <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
