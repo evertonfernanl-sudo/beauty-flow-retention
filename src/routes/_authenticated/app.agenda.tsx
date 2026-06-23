@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
@@ -28,17 +30,29 @@ import {
   Plus,
   Calendar as CalendarIcon,
   Check,
-  ChevronLeft,
-  ChevronRight,
   X,
   Edit3,
   Search,
+  ArrowUp,
+  ArrowDown,
+  TrendingUp,
+  Wallet,
 } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { formatBRL } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+} from "recharts";
 
 export const Route = createFileRoute("/_authenticated/app/agenda")({
   head: () => ({ meta: [{ title: "Agenda · BeautyFlow" }] }),
@@ -55,22 +69,70 @@ const schema = z.object({
   notes: z.string().max(500).optional().or(z.literal("")),
 });
 
-type ViewMode = "day" | "week" | "month";
 type StatusFilter = "ALL" | "SCHEDULED" | "CONFIRMED" | "COMPLETED" | "CANCELLED" | "NO_SHOW";
+
+type PeriodMode = "today" | "week" | "month" | "year";
+type PeriodState = {
+  mode: PeriodMode;
+  date?: string; // YYYY-MM-DD
+  month?: string; // YYYY-MM
+  year?: number;
+};
 
 function toISODate(d: Date) {
   return d.toISOString().slice(0, 10);
+}
+
+function periodToRange(p: PeriodState): { from: Date; to: Date; label: string } {
+  const now = new Date();
+  if (p.mode === "today") {
+    const base = p.date ? new Date(p.date + "T00:00:00") : new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const from = new Date(base);
+    from.setHours(0, 0, 0, 0);
+    const to = new Date(from);
+    to.setDate(to.getDate() + 1);
+    return {
+      from,
+      to,
+      label: from.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" }),
+    };
+  }
+  if (p.mode === "week") {
+    const to = new Date(now);
+    to.setHours(0, 0, 0, 0);
+    to.setDate(to.getDate() + 1);
+    const from = new Date(to);
+    from.setDate(from.getDate() - 7);
+    return {
+      from,
+      to,
+      label: `Últimos 7 dias`,
+    };
+  }
+  if (p.mode === "month") {
+    const ym = p.month ?? now.toISOString().slice(0, 7);
+    const [y, m] = ym.split("-").map(Number);
+    const from = new Date(y, m - 1, 1);
+    const to = new Date(y, m, 1);
+    const label = from.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+    return { from, to, label: label.charAt(0).toUpperCase() + label.slice(1) };
+  }
+  const y = p.year ?? now.getFullYear();
+  return { from: new Date(y, 0, 1), to: new Date(y + 1, 0, 1), label: String(y) };
 }
 
 function AgendaPage() {
   const { data: profile } = useCurrentProfile();
   const companyId = profile?.company?.id;
   const queryClient = useQueryClient();
-  const [view, setView] = useState<ViewMode>("day");
-  const [cursor, setCursor] = useState(() => new Date());
+  const [agendaPeriod, setAgendaPeriod] = useState<PeriodState>({ mode: "today" });
+  const [expensesPeriod, setExpensesPeriod] = useState<PeriodState>({ mode: "month" });
+  const [incomePeriod, setIncomePeriod] = useState<PeriodState>({ mode: "month" });
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [search, setSearch] = useState("");
-  const [open, setOpen] = useState(false);
+  const [newApptOpen, setNewApptOpen] = useState(false);
+  const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
+  const [incomeDialogOpen, setIncomeDialogOpen] = useState(false);
 
   const isEmployee = profile?.role === "employee";
   const shouldRestrictAgenda = isEmployee && !profile?.permissions?.view_other_professionals_agenda;
@@ -102,15 +164,46 @@ function AgendaPage() {
       ).data ?? [],
   });
 
-  const { start, end, label } = useMemo(() => rangeFor(view, cursor), [view, cursor]);
+  // Available months/years for agenda's period filter (from appointments)
+  const apptHistory = useQuery({
+    enabled: !!companyId,
+    queryKey: ["appt-history-buckets", companyId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("appointments")
+        .select("start_datetime")
+        .eq("company_id", companyId!)
+        .order("start_datetime", { ascending: false })
+        .limit(2000);
+      return extractBuckets((data ?? []).map((r: any) => r.start_datetime?.slice(0, 10)));
+    },
+  });
+
+  // Available months/years for financial transactions
+  const txHistory = useQuery({
+    enabled: !!companyId,
+    queryKey: ["tx-history-buckets", companyId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("financial_transactions")
+        .select("transaction_date")
+        .eq("company_id", companyId!)
+        .order("transaction_date", { ascending: false });
+      return extractBuckets((data ?? []).map((r: any) => r.transaction_date));
+    },
+  });
+
+  const agendaRange = useMemo(() => periodToRange(agendaPeriod), [agendaPeriod]);
+  const expensesRange = useMemo(() => periodToRange(expensesPeriod), [expensesPeriod]);
+  const incomeRange = useMemo(() => periodToRange(incomePeriod), [incomePeriod]);
 
   const list = useQuery({
     enabled: !!companyId && (!shouldRestrictAgenda || !!myProfessional),
     queryKey: [
       "appointments",
       companyId,
-      view,
-      start.toISOString(),
+      agendaRange.from.toISOString(),
+      agendaRange.to.toISOString(),
       statusFilter,
       shouldRestrictAgenda,
       myProfessional?.id,
@@ -122,8 +215,8 @@ function AgendaPage() {
           "id, start_datetime, end_datetime, status, price, notes, cancellation_reason, client_id, service_id, professional_id, clients(name, phone), services(name, duration_minutes, price), professionals(name)",
         )
         .eq("company_id", companyId!)
-        .gte("start_datetime", start.toISOString())
-        .lt("start_datetime", end.toISOString())
+        .gte("start_datetime", agendaRange.from.toISOString())
+        .lt("start_datetime", agendaRange.to.toISOString())
         .order("start_datetime");
       if (statusFilter !== "ALL") q = q.eq("status", statusFilter);
       if (shouldRestrictAgenda && myProfessional) {
@@ -132,6 +225,107 @@ function AgendaPage() {
       const { data, error } = await q;
       if (error) throw error;
       return data;
+    },
+  });
+
+  // Current month income + scheduled value (estimativa)
+  const estimativa = useQuery({
+    enabled: !!companyId,
+    queryKey: ["estimativa-faturamento", companyId],
+    queryFn: async () => {
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      const [txRes, apptRes] = await Promise.all([
+        supabase
+          .from("financial_transactions")
+          .select("amount, type, transaction_date")
+          .eq("company_id", companyId!)
+          .eq("type", "INCOME")
+          .gte("transaction_date", toISODate(monthStart))
+          .lt("transaction_date", toISODate(monthEnd)),
+        supabase
+          .from("appointments")
+          .select("price, status, start_datetime")
+          .eq("company_id", companyId!)
+          .in("status", ["SCHEDULED", "CONFIRMED"])
+          .gte("start_datetime", monthStart.toISOString())
+          .lt("start_datetime", monthEnd.toISOString()),
+      ]);
+      const received = (txRes.data ?? []).reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0);
+      const scheduled = (apptRes.data ?? []).reduce((s: number, r: any) => s + Number(r.price ?? 0), 0);
+      return { received, scheduled, total: received + scheduled, monthStart, monthEnd };
+    },
+  });
+
+  // Cash flow chart data (current month, daily)
+  const cashflowMonth = useQuery({
+    enabled: !!companyId,
+    queryKey: ["cashflow-month", companyId],
+    queryFn: async () => {
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      const { data } = await supabase
+        .from("financial_transactions")
+        .select("amount, type, transaction_date")
+        .eq("company_id", companyId!)
+        .gte("transaction_date", toISODate(monthStart))
+        .lt("transaction_date", toISODate(monthEnd));
+      const map = new Map<string, { date: string; Entradas: number; Saídas: number }>();
+      const cur = new Date(monthStart);
+      while (cur < monthEnd) {
+        const key = toISODate(cur);
+        map.set(key, {
+          date: cur.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
+          Entradas: 0,
+          Saídas: 0,
+        });
+        cur.setDate(cur.getDate() + 1);
+      }
+      for (const r of data ?? []) {
+        const v = map.get((r as any).transaction_date);
+        if (!v) continue;
+        if ((r as any).type === "INCOME") v.Entradas += Number((r as any).amount);
+        else v.Saídas += Number((r as any).amount);
+      }
+      return [...map.values()];
+    },
+  });
+
+  const expensesList = useQuery({
+    enabled: !!companyId,
+    queryKey: ["expenses", companyId, expensesRange.from.toISOString(), expensesRange.to.toISOString()],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("financial_transactions")
+        .select("*")
+        .eq("company_id", companyId!)
+        .eq("type", "EXPENSE")
+        .gte("transaction_date", toISODate(expensesRange.from))
+        .lt("transaction_date", toISODate(expensesRange.to))
+        .order("transaction_date", { ascending: false })
+        .limit(500);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const incomeList = useQuery({
+    enabled: !!companyId,
+    queryKey: ["incomes", companyId, incomeRange.from.toISOString(), incomeRange.to.toISOString()],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("financial_transactions")
+        .select("*")
+        .eq("company_id", companyId!)
+        .eq("type", "INCOME")
+        .gte("transaction_date", toISODate(incomeRange.from))
+        .lt("transaction_date", toISODate(incomeRange.to))
+        .order("transaction_date", { ascending: false })
+        .limit(500);
+      if (error) throw error;
+      return data ?? [];
     },
   });
 
@@ -181,7 +375,6 @@ function AgendaPage() {
   });
 
   const selectedServiceIds = form.watch("service_ids") || [];
-  // auto-fill price when service changes
   useMemo(() => {
     const sum = selectedServiceIds.reduce((acc: number, id: string) => {
       const s = services.data?.find((svc: any) => svc.id === id);
@@ -195,12 +388,10 @@ function AgendaPage() {
     const selectedSvcs = values.service_ids
       .map((id) => services.data?.find((s: any) => s.id === id))
       .filter(Boolean) as any[];
-
     if (!selectedSvcs.length) {
       toast.error("Selecione pelo menos um serviço.");
       return;
     }
-
     const startDt = new Date(`${values.date}T${values.time}:00`);
     const sumPrices = selectedSvcs.reduce((acc, s) => acc + Number(s.price ?? 0), 0);
     const customPrice = values.price !== undefined ? Number(values.price) : sumPrices;
@@ -209,9 +400,7 @@ function AgendaPage() {
     for (const svc of selectedSvcs) {
       const duration = svc.duration_minutes ?? 60;
       const endDt = new Date(currentStart.getTime() + duration * 60_000);
-
       const svcPrice = sumPrices > 0 ? customPrice * (Number(svc.price ?? 0) / sumPrices) : 0;
-
       const { error } = await supabase.from("appointments").insert({
         company_id: companyId,
         client_id: values.client_id,
@@ -225,14 +414,12 @@ function AgendaPage() {
         notes: values.notes || null,
         status: "SCHEDULED",
       });
-
       if (error) {
         toast.error(error.message);
         return;
       }
       currentStart = endDt;
     }
-
     toast.success("Atendimento agendado!");
     form.reset({
       client_id: "",
@@ -242,8 +429,9 @@ function AgendaPage() {
       time: "09:00",
       notes: "",
     });
-    setOpen(false);
+    setNewApptOpen(false);
     queryClient.invalidateQueries({ queryKey: ["appointments", companyId] });
+    queryClient.invalidateQueries({ queryKey: ["estimativa-faturamento", companyId] });
   }
 
   async function markCompleted(id: string) {
@@ -258,6 +446,9 @@ function AgendaPage() {
     toast.success("Concluído. Retorno e receita gerados.");
     queryClient.invalidateQueries({ queryKey: ["appointments", companyId] });
     queryClient.invalidateQueries({ queryKey: ["returns-preview"] });
+    queryClient.invalidateQueries({ queryKey: ["estimativa-faturamento", companyId] });
+    queryClient.invalidateQueries({ queryKey: ["cashflow-month", companyId] });
+    queryClient.invalidateQueries({ queryKey: ["incomes", companyId] });
   }
 
   async function confirmAppointment(id: string) {
@@ -272,145 +463,20 @@ function AgendaPage() {
     queryClient.invalidateQueries({ queryKey: ["appointments", companyId] });
   }
 
-  function step(dir: -1 | 1) {
-    const d = new Date(cursor);
-    if (view === "day") d.setDate(d.getDate() + dir);
-    if (view === "week") d.setDate(d.getDate() + dir * 7);
-    if (view === "month") d.setMonth(d.getMonth() + dir);
-    setCursor(d);
-  }
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-24">
+      {/* === AGENDA === */}
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Agenda</h1>
-          <p className="text-sm text-muted-foreground">{label}</p>
+          <p className="text-sm text-muted-foreground">{agendaRange.label}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="hidden md:block">
-            <Tabs value={view} onValueChange={(v) => setView(v as ViewMode)}>
-              <TabsList>
-                <TabsTrigger value="day">Dia</TabsTrigger>
-                <TabsTrigger value="week">Semana</TabsTrigger>
-                <TabsTrigger value="month">Mês</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-          <Button variant="outline" size="icon" onClick={() => step(-1)}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setCursor(new Date())}>
-            Hoje
-          </Button>
-          <Button variant="outline" size="icon" onClick={() => step(1)}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-1" /> Agendar
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Novo agendamento</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={form.handleSubmit(onCreate)} className="space-y-3">
-                <FormSelectField
-                  label="Cliente"
-                  name="client_id"
-                  form={form}
-                  options={(clients.data ?? []).map((c: any) => ({ value: c.id, label: c.name }))}
-                />
-                {!shouldRestrictAgenda && (
-                  <FormSelectField
-                    label="Profissional"
-                    name="professional_id"
-                    form={form}
-                    options={(professionals.data ?? []).map((p: any) => ({
-                      value: p.id,
-                      label: p.name,
-                    }))}
-                  />
-                )}
-                <div className="space-y-2">
-                  <Label>Serviços (Selecione um ou mais)</Label>
-                  <Controller
-                    control={form.control}
-                    name="service_ids"
-                    render={({ field }) => {
-                      const selected = field.value || [];
-                      return (
-                        <div className="border rounded-lg p-3 max-h-48 overflow-y-auto space-y-2 bg-background">
-                          {(services.data ?? []).map((s: any) => {
-                            const isChecked = selected.includes(s.id);
-                            return (
-                              <label
-                                key={s.id}
-                                className="flex items-center gap-2 p-2 hover:bg-secondary/40 rounded cursor-pointer text-sm"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={isChecked}
-                                  onChange={() => {
-                                    if (isChecked) {
-                                      field.onChange(selected.filter((id: string) => id !== s.id));
-                                    } else {
-                                      field.onChange([...selected, s.id]);
-                                    }
-                                  }}
-                                  className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4"
-                                />
-                                <span className="flex-1 font-medium">{s.name}</span>
-                                <span className="text-muted-foreground">
-                                  {formatBRL(Number(s.price))}
-                                </span>
-                              </label>
-                            );
-                          })}
-                          {(services.data ?? []).length === 0 && (
-                            <p className="text-xs text-muted-foreground">
-                              Nenhum serviço disponível.
-                            </p>
-                          )}
-                        </div>
-                      );
-                    }}
-                  />
-                  {form.formState.errors.service_ids && (
-                    <p className="text-xs text-destructive mt-1">
-                      {form.formState.errors.service_ids.message}
-                    </p>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label>Data</Label>
-                    <Input type="date" {...form.register("date")} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Hora</Label>
-                    <Input type="time" {...form.register("time")} />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Valor (R$)</Label>
-                  <Input type="number" step="0.01" {...form.register("price")} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Observações</Label>
-                  <Textarea rows={2} {...form.register("notes")} />
-                </div>
-                <DialogFooter>
-                  <Button type="submit" disabled={form.formState.isSubmitting}>
-                    Agendar
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
-        </div>
+        <PeriodFilter
+          value={agendaPeriod}
+          onChange={setAgendaPeriod}
+          months={apptHistory.data?.months ?? []}
+          years={apptHistory.data?.years ?? []}
+        />
       </header>
 
       <Card className="p-4 space-y-4">
@@ -454,7 +520,7 @@ function AgendaPage() {
         ) : (
           <GroupedList
             items={filtered}
-            view={view}
+            mode={agendaPeriod.mode}
             onComplete={markCompleted}
             onConfirm={confirmAppointment}
             onChanged={() =>
@@ -467,13 +533,622 @@ function AgendaPage() {
           />
         )}
       </Card>
+
+      {/* Hidden dialog wired to be opened externally (kept for parity) */}
+      <Dialog open={newApptOpen} onOpenChange={setNewApptOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Novo agendamento</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={form.handleSubmit(onCreate)} className="space-y-3">
+            <FormSelectField
+              label="Cliente"
+              name="client_id"
+              form={form}
+              options={(clients.data ?? []).map((c: any) => ({ value: c.id, label: c.name }))}
+            />
+            {!shouldRestrictAgenda && (
+              <FormSelectField
+                label="Profissional"
+                name="professional_id"
+                form={form}
+                options={(professionals.data ?? []).map((p: any) => ({
+                  value: p.id,
+                  label: p.name,
+                }))}
+              />
+            )}
+            <div className="space-y-2">
+              <Label>Serviços (Selecione um ou mais)</Label>
+              <Controller
+                control={form.control}
+                name="service_ids"
+                render={({ field }) => {
+                  const selected = field.value || [];
+                  return (
+                    <div className="border rounded-lg p-3 max-h-48 overflow-y-auto space-y-2 bg-background">
+                      {(services.data ?? []).map((s: any) => {
+                        const isChecked = selected.includes(s.id);
+                        return (
+                          <label
+                            key={s.id}
+                            className="flex items-center gap-2 p-2 hover:bg-secondary/40 rounded cursor-pointer text-sm"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                if (isChecked) {
+                                  field.onChange(selected.filter((id: string) => id !== s.id));
+                                } else {
+                                  field.onChange([...selected, s.id]);
+                                }
+                              }}
+                              className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4"
+                            />
+                            <span className="flex-1 font-medium">{s.name}</span>
+                            <span className="text-muted-foreground">
+                              {formatBRL(Number(s.price))}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  );
+                }}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Data</Label>
+                <Input type="date" {...form.register("date")} />
+              </div>
+              <div className="space-y-2">
+                <Label>Hora</Label>
+                <Input type="time" {...form.register("time")} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Valor (R$)</Label>
+              <Input type="number" step="0.01" {...form.register("price")} />
+            </div>
+            <div className="space-y-2">
+              <Label>Observações</Label>
+              <Textarea rows={2} {...form.register("notes")} />
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={form.formState.isSubmitting}>
+                Agendar
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* === SECTION 1: ESTIMATIVA + CASH FLOW === */}
+      <Card className="p-5 shadow-soft">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-primary" />
+            <h2 className="font-semibold text-[15px]">Estimativa de faturamento do mês</h2>
+          </div>
+        </div>
+        <div className="grid sm:grid-cols-3 gap-3 mb-5">
+          <div className="rounded-lg border p-3">
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Recebido</p>
+            <p className="text-lg font-semibold text-success tabular-nums">
+              {formatBRL(estimativa.data?.received ?? 0)}
+            </p>
+          </div>
+          <div className="rounded-lg border p-3">
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Agendado</p>
+            <p className="text-lg font-semibold text-primary tabular-nums">
+              {formatBRL(estimativa.data?.scheduled ?? 0)}
+            </p>
+          </div>
+          <div className="rounded-lg border p-3 bg-primary/5 border-primary/30">
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Estimativa total</p>
+            <p className="text-lg font-semibold tabular-nums">
+              {formatBRL(estimativa.data?.total ?? 0)}
+            </p>
+          </div>
+        </div>
+
+        <h3 className="font-medium text-sm mb-3 text-muted-foreground">Fluxo de caixa do mês</h3>
+        <div className="h-56">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={cashflowMonth.data ?? []}>
+              <defs>
+                <linearGradient id="agenda-g-in" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="hsl(var(--success))" stopOpacity={0.4} />
+                  <stop offset="100%" stopColor="hsl(var(--success))" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="agenda-g-out" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="hsl(var(--destructive))" stopOpacity={0.4} />
+                  <stop offset="100%" stopColor="hsl(var(--destructive))" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `R$${v}`} width={50} />
+              <Tooltip formatter={(v: any) => formatBRL(Number(v))} />
+              <Area type="monotone" dataKey="Entradas" stroke="hsl(var(--success))" fill="url(#agenda-g-in)" />
+              <Area type="monotone" dataKey="Saídas" stroke="hsl(var(--destructive))" fill="url(#agenda-g-out)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
+
+      {/* === SECTION 2: DESPESAS === */}
+      <Card className="p-5 shadow-soft space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <ArrowDown className="h-4 w-4 text-destructive" />
+            <h2 className="font-semibold text-[15px]">Despesas · {expensesRange.label.toLowerCase()}</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <PeriodFilter
+              value={expensesPeriod}
+              onChange={setExpensesPeriod}
+              months={txHistory.data?.months ?? []}
+              years={txHistory.data?.years ?? []}
+              compact
+            />
+            <Button size="sm" onClick={() => setExpenseDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-1" /> Lançamento
+            </Button>
+          </div>
+        </div>
+        <TransactionList rows={expensesList.data ?? []} loading={expensesList.isLoading} kind="EXPENSE" />
+      </Card>
+
+      {/* === SECTION 3: RECEITAS === */}
+      <Card className="p-5 shadow-soft space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <ArrowUp className="h-4 w-4 text-success" />
+            <h2 className="font-semibold text-[15px]">Receitas · {incomeRange.label.toLowerCase()}</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <PeriodFilter
+              value={incomePeriod}
+              onChange={setIncomePeriod}
+              months={txHistory.data?.months ?? []}
+              years={txHistory.data?.years ?? []}
+              compact
+            />
+            <Button size="sm" onClick={() => setIncomeDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-1" /> Lançamento
+            </Button>
+          </div>
+        </div>
+        <TransactionList rows={incomeList.data ?? []} loading={incomeList.isLoading} kind="INCOME" />
+      </Card>
+
+      <NewTransactionDialog
+        open={expenseDialogOpen}
+        onOpenChange={setExpenseDialogOpen}
+        companyId={companyId}
+        defaultType="EXPENSE"
+        onSaved={() => {
+          queryClient.invalidateQueries({ queryKey: ["expenses", companyId] });
+          queryClient.invalidateQueries({ queryKey: ["incomes", companyId] });
+          queryClient.invalidateQueries({ queryKey: ["cashflow-month", companyId] });
+          queryClient.invalidateQueries({ queryKey: ["estimativa-faturamento", companyId] });
+          queryClient.invalidateQueries({ queryKey: ["tx-history-buckets", companyId] });
+        }}
+      />
+      <NewTransactionDialog
+        open={incomeDialogOpen}
+        onOpenChange={setIncomeDialogOpen}
+        companyId={companyId}
+        defaultType="INCOME"
+        onSaved={() => {
+          queryClient.invalidateQueries({ queryKey: ["expenses", companyId] });
+          queryClient.invalidateQueries({ queryKey: ["incomes", companyId] });
+          queryClient.invalidateQueries({ queryKey: ["cashflow-month", companyId] });
+          queryClient.invalidateQueries({ queryKey: ["estimativa-faturamento", companyId] });
+          queryClient.invalidateQueries({ queryKey: ["tx-history-buckets", companyId] });
+        }}
+      />
     </div>
+  );
+}
+
+function extractBuckets(dates: (string | null | undefined)[]): { months: string[]; years: number[] } {
+  const monthSet = new Set<string>();
+  const yearSet = new Set<number>();
+  const now = new Date();
+  monthSet.add(now.toISOString().slice(0, 7));
+  yearSet.add(now.getFullYear());
+  for (const d of dates) {
+    if (!d) continue;
+    monthSet.add(d.slice(0, 7));
+    yearSet.add(Number(d.slice(0, 4)));
+  }
+  return {
+    months: Array.from(monthSet).sort((a, b) => b.localeCompare(a)),
+    years: Array.from(yearSet).sort((a, b) => b - a),
+  };
+}
+
+function PeriodFilter({
+  value,
+  onChange,
+  months,
+  years,
+  compact,
+}: {
+  value: PeriodState;
+  onChange: (p: PeriodState) => void;
+  months: string[];
+  years: number[];
+  compact?: boolean;
+}) {
+  const todayISO = toISODate(new Date());
+  const dayLabel = value.mode === "today" && value.date && value.date !== todayISO
+    ? new Date(value.date + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
+    : "Hoje";
+  const monthLabel = value.mode === "month" && value.month
+    ? formatMonthLabel(value.month)
+    : "Mês";
+  const showYearDropdown = years.length > 1;
+
+  return (
+    <div className={cn("flex items-center gap-1 rounded-lg border bg-muted/30 p-1", compact && "text-xs")}>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            variant={value.mode === "today" ? "default" : "ghost"}
+            size="sm"
+            className="h-7 px-3"
+          >
+            <CalendarIcon className="h-3.5 w-3.5 mr-1" />
+            {dayLabel}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="end">
+          <Calendar
+            mode="single"
+            selected={value.date ? new Date(value.date + "T00:00:00") : new Date()}
+            onSelect={(d) => {
+              if (d) onChange({ mode: "today", date: toISODate(d) });
+            }}
+            className="pointer-events-auto"
+          />
+        </PopoverContent>
+      </Popover>
+      <Button
+        variant={value.mode === "week" ? "default" : "ghost"}
+        size="sm"
+        className="h-7 px-3"
+        onClick={() => onChange({ mode: "week" })}
+      >
+        Semana
+      </Button>
+      <Select
+        value={value.mode === "month" ? (value.month ?? new Date().toISOString().slice(0, 7)) : ""}
+        onValueChange={(v) => onChange({ mode: "month", month: v })}
+      >
+        <SelectTrigger
+          className={cn(
+            "h-7 border-0 bg-transparent shadow-none px-3 py-0 text-sm font-medium gap-1 w-auto",
+            value.mode === "month"
+              ? "bg-primary text-primary-foreground rounded-md"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          <SelectValue placeholder={monthLabel}>{monthLabel}</SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {months.map((m) => (
+            <SelectItem key={m} value={m}>
+              {formatMonthLabel(m)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {showYearDropdown ? (
+        <Select
+          value={value.mode === "year" ? String(value.year ?? new Date().getFullYear()) : ""}
+          onValueChange={(v) => onChange({ mode: "year", year: Number(v) })}
+        >
+          <SelectTrigger
+            className={cn(
+              "h-7 border-0 bg-transparent shadow-none px-3 py-0 text-sm font-medium gap-1 w-auto",
+              value.mode === "year"
+                ? "bg-primary text-primary-foreground rounded-md"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <SelectValue placeholder="Ano">
+              {value.mode === "year" ? String(value.year ?? new Date().getFullYear()) : "Ano"}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {years.map((y) => (
+              <SelectItem key={y} value={String(y)}>
+                {y}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : (
+        <Button
+          variant={value.mode === "year" ? "default" : "ghost"}
+          size="sm"
+          className="h-7 px-3"
+          onClick={() => onChange({ mode: "year", year: new Date().getFullYear() })}
+        >
+          {new Date().getFullYear()}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function formatMonthLabel(ym: string) {
+  const [y, m] = ym.split("-").map(Number);
+  const d = new Date(y, m - 1, 1);
+  const label = d.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" });
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function TransactionList({
+  rows,
+  loading,
+  kind,
+}: {
+  rows: any[];
+  loading: boolean;
+  kind: "INCOME" | "EXPENSE";
+}) {
+  if (loading) return <p className="text-sm text-muted-foreground py-8 text-center">Carregando…</p>;
+  if (!rows.length) {
+    return (
+      <div className="py-12 text-center">
+        <div className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-full bg-secondary text-primary">
+          <Wallet className="h-5 w-5" />
+        </div>
+        <p className="mt-3 text-sm font-medium">
+          {kind === "INCOME" ? "Sem receitas neste período" : "Sem despesas neste período"}
+        </p>
+      </div>
+    );
+  }
+  const total = rows.reduce((s, r) => s + Number(r.amount ?? 0), 0);
+  return (
+    <>
+      <ul className="divide-y">
+        {rows.map((t: any) => (
+          <li
+            key={t.id}
+            className="py-3 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3"
+          >
+            <span
+              className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${
+                t.type === "INCOME"
+                  ? "bg-success/15 text-success"
+                  : "bg-destructive/15 text-destructive"
+              }`}
+            >
+              {t.type === "INCOME" ? (
+                <ArrowUp className="h-4 w-4" />
+              ) : (
+                <ArrowDown className="h-4 w-4" />
+              )}
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-medium truncate">{t.description || t.category}</p>
+              <p className="text-xs text-muted-foreground truncate">
+                {new Date(t.transaction_date + "T00:00:00").toLocaleDateString("pt-BR")}
+                {" · "}
+                {t.category}
+                {t.payment_method ? ` · ${t.payment_method}` : ""}
+              </p>
+            </div>
+            <p
+              className={`text-sm font-semibold ${t.type === "INCOME" ? "text-success" : "text-destructive"}`}
+            >
+              {t.type === "INCOME" ? "+" : "−"} {formatBRL(Number(t.amount))}
+            </p>
+          </li>
+        ))}
+      </ul>
+      <div className="flex justify-end pt-2 border-t text-sm">
+        <span className="text-muted-foreground mr-2">Total:</span>
+        <span className={`font-semibold ${kind === "INCOME" ? "text-success" : "text-destructive"}`}>
+          {formatBRL(total)}
+        </span>
+      </div>
+    </>
+  );
+}
+
+const PAYMENT_METHODS = ["PIX", "Dinheiro", "Cartão Crédito", "Cartão Débito", "Transferência"];
+const INCOME_CATEGORIES = ["Atendimento", "Venda de produto", "Outros"];
+const EXPENSE_CATEGORIES = [
+  "Aluguel",
+  "Internet",
+  "Energia",
+  "Água",
+  "Produtos",
+  "Marketing",
+  "Impostos",
+  "Funcionários",
+  "Outros",
+];
+
+const txSchema = z.object({
+  type: z.enum(["INCOME", "EXPENSE"]),
+  category: z.string().trim().min(2).max(60),
+  description: z.string().max(200).optional().or(z.literal("")),
+  amount: z.coerce.number().min(0.01).max(1_000_000),
+  payment_method: z.string().max(40).optional().or(z.literal("")),
+  transaction_date: z.string().min(1),
+});
+
+function NewTransactionDialog({
+  open,
+  onOpenChange,
+  companyId,
+  defaultType,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  companyId?: string;
+  defaultType: "INCOME" | "EXPENSE";
+  onSaved: () => void;
+}) {
+  const form = useForm<z.infer<typeof txSchema>>({
+    resolver: zodResolver(txSchema),
+    defaultValues: {
+      type: defaultType,
+      category: "",
+      description: "",
+      amount: 0,
+      payment_method: "",
+      transaction_date: toISODate(new Date()),
+    },
+  });
+  const type = form.watch("type");
+  const cats = type === "INCOME" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+
+  // Reset default type when opening
+  useMemo(() => {
+    if (open) {
+      form.reset({
+        type: defaultType,
+        category: "",
+        description: "",
+        amount: 0,
+        payment_method: "",
+        transaction_date: toISODate(new Date()),
+      });
+    }
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function onSubmit(v: z.infer<typeof txSchema>) {
+    if (!companyId) return;
+    const { error } = await supabase.from("financial_transactions").insert({
+      ...v,
+      description: v.description || null,
+      payment_method: v.payment_method || null,
+      company_id: companyId,
+    });
+    if (error) return toast.error(error.message);
+    toast.success(v.type === "INCOME" ? "Receita registrada" : "Despesa registrada");
+    onOpenChange(false);
+    onSaved();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Novo lançamento</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <div className="space-y-2">
+            <Label>Tipo</Label>
+            <Controller
+              control={form.control}
+              name="type"
+              render={({ field }) => (
+                <Tabs
+                  value={field.value}
+                  onValueChange={(v) => {
+                    field.onChange(v);
+                    form.setValue("category", "");
+                  }}
+                >
+                  <TabsList className="grid grid-cols-2 w-full">
+                    <TabsTrigger value="INCOME">Receita</TabsTrigger>
+                    <TabsTrigger value="EXPENSE">Despesa</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              )}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Categoria *</Label>
+              <Controller
+                control={form.control}
+                name="category"
+                render={({ field }) => (
+                  <Select value={field.value || undefined} onValueChange={field.onChange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cats.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              {form.formState.errors.category && (
+                <p className="text-xs text-destructive">{form.formState.errors.category.message}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Valor (R$) *</Label>
+              <Input type="number" step="0.01" {...form.register("amount")} />
+              {form.formState.errors.amount && (
+                <p className="text-xs text-destructive">{form.formState.errors.amount.message}</p>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Data</Label>
+              <Input type="date" {...form.register("transaction_date")} />
+            </div>
+            <div className="space-y-2">
+              <Label>Forma de pagamento</Label>
+              <Controller
+                control={form.control}
+                name="payment_method"
+                render={({ field }) => (
+                  <Select value={field.value || undefined} onValueChange={field.onChange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="—" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PAYMENT_METHODS.map((m) => (
+                        <SelectItem key={m} value={m}>
+                          {m}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Descrição</Label>
+            <Input {...form.register("description")} />
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={form.formState.isSubmitting}>
+              Salvar
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 function GroupedList({
   items,
-  view,
+  mode,
   onComplete,
   onConfirm,
   onChanged,
@@ -483,7 +1158,7 @@ function GroupedList({
   myProfessional,
 }: {
   items: any[];
-  view: ViewMode;
+  mode: PeriodMode;
   onComplete: (id: string) => void;
   onConfirm: (id: string) => void;
   onChanged: () => void;
@@ -492,7 +1167,7 @@ function GroupedList({
   shouldRestrictAgenda: boolean;
   myProfessional: any;
 }) {
-  if (view === "day") {
+  if (mode === "today") {
     return (
       <ul className="divide-y">
         {items.map((a) => (
@@ -858,45 +1533,6 @@ function FormSelectField({
       )}
     </div>
   );
-}
-
-function rangeFor(view: ViewMode, cursor: Date): { start: Date; end: Date; label: string } {
-  const d = new Date(cursor);
-  if (view === "day") {
-    const start = new Date(d);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 1);
-    return {
-      start,
-      end,
-      label: d.toLocaleDateString("pt-BR", {
-        weekday: "long",
-        day: "2-digit",
-        month: "long",
-        year: "numeric",
-      }),
-    };
-  }
-  if (view === "week") {
-    const start = new Date(d);
-    start.setDate(start.getDate() - start.getDay());
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 7);
-    return {
-      start,
-      end,
-      label: `Semana de ${start.toLocaleDateString("pt-BR")} a ${new Date(end.getTime() - 86400000).toLocaleDateString("pt-BR")}`,
-    };
-  }
-  const start = new Date(d.getFullYear(), d.getMonth(), 1);
-  const end = new Date(d.getFullYear(), d.getMonth() + 1, 1);
-  return {
-    start,
-    end,
-    label: start.toLocaleDateString("pt-BR", { month: "long", year: "numeric" }),
-  };
 }
 
 function statusLabel(s: string) {
