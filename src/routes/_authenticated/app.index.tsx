@@ -417,7 +417,6 @@ function VisaoGeral() {
           delta={pct(data?.revenue, data?.revenuePrev)}
           accent
           to="/app/agenda"
-          search={{ type: "INCOME" }}
         />
         <Kpi
           icon={TrendingDown}
@@ -427,7 +426,6 @@ function VisaoGeral() {
           tone="warn"
           invertDelta
           to="/app/agenda"
-          search={{ type: "EXPENSE" }}
         />
         <Kpi
           icon={TrendingUp}
@@ -436,7 +434,6 @@ function VisaoGeral() {
           delta={pct(data?.profit, data?.profitPrev)}
           tone={data && data.profit >= 0 ? "default" : "warn"}
           to="/app/agenda"
-          search={{ type: "all" }}
         />
         <Kpi
           icon={Calendar}
