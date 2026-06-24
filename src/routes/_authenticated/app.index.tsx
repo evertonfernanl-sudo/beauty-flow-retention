@@ -416,7 +416,7 @@ function VisaoGeral() {
           value={loading ? null : formatBRL(data?.revenue ?? 0)}
           delta={pct(data?.revenue, data?.revenuePrev)}
           accent
-          to="/app/financial"
+          to="/app/agenda"
           search={{ type: "INCOME" }}
         />
         <Kpi
@@ -426,7 +426,7 @@ function VisaoGeral() {
           delta={pct(data?.expense, data?.expensePrev)}
           tone="warn"
           invertDelta
-          to="/app/financial"
+          to="/app/agenda"
           search={{ type: "EXPENSE" }}
         />
         <Kpi
@@ -435,7 +435,7 @@ function VisaoGeral() {
           value={loading ? null : formatBRL(data?.profit ?? 0)}
           delta={pct(data?.profit, data?.profitPrev)}
           tone={data && data.profit >= 0 ? "default" : "warn"}
-          to="/app/financial"
+          to="/app/agenda"
           search={{ type: "all" }}
         />
         <Kpi
@@ -450,7 +450,7 @@ function VisaoGeral() {
           label="Ticket médio"
           value={loading ? null : formatBRL(data?.ticket ?? 0)}
           delta={pct(data?.ticket, data?.ticketPrev)}
-          to="/app/financial"
+          to="/app/agenda"
         />
         <Kpi
           icon={Users}
