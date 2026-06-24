@@ -204,49 +204,95 @@ function ClientsPage() {
     },
   });
 
+  // Clients with a future SCHEDULED appointment — excluded from all retention buckets.
+  const scheduledQ = useQuery({
+    enabled: !!companyId,
+    queryKey: ["scheduled-clients", companyId],
+    queryFn: async () => {
+      const nowIso = new Date().toISOString();
+      const { data, error } = await supabase
+        .from("appointments")
+        .select("client_id")
+        .eq("company_id", companyId!)
+        .eq("status", "SCHEDULED")
+        .gte("start_datetime", nowIso);
+      if (error) throw error;
+      return new Set((data ?? []).map((r: any) => r.client_id).filter(Boolean));
+    },
+  });
+
+  // Ticket médio: completed appointments in current month / count
+  const ticketQ = useQuery({
+    enabled: !!companyId,
+    queryKey: ["ticket-month", companyId],
+    queryFn: async () => {
+      const now = new Date();
+      const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const end = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
+      const { data, error } = await supabase
+        .from("appointments")
+        .select("price")
+        .eq("company_id", companyId!)
+        .eq("status", "COMPLETED")
+        .gte("start_datetime", start)
+        .lt("start_datetime", end);
+      if (error) throw error;
+      const rows = data ?? [];
+      const sum = rows.reduce((acc: number, r: any) => acc + Number(r.price || 0), 0);
+      return { sum, count: rows.length, avg: rows.length > 0 ? sum / rows.length : 0 };
+    },
+  });
+
   const clientsWithOpp = useMemo(() => {
-    const RETURN_CLASSES = new Set(["ATTENTION", "LATE", "ON_TIME"]);
+    const scheduledSet = scheduledQ.data ?? new Set<string>();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     return (list.data ?? []).map((c: any) => {
       const activeOpps = (c.recovery_opportunities ?? [])
         .filter((o: any) => o.status === "OPEN" || o.status === "IN_CONTACT")
         .sort((a: any, b: any) => {
-          const da = a.expected_return_date ? new Date(a.expected_return_date).getTime() : Infinity;
-          const db = b.expected_return_date ? new Date(b.expected_return_date).getTime() : Infinity;
-          return da - db;
+          const da = a.expected_return_date ? new Date(a.expected_return_date).getTime() : 0;
+          const db = b.expected_return_date ? new Date(b.expected_return_date).getTime() : 0;
+          return db - da; // latest first
         });
-      const activeReturnOpps = activeOpps.filter((o: any) => RETURN_CLASSES.has(o.classification));
-      const activeAtRiskOpps = activeOpps.filter((o: any) => o.classification === "AT_RISK");
-      const activeLostOpps = activeOpps.filter((o: any) => o.classification === "LOST");
+      const lastOpp = activeOpps[0];
+      const hasScheduled = scheduledSet.has(c.id);
+      let daysLate = 0;
+      if (lastOpp?.expected_return_date) {
+        const exp = new Date(lastOpp.expected_return_date);
+        exp.setHours(0, 0, 0, 0);
+        daysLate = Math.floor((today.getTime() - exp.getTime()) / 86400000);
+      }
+      const isPending = !hasScheduled && !!lastOpp && daysLate > 0;
+      const isAtRisk = isPending && daysLate > 10;
+      const isLost = isPending && daysLate > 30;
+      const isInactive = isPending && daysLate > 60;
       return {
         ...c,
         activeOpps,
-        activeReturnOpps,
-        activeAtRiskOpps,
-        activeLostOpps,
-        activeOpp: activeOpps[0],
+        lastOpp,
+        hasScheduled,
+        daysLate,
+        isPending,
+        isAtRisk,
+        isLost,
+        isInactive,
       };
     });
-  }, [list.data]);
+  }, [list.data, scheduledQ.data]);
 
   const stats = useMemo(() => {
-    const sumPotential = (opps: any[]) =>
-      opps.reduce((acc, o) => acc + Number(o.potential_value || 0), 0);
-
-    const returnClients = clientsWithOpp.filter((c) => c.activeReturnOpps.length > 0);
-    const atRiskClients = clientsWithOpp.filter((c) => c.activeAtRiskOpps.length > 0);
-
-    const opportunitiesCount = returnClients.length;
-    const recoveredValue = returnClients.reduce((acc, c) => acc + sumPotential(c.activeReturnOpps), 0);
-    const ticketAverage = returnClients.length > 0 ? recoveredValue / returnClients.length : 0;
-    const atRiskValue = atRiskClients.reduce((acc, c) => acc + sumPotential(c.activeAtRiskOpps), 0);
-
+    const pending = clientsWithOpp.filter((c) => c.isPending);
+    const atRisk = clientsWithOpp.filter((c) => c.isAtRisk);
+    const sumPotential = (rows: any[]) =>
+      rows.reduce((acc, c) => acc + Number(c.lastOpp?.potential_value || 0), 0);
     return {
-      opportunitiesCount,
-      recoveredValue,
-      ticketAverage,
-      atRiskValue,
+      opportunitiesCount: pending.length,
+      recoveredValue: sumPotential(pending),
+      atRiskValue: sumPotential(atRisk),
+      ticketAverage: ticketQ.data?.avg ?? 0,
     };
-  }, [clientsWithOpp]);
+  }, [clientsWithOpp, ticketQ.data]);
 
   const searched = useMemo(() => {
     const s = search.trim().toLowerCase();
@@ -264,21 +310,10 @@ function ClientsPage() {
     return searched.filter((c) => {
       if (filter === "ALL") return true;
       if (filter === "ACTIVE") return c.status === "ACTIVE";
-      if (filter === "INACTIVE") return c.status === "INACTIVE";
-      if (filter === "RETURN") {
-        return c.activeReturnOpps.length > 0;
-      }
-      if (filter === "AT_RISK") {
-        return c.activeAtRiskOpps.length > 0;
-      }
-      if (filter === "LOST") {
-        const date90DaysAgo = new Date();
-        date90DaysAgo.setDate(date90DaysAgo.getDate() - 90);
-        const isLostInactivity = c.last_visit
-          ? new Date(c.last_visit) < date90DaysAgo
-          : new Date(c.created_at) < date90DaysAgo;
-        return c.status === "LOST" || c.activeLostOpps.length > 0 || isLostInactivity;
-      }
+      if (filter === "RETURN") return c.isPending;
+      if (filter === "AT_RISK") return c.isAtRisk;
+      if (filter === "LOST") return c.isLost;
+      if (filter === "INACTIVE") return c.isInactive;
       if (filter === "BIRTHDAY") {
         const month = new Date().getMonth() + 1;
         return c.birthday && new Date(c.birthday).getMonth() + 1 === month;
