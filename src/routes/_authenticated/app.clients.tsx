@@ -66,7 +66,7 @@ import {
 } from "lucide-react";
 
 const clientsSearchSchema = z.object({
-  tab: z.enum(["cadastro", "retorno"]).optional(),
+  tab: z.enum(["cadastro", "retorno", "comunicacao", "mensageria"]).optional(),
   filter: z.string().optional(),
 });
 
@@ -92,10 +92,10 @@ type Filter = "ALL" | "ACTIVE" | "INACTIVE" | "LOST" | "RETURN" | "BIRTHDAY" | "
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "ALL", label: "Todos" },
   { id: "ACTIVE", label: "Ativos" },
-  { id: "INACTIVE", label: "Inativos" },
-  { id: "LOST", label: "Perdidos" },
   { id: "RETURN", label: "Retorno pendente" },
   { id: "AT_RISK", label: "Em risco" },
+  { id: "LOST", label: "Perdidos" },
+  { id: "INACTIVE", label: "Inativos" },
   { id: "BIRTHDAY", label: "Aniversariantes" },
 ];
 
