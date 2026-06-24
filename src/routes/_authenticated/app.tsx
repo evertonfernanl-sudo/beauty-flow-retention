@@ -63,7 +63,6 @@ function AppShell() {
     if (profile.role === "owner" || profile.role === "admin") return true;
     if (itemTo === "/app") return !!profile.permissions?.view_dashboard;
     if (itemTo === "/app/clients") return !!profile.permissions?.view_clients;
-    if (itemTo === "/app/financial") return !!profile.permissions?.view_financial;
     if (itemTo === "/app/sie") return !!profile.permissions?.view_imports;
     if (itemTo === "/app/settings") return !!profile.permissions?.view_settings;
     return true; // agenda and recurrence are always allowed
