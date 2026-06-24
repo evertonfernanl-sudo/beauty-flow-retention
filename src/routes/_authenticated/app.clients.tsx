@@ -66,7 +66,7 @@ import {
 } from "lucide-react";
 
 const clientsSearchSchema = z.object({
-  tab: z.enum(["cadastro", "retorno"]).optional(),
+  tab: z.enum(["cadastro", "retorno", "comunicacao", "mensageria"]).optional(),
   filter: z.string().optional(),
 });
 
@@ -92,10 +92,10 @@ type Filter = "ALL" | "ACTIVE" | "INACTIVE" | "LOST" | "RETURN" | "BIRTHDAY" | "
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "ALL", label: "Todos" },
   { id: "ACTIVE", label: "Ativos" },
-  { id: "INACTIVE", label: "Inativos" },
-  { id: "LOST", label: "Perdidos" },
   { id: "RETURN", label: "Retorno pendente" },
   { id: "AT_RISK", label: "Em risco" },
+  { id: "LOST", label: "Perdidos" },
+  { id: "INACTIVE", label: "Inativos" },
   { id: "BIRTHDAY", label: "Aniversariantes" },
 ];
 
@@ -204,49 +204,95 @@ function ClientsPage() {
     },
   });
 
+  // Clients with a future SCHEDULED appointment — excluded from all retention buckets.
+  const scheduledQ = useQuery({
+    enabled: !!companyId,
+    queryKey: ["scheduled-clients", companyId],
+    queryFn: async () => {
+      const nowIso = new Date().toISOString();
+      const { data, error } = await supabase
+        .from("appointments")
+        .select("client_id")
+        .eq("company_id", companyId!)
+        .eq("status", "SCHEDULED")
+        .gte("start_datetime", nowIso);
+      if (error) throw error;
+      return new Set((data ?? []).map((r: any) => r.client_id).filter(Boolean));
+    },
+  });
+
+  // Ticket médio: completed appointments in current month / count
+  const ticketQ = useQuery({
+    enabled: !!companyId,
+    queryKey: ["ticket-month", companyId],
+    queryFn: async () => {
+      const now = new Date();
+      const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const end = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
+      const { data, error } = await supabase
+        .from("appointments")
+        .select("price")
+        .eq("company_id", companyId!)
+        .eq("status", "COMPLETED")
+        .gte("start_datetime", start)
+        .lt("start_datetime", end);
+      if (error) throw error;
+      const rows = data ?? [];
+      const sum = rows.reduce((acc: number, r: any) => acc + Number(r.price || 0), 0);
+      return { sum, count: rows.length, avg: rows.length > 0 ? sum / rows.length : 0 };
+    },
+  });
+
   const clientsWithOpp = useMemo(() => {
-    const RETURN_CLASSES = new Set(["ATTENTION", "LATE", "ON_TIME"]);
+    const scheduledSet = scheduledQ.data ?? new Set<string>();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     return (list.data ?? []).map((c: any) => {
       const activeOpps = (c.recovery_opportunities ?? [])
         .filter((o: any) => o.status === "OPEN" || o.status === "IN_CONTACT")
         .sort((a: any, b: any) => {
-          const da = a.expected_return_date ? new Date(a.expected_return_date).getTime() : Infinity;
-          const db = b.expected_return_date ? new Date(b.expected_return_date).getTime() : Infinity;
-          return da - db;
+          const da = a.expected_return_date ? new Date(a.expected_return_date).getTime() : 0;
+          const db = b.expected_return_date ? new Date(b.expected_return_date).getTime() : 0;
+          return db - da; // latest first
         });
-      const activeReturnOpps = activeOpps.filter((o: any) => RETURN_CLASSES.has(o.classification));
-      const activeAtRiskOpps = activeOpps.filter((o: any) => o.classification === "AT_RISK");
-      const activeLostOpps = activeOpps.filter((o: any) => o.classification === "LOST");
+      const lastOpp = activeOpps[0];
+      const hasScheduled = scheduledSet.has(c.id);
+      let daysLate = 0;
+      if (lastOpp?.expected_return_date) {
+        const exp = new Date(lastOpp.expected_return_date);
+        exp.setHours(0, 0, 0, 0);
+        daysLate = Math.floor((today.getTime() - exp.getTime()) / 86400000);
+      }
+      const isPending = !hasScheduled && !!lastOpp && daysLate > 0;
+      const isAtRisk = isPending && daysLate > 10;
+      const isLost = isPending && daysLate > 30;
+      const isInactive = isPending && daysLate > 60;
       return {
         ...c,
         activeOpps,
-        activeReturnOpps,
-        activeAtRiskOpps,
-        activeLostOpps,
-        activeOpp: activeOpps[0],
+        lastOpp,
+        hasScheduled,
+        daysLate,
+        isPending,
+        isAtRisk,
+        isLost,
+        isInactive,
       };
     });
-  }, [list.data]);
+  }, [list.data, scheduledQ.data]);
 
   const stats = useMemo(() => {
-    const sumPotential = (opps: any[]) =>
-      opps.reduce((acc, o) => acc + Number(o.potential_value || 0), 0);
-
-    const returnClients = clientsWithOpp.filter((c) => c.activeReturnOpps.length > 0);
-    const atRiskClients = clientsWithOpp.filter((c) => c.activeAtRiskOpps.length > 0);
-
-    const opportunitiesCount = returnClients.length;
-    const recoveredValue = returnClients.reduce((acc, c) => acc + sumPotential(c.activeReturnOpps), 0);
-    const ticketAverage = returnClients.length > 0 ? recoveredValue / returnClients.length : 0;
-    const atRiskValue = atRiskClients.reduce((acc, c) => acc + sumPotential(c.activeAtRiskOpps), 0);
-
+    const pending = clientsWithOpp.filter((c) => c.isPending);
+    const atRisk = clientsWithOpp.filter((c) => c.isAtRisk);
+    const sumPotential = (rows: any[]) =>
+      rows.reduce((acc, c) => acc + Number(c.lastOpp?.potential_value || 0), 0);
     return {
-      opportunitiesCount,
-      recoveredValue,
-      ticketAverage,
-      atRiskValue,
+      opportunitiesCount: pending.length,
+      recoveredValue: sumPotential(pending),
+      atRiskValue: sumPotential(atRisk),
+      ticketAverage: ticketQ.data?.avg ?? 0,
     };
-  }, [clientsWithOpp]);
+  }, [clientsWithOpp, ticketQ.data]);
 
   const searched = useMemo(() => {
     const s = search.trim().toLowerCase();
@@ -264,21 +310,10 @@ function ClientsPage() {
     return searched.filter((c) => {
       if (filter === "ALL") return true;
       if (filter === "ACTIVE") return c.status === "ACTIVE";
-      if (filter === "INACTIVE") return c.status === "INACTIVE";
-      if (filter === "RETURN") {
-        return c.activeReturnOpps.length > 0;
-      }
-      if (filter === "AT_RISK") {
-        return c.activeAtRiskOpps.length > 0;
-      }
-      if (filter === "LOST") {
-        const date90DaysAgo = new Date();
-        date90DaysAgo.setDate(date90DaysAgo.getDate() - 90);
-        const isLostInactivity = c.last_visit
-          ? new Date(c.last_visit) < date90DaysAgo
-          : new Date(c.created_at) < date90DaysAgo;
-        return c.status === "LOST" || c.activeLostOpps.length > 0 || isLostInactivity;
-      }
+      if (filter === "RETURN") return c.isPending;
+      if (filter === "AT_RISK") return c.isAtRisk;
+      if (filter === "LOST") return c.isLost;
+      if (filter === "INACTIVE") return c.isInactive;
       if (filter === "BIRTHDAY") {
         const month = new Date().getMonth() + 1;
         return c.birthday && new Date(c.birthday).getMonth() + 1 === month;
@@ -697,12 +732,12 @@ function ClientsPage() {
                   <p className="text-sm text-muted-foreground">Ajuste a busca ou aplique outro filtro.</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto -mx-4 lg:mx-0">
+                <div className="overflow-x-scroll overflow-y-visible -mx-4 lg:mx-0 border-t border-b">
                   <div className="min-w-[1100px] divide-y">
                     {/* Header */}
-                    <div className="hidden lg:grid grid-cols-[30px_1.8fr_1.2fr_1.2fr_1.2fr_1fr_1fr_1fr_1.2fr_1.2fr] gap-4 px-4 py-3 text-xs font-semibold text-muted-foreground bg-muted/20 items-center">
-                      <div className="w-5"></div>
-                      <div>Nome</div>
+                    <div className="hidden lg:grid grid-cols-[30px_220px_1.2fr_1.2fr_1.2fr_1fr_1fr_1fr_1.2fr_1.2fr] gap-4 px-4 py-3 text-xs font-semibold text-muted-foreground bg-muted/20 items-center sticky top-0 z-10">
+                      <div className="w-5 sticky left-0 bg-muted/20 z-20"></div>
+                      <div className="sticky left-[30px] bg-muted/20 z-20 pl-3 -ml-3 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]">Nome</div>
                       <div>Telefone</div>
                       <div>Último Atend.</div>
                       <div>Serviço Realizado</div>
@@ -718,28 +753,15 @@ function ClientsPage() {
                       {filtered.map((c: any) => {
                         const isBirthdayMonth =
                           c.birthday && new Date(c.birthday).getMonth() === new Date().getMonth();
-                        const daysSince = c.last_visit 
-                          ? Math.floor((Date.now() - new Date(c.last_visit).getTime()) / 86400000) 
+                        const daysSince = c.last_visit
+                          ? Math.floor((Date.now() - new Date(c.last_visit).getTime()) / 86400000)
                           : null;
-                        const oppsForFilter: any[] =
-                          filter === "RETURN" ? c.activeReturnOpps
-                          : filter === "AT_RISK" ? c.activeAtRiskOpps
-                          : filter === "LOST" ? c.activeLostOpps
-                          : c.activeOpps;
-                        const uniqueServiceNames = Array.from(
-                          new Set(
-                            oppsForFilter
-                              .map((o: any) => o.services?.name)
-                              .filter((n: any): n is string => !!n)
-                          )
-                        );
-                        const serviceName = uniqueServiceNames.length > 0 ? uniqueServiceNames.join(", ") : "—";
-                        const valueToDisplay = oppsForFilter.length > 0
-                          ? oppsForFilter.reduce((acc: number, o: any) => acc + Number(o.potential_value || 0), 0)
+                        const serviceName = c.lastOpp?.services?.name ?? "—";
+                        const valueToDisplay = c.lastOpp
+                          ? Number(c.lastOpp.potential_value || 0)
                           : (c.appointments_count > 0 ? Number(c.total_spent || 0) / c.appointments_count : 0);
-                        const nextOppDate = oppsForFilter[0]?.expected_return_date;
-                        const nextActionDate = nextOppDate
-                          ? new Date(nextOppDate).toLocaleDateString("pt-BR")
+                        const nextActionDate = c.lastOpp?.expected_return_date
+                          ? new Date(c.lastOpp.expected_return_date).toLocaleDateString("pt-BR")
                           : (c.next_return ? new Date(c.next_return).toLocaleDateString("pt-BR") : "—");
                         const link = profile?.company?.slug
                           ? `${window.location.origin}/agendar/${profile.company.slug}`
@@ -753,11 +775,11 @@ function ClientsPage() {
                         const individualWa = whatsappLink(c.phone, waMsg);
 
                         return (
-                          <li key={c.id} className="grid grid-cols-[30px_1.8fr_1.2fr_1.2fr_1.2fr_1fr_1fr_1fr_1.2fr_1.2fr] gap-4 px-4 py-3 hover:bg-muted/40 transition items-center text-sm">
-                            <div>
+                          <li key={c.id} className="group grid grid-cols-[30px_220px_1.2fr_1.2fr_1.2fr_1fr_1fr_1fr_1.2fr_1.2fr] gap-4 px-4 py-3 transition items-center text-sm bg-card hover:bg-muted/40">
+                            <div className="sticky left-0 z-10 bg-card group-hover:bg-muted/40">
                               <Checkbox checked={selected.has(c.id)} onCheckedChange={() => toggle(c.id)} />
                             </div>
-                            <div className="min-w-0">
+                            <div className="min-w-0 sticky left-[30px] z-10 bg-card group-hover:bg-muted/40 pl-3 -ml-3 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <span
                                   className="font-medium hover:underline cursor-pointer text-primary truncate block"
@@ -837,6 +859,7 @@ function ClientsPage() {
                     </ul>
                   </div>
                 </div>
+
               )}
             </Card>
           </div>

@@ -7,16 +7,13 @@ import { toast } from "sonner";
 import {
   Bell,
   Calendar,
-  DollarSign,
   LayoutDashboard,
   LogOut,
   MoreHorizontal,
   Plus,
-  Scissors,
   Search,
   Settings,
   Sparkles,
-  TrendingUp,
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -41,7 +38,6 @@ const NAV: NavItem[] = [
   { to: "/app", label: "Visão Geral", icon: LayoutDashboard, exact: true },
   { to: "/app/agenda", label: "Agenda", icon: Calendar },
   { to: "/app/clients", label: "Clientes & Recorrência", icon: Users },
-  { to: "/app/financial", label: "Financeiro", icon: DollarSign },
   { to: "/app/sie", label: "Importar Dados", icon: Sparkles },
   { to: "/app/settings", label: "Configurações", icon: Settings },
 ];
@@ -67,7 +63,6 @@ function AppShell() {
     if (profile.role === "owner" || profile.role === "admin") return true;
     if (itemTo === "/app") return !!profile.permissions?.view_dashboard;
     if (itemTo === "/app/clients") return !!profile.permissions?.view_clients;
-    if (itemTo === "/app/financial") return !!profile.permissions?.view_financial;
     if (itemTo === "/app/sie") return !!profile.permissions?.view_imports;
     if (itemTo === "/app/settings") return !!profile.permissions?.view_settings;
     return true; // agenda and recurrence are always allowed
@@ -85,8 +80,6 @@ function AppShell() {
       if (profile.role === "employee") {
         if (pathname === "/app" && !profile.permissions?.view_dashboard) allowed = false;
         if (pathname.startsWith("/app/clients") && !profile.permissions?.view_clients)
-          allowed = false;
-        if (pathname.startsWith("/app/financial") && !profile.permissions?.view_financial)
           allowed = false;
         if (pathname.startsWith("/app/sie") && !profile.permissions?.view_imports) allowed = false;
         if (pathname.startsWith("/app/settings") && !profile.permissions?.view_settings)
