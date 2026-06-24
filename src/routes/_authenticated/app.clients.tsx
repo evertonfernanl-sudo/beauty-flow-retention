@@ -732,12 +732,12 @@ function ClientsPage() {
                   <p className="text-sm text-muted-foreground">Ajuste a busca ou aplique outro filtro.</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto -mx-4 lg:mx-0">
+                <div className="overflow-x-scroll overflow-y-visible -mx-4 lg:mx-0 border-t border-b">
                   <div className="min-w-[1100px] divide-y">
                     {/* Header */}
-                    <div className="hidden lg:grid grid-cols-[30px_1.8fr_1.2fr_1.2fr_1.2fr_1fr_1fr_1fr_1.2fr_1.2fr] gap-4 px-4 py-3 text-xs font-semibold text-muted-foreground bg-muted/20 items-center">
-                      <div className="w-5"></div>
-                      <div>Nome</div>
+                    <div className="hidden lg:grid grid-cols-[30px_220px_1.2fr_1.2fr_1.2fr_1fr_1fr_1fr_1.2fr_1.2fr] gap-4 px-4 py-3 text-xs font-semibold text-muted-foreground bg-muted/20 items-center sticky top-0 z-10">
+                      <div className="w-5 sticky left-0 bg-muted/20 z-20"></div>
+                      <div className="sticky left-[30px] bg-muted/20 z-20 pl-3 -ml-3 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]">Nome</div>
                       <div>Telefone</div>
                       <div>Último Atend.</div>
                       <div>Serviço Realizado</div>
@@ -753,28 +753,15 @@ function ClientsPage() {
                       {filtered.map((c: any) => {
                         const isBirthdayMonth =
                           c.birthday && new Date(c.birthday).getMonth() === new Date().getMonth();
-                        const daysSince = c.last_visit 
-                          ? Math.floor((Date.now() - new Date(c.last_visit).getTime()) / 86400000) 
+                        const daysSince = c.last_visit
+                          ? Math.floor((Date.now() - new Date(c.last_visit).getTime()) / 86400000)
                           : null;
-                        const oppsForFilter: any[] =
-                          filter === "RETURN" ? c.activeReturnOpps
-                          : filter === "AT_RISK" ? c.activeAtRiskOpps
-                          : filter === "LOST" ? c.activeLostOpps
-                          : c.activeOpps;
-                        const uniqueServiceNames = Array.from(
-                          new Set(
-                            oppsForFilter
-                              .map((o: any) => o.services?.name)
-                              .filter((n: any): n is string => !!n)
-                          )
-                        );
-                        const serviceName = uniqueServiceNames.length > 0 ? uniqueServiceNames.join(", ") : "—";
-                        const valueToDisplay = oppsForFilter.length > 0
-                          ? oppsForFilter.reduce((acc: number, o: any) => acc + Number(o.potential_value || 0), 0)
+                        const serviceName = c.lastOpp?.services?.name ?? "—";
+                        const valueToDisplay = c.lastOpp
+                          ? Number(c.lastOpp.potential_value || 0)
                           : (c.appointments_count > 0 ? Number(c.total_spent || 0) / c.appointments_count : 0);
-                        const nextOppDate = oppsForFilter[0]?.expected_return_date;
-                        const nextActionDate = nextOppDate
-                          ? new Date(nextOppDate).toLocaleDateString("pt-BR")
+                        const nextActionDate = c.lastOpp?.expected_return_date
+                          ? new Date(c.lastOpp.expected_return_date).toLocaleDateString("pt-BR")
                           : (c.next_return ? new Date(c.next_return).toLocaleDateString("pt-BR") : "—");
                         const link = profile?.company?.slug
                           ? `${window.location.origin}/agendar/${profile.company.slug}`
@@ -788,11 +775,11 @@ function ClientsPage() {
                         const individualWa = whatsappLink(c.phone, waMsg);
 
                         return (
-                          <li key={c.id} className="grid grid-cols-[30px_1.8fr_1.2fr_1.2fr_1.2fr_1fr_1fr_1fr_1.2fr_1.2fr] gap-4 px-4 py-3 hover:bg-muted/40 transition items-center text-sm">
-                            <div>
+                          <li key={c.id} className="group grid grid-cols-[30px_220px_1.2fr_1.2fr_1.2fr_1fr_1fr_1fr_1.2fr_1.2fr] gap-4 px-4 py-3 transition items-center text-sm bg-card hover:bg-muted/40">
+                            <div className="sticky left-0 z-10 bg-card group-hover:bg-muted/40">
                               <Checkbox checked={selected.has(c.id)} onCheckedChange={() => toggle(c.id)} />
                             </div>
-                            <div className="min-w-0">
+                            <div className="min-w-0 sticky left-[30px] z-10 bg-card group-hover:bg-muted/40 pl-3 -ml-3 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <span
                                   className="font-medium hover:underline cursor-pointer text-primary truncate block"
@@ -872,6 +859,7 @@ function ClientsPage() {
                     </ul>
                   </div>
                 </div>
+
               )}
             </Card>
           </div>
