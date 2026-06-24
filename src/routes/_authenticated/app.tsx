@@ -7,16 +7,13 @@ import { toast } from "sonner";
 import {
   Bell,
   Calendar,
-  DollarSign,
   LayoutDashboard,
   LogOut,
   MoreHorizontal,
   Plus,
-  Scissors,
   Search,
   Settings,
   Sparkles,
-  TrendingUp,
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";

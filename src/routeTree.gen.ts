@@ -32,7 +32,6 @@ import { Route as AuthenticatedAppReportsRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAppRecorrenciaRouteImport } from './routes/_authenticated/app.recorrencia'
 import { Route as AuthenticatedAppMensageriaRouteImport } from './routes/_authenticated/app.mensageria'
 import { Route as AuthenticatedAppImportRouteImport } from './routes/_authenticated/app.import'
-import { Route as AuthenticatedAppFinancialRouteImport } from './routes/_authenticated/app.financial'
 import { Route as AuthenticatedAppComunicacaoRouteImport } from './routes/_authenticated/app.comunicacao'
 import { Route as AuthenticatedAppClientsRouteImport } from './routes/_authenticated/app.clients'
 import { Route as AuthenticatedAppAgendaRouteImport } from './routes/_authenticated/app.agenda'
@@ -157,12 +156,6 @@ const AuthenticatedAppImportRoute = AuthenticatedAppImportRouteImport.update({
   path: '/import',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
-const AuthenticatedAppFinancialRoute =
-  AuthenticatedAppFinancialRouteImport.update({
-    id: '/financial',
-    path: '/financial',
-    getParentRoute: () => AuthenticatedAppRoute,
-  } as any)
 const AuthenticatedAppComunicacaoRoute =
   AuthenticatedAppComunicacaoRouteImport.update({
     id: '/comunicacao',
@@ -208,7 +201,6 @@ export interface FileRoutesByFullPath {
   '/app/agenda': typeof AuthenticatedAppAgendaRoute
   '/app/clients': typeof AuthenticatedAppClientsRouteWithChildren
   '/app/comunicacao': typeof AuthenticatedAppComunicacaoRoute
-  '/app/financial': typeof AuthenticatedAppFinancialRoute
   '/app/import': typeof AuthenticatedAppImportRoute
   '/app/mensageria': typeof AuthenticatedAppMensageriaRoute
   '/app/recorrencia': typeof AuthenticatedAppRecorrenciaRoute
@@ -237,7 +229,6 @@ export interface FileRoutesByTo {
   '/app/agenda': typeof AuthenticatedAppAgendaRoute
   '/app/clients': typeof AuthenticatedAppClientsRouteWithChildren
   '/app/comunicacao': typeof AuthenticatedAppComunicacaoRoute
-  '/app/financial': typeof AuthenticatedAppFinancialRoute
   '/app/import': typeof AuthenticatedAppImportRoute
   '/app/mensageria': typeof AuthenticatedAppMensageriaRoute
   '/app/recorrencia': typeof AuthenticatedAppRecorrenciaRoute
@@ -269,7 +260,6 @@ export interface FileRoutesById {
   '/_authenticated/app/agenda': typeof AuthenticatedAppAgendaRoute
   '/_authenticated/app/clients': typeof AuthenticatedAppClientsRouteWithChildren
   '/_authenticated/app/comunicacao': typeof AuthenticatedAppComunicacaoRoute
-  '/_authenticated/app/financial': typeof AuthenticatedAppFinancialRoute
   '/_authenticated/app/import': typeof AuthenticatedAppImportRoute
   '/_authenticated/app/mensageria': typeof AuthenticatedAppMensageriaRoute
   '/_authenticated/app/recorrencia': typeof AuthenticatedAppRecorrenciaRoute
@@ -301,7 +291,6 @@ export interface FileRouteTypes {
     | '/app/agenda'
     | '/app/clients'
     | '/app/comunicacao'
-    | '/app/financial'
     | '/app/import'
     | '/app/mensageria'
     | '/app/recorrencia'
@@ -330,7 +319,6 @@ export interface FileRouteTypes {
     | '/app/agenda'
     | '/app/clients'
     | '/app/comunicacao'
-    | '/app/financial'
     | '/app/import'
     | '/app/mensageria'
     | '/app/recorrencia'
@@ -361,7 +349,6 @@ export interface FileRouteTypes {
     | '/_authenticated/app/agenda'
     | '/_authenticated/app/clients'
     | '/_authenticated/app/comunicacao'
-    | '/_authenticated/app/financial'
     | '/_authenticated/app/import'
     | '/_authenticated/app/mensageria'
     | '/_authenticated/app/recorrencia'
@@ -553,13 +540,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppImportRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
-    '/_authenticated/app/financial': {
-      id: '/_authenticated/app/financial'
-      path: '/financial'
-      fullPath: '/app/financial'
-      preLoaderRoute: typeof AuthenticatedAppFinancialRouteImport
-      parentRoute: typeof AuthenticatedAppRoute
-    }
     '/_authenticated/app/comunicacao': {
       id: '/_authenticated/app/comunicacao'
       path: '/comunicacao'
@@ -616,7 +596,6 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppAgendaRoute: typeof AuthenticatedAppAgendaRoute
   AuthenticatedAppClientsRoute: typeof AuthenticatedAppClientsRouteWithChildren
   AuthenticatedAppComunicacaoRoute: typeof AuthenticatedAppComunicacaoRoute
-  AuthenticatedAppFinancialRoute: typeof AuthenticatedAppFinancialRoute
   AuthenticatedAppImportRoute: typeof AuthenticatedAppImportRoute
   AuthenticatedAppMensageriaRoute: typeof AuthenticatedAppMensageriaRoute
   AuthenticatedAppRecorrenciaRoute: typeof AuthenticatedAppRecorrenciaRoute
@@ -632,7 +611,6 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppAgendaRoute: AuthenticatedAppAgendaRoute,
   AuthenticatedAppClientsRoute: AuthenticatedAppClientsRouteWithChildren,
   AuthenticatedAppComunicacaoRoute: AuthenticatedAppComunicacaoRoute,
-  AuthenticatedAppFinancialRoute: AuthenticatedAppFinancialRoute,
   AuthenticatedAppImportRoute: AuthenticatedAppImportRoute,
   AuthenticatedAppMensageriaRoute: AuthenticatedAppMensageriaRoute,
   AuthenticatedAppRecorrenciaRoute: AuthenticatedAppRecorrenciaRoute,
@@ -679,13 +657,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
