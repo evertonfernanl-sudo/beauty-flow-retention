@@ -257,13 +257,16 @@ function ClientsPage() {
         });
       const lastOpp = activeOpps[0];
       const hasScheduled = scheduledSet.has(c.id);
+      // Fonte única (mesma usada pela coluna "Próxima Ação" da tabela):
+      // prioriza a oportunidade ativa mais recente; se não houver, usa clients.next_return.
+      const nextActionRaw = lastOpp?.expected_return_date ?? c.next_return ?? null;
       let daysLate = 0;
-      if (lastOpp?.expected_return_date) {
-        const exp = new Date(lastOpp.expected_return_date);
+      if (nextActionRaw) {
+        const exp = new Date(nextActionRaw);
         exp.setHours(0, 0, 0, 0);
         daysLate = Math.floor((today.getTime() - exp.getTime()) / 86400000);
       }
-      const isPending = !hasScheduled && !!lastOpp && daysLate > 0;
+      const isPending = !hasScheduled && !!nextActionRaw && daysLate > 0;
       // Buckets disjuntos: cliente pertence a apenas uma categoria por vez.
       const isAtRisk = isPending && daysLate > 10 && daysLate <= 30;
       const isLost = isPending && daysLate > 30 && daysLate <= 60;
@@ -273,6 +276,7 @@ function ClientsPage() {
         activeOpps,
         lastOpp,
         hasScheduled,
+        nextActionDate: nextActionRaw,
         daysLate,
         isPending,
         isAtRisk,
@@ -286,7 +290,12 @@ function ClientsPage() {
     const pending = clientsWithOpp.filter((c) => c.isPending);
     const atRisk = clientsWithOpp.filter((c) => c.isAtRisk);
     const sumPotential = (rows: any[]) =>
-      rows.reduce((acc, c) => acc + Number(c.lastOpp?.potential_value || 0), 0);
+      rows.reduce((acc, c) => {
+        const v = Number(c.lastOpp?.potential_value || 0);
+        if (v > 0) return acc + v;
+        const ticket = c.appointments_count > 0 ? Number(c.total_spent || 0) / c.appointments_count : 0;
+        return acc + ticket;
+      }, 0);
     return {
       opportunitiesCount: pending.length,
       recoveredValue: sumPotential(pending),
