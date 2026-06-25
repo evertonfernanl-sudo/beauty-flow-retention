@@ -733,8 +733,9 @@ function ClientsPage() {
                   <p className="text-sm text-muted-foreground">Ajuste a busca ou aplique outro filtro.</p>
                 </div>
               ) : (
-                <div className="overflow-x-scroll overflow-y-visible -mx-4 lg:mx-0 border-t border-b">
+                <div className="overflow-x-scroll overflow-y-auto -mx-4 lg:mx-0 border-t border-b max-h-[calc(100vh-360px)]">
                   <div className="min-w-[1100px] divide-y">
+
                     {/* Header */}
                     <div className="hidden lg:grid grid-cols-[30px_220px_1.2fr_1.2fr_1.2fr_1fr_1fr_1fr_1.2fr_1.2fr] gap-4 px-4 py-3 text-xs font-semibold text-muted-foreground bg-muted/20 items-center sticky top-0 z-10">
                       <div className="w-5 sticky left-0 bg-muted/20 z-20"></div>
