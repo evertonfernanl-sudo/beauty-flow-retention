@@ -264,8 +264,9 @@ function ClientsPage() {
         daysLate = Math.floor((today.getTime() - exp.getTime()) / 86400000);
       }
       const isPending = !hasScheduled && !!lastOpp && daysLate > 0;
-      const isAtRisk = isPending && daysLate > 10;
-      const isLost = isPending && daysLate > 30;
+      // Buckets disjuntos: cliente pertence a apenas uma categoria por vez.
+      const isAtRisk = isPending && daysLate > 10 && daysLate <= 30;
+      const isLost = isPending && daysLate > 30 && daysLate <= 60;
       const isInactive = isPending && daysLate > 60;
       return {
         ...c,
