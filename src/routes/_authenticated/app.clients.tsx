@@ -290,7 +290,12 @@ function ClientsPage() {
     const pending = clientsWithOpp.filter((c) => c.isPending);
     const atRisk = clientsWithOpp.filter((c) => c.isAtRisk);
     const sumPotential = (rows: any[]) =>
-      rows.reduce((acc, c) => acc + Number(c.lastOpp?.potential_value || 0), 0);
+      rows.reduce((acc, c) => {
+        const v = Number(c.lastOpp?.potential_value || 0);
+        if (v > 0) return acc + v;
+        const ticket = c.appointments_count > 0 ? Number(c.total_spent || 0) / c.appointments_count : 0;
+        return acc + ticket;
+      }, 0);
     return {
       opportunitiesCount: pending.length,
       recoveredValue: sumPotential(pending),
