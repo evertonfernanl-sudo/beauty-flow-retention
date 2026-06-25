@@ -257,13 +257,16 @@ function ClientsPage() {
         });
       const lastOpp = activeOpps[0];
       const hasScheduled = scheduledSet.has(c.id);
+      // Fonte única (mesma usada pela coluna "Próxima Ação" da tabela):
+      // prioriza a oportunidade ativa mais recente; se não houver, usa clients.next_return.
+      const nextActionRaw = lastOpp?.expected_return_date ?? c.next_return ?? null;
       let daysLate = 0;
-      if (lastOpp?.expected_return_date) {
-        const exp = new Date(lastOpp.expected_return_date);
+      if (nextActionRaw) {
+        const exp = new Date(nextActionRaw);
         exp.setHours(0, 0, 0, 0);
         daysLate = Math.floor((today.getTime() - exp.getTime()) / 86400000);
       }
-      const isPending = !hasScheduled && !!lastOpp && daysLate > 0;
+      const isPending = !hasScheduled && !!nextActionRaw && daysLate > 0;
       // Buckets disjuntos: cliente pertence a apenas uma categoria por vez.
       const isAtRisk = isPending && daysLate > 10 && daysLate <= 30;
       const isLost = isPending && daysLate > 30 && daysLate <= 60;
@@ -273,6 +276,7 @@ function ClientsPage() {
         activeOpps,
         lastOpp,
         hasScheduled,
+        nextActionDate: nextActionRaw,
         daysLate,
         isPending,
         isAtRisk,
