@@ -326,6 +326,10 @@ type Row = {
     isExpense?: boolean;
     isContribution?: boolean;
     isDuplicate?: boolean;
+    revenueKindSet?: boolean;
+    expenseScope?: "empresa" | "pessoal";
+    originalPayerName?: string;
+    clientIdOverride?: string;
   };
 
 };
