@@ -44,7 +44,7 @@ export type Database = {
       appointments: {
         Row: {
           cancellation_reason: string | null
-          client_id: string
+          client_id: string | null
           company_id: string
           completed_at: string | null
           created_at: string
@@ -53,7 +53,7 @@ export type Database = {
           notes: string | null
           price: number
           professional_id: string | null
-          service_id: string
+          service_id: string | null
           source: Database["public"]["Enums"]["appointment_source"]
           start_datetime: string
           status: Database["public"]["Enums"]["appointment_status"]
@@ -61,7 +61,7 @@ export type Database = {
         }
         Insert: {
           cancellation_reason?: string | null
-          client_id: string
+          client_id?: string | null
           company_id: string
           completed_at?: string | null
           created_at?: string
@@ -70,7 +70,7 @@ export type Database = {
           notes?: string | null
           price?: number
           professional_id?: string | null
-          service_id: string
+          service_id?: string | null
           source?: Database["public"]["Enums"]["appointment_source"]
           start_datetime: string
           status?: Database["public"]["Enums"]["appointment_status"]
@@ -78,7 +78,7 @@ export type Database = {
         }
         Update: {
           cancellation_reason?: string | null
-          client_id?: string
+          client_id?: string | null
           company_id?: string
           completed_at?: string | null
           created_at?: string
@@ -87,7 +87,7 @@ export type Database = {
           notes?: string | null
           price?: number
           professional_id?: string | null
-          service_id?: string
+          service_id?: string | null
           source?: Database["public"]["Enums"]["appointment_source"]
           start_datetime?: string
           status?: Database["public"]["Enums"]["appointment_status"]
@@ -690,6 +690,7 @@ export type Database = {
       }
       financial_transactions: {
         Row: {
+          account_source: string | null
           amount: number
           appointment_id: string | null
           category: string
@@ -698,13 +699,17 @@ export type Database = {
           created_by: string | null
           description: string | null
           id: string
+          is_personal: boolean
           payment_method: string | null
           provider_id: string | null
+          revenue_type: string | null
+          status: string
           transaction_date: string
           type: Database["public"]["Enums"]["transaction_type"]
           updated_at: string
         }
         Insert: {
+          account_source?: string | null
           amount: number
           appointment_id?: string | null
           category: string
@@ -713,13 +718,17 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           id?: string
+          is_personal?: boolean
           payment_method?: string | null
           provider_id?: string | null
+          revenue_type?: string | null
+          status?: string
           transaction_date?: string
           type: Database["public"]["Enums"]["transaction_type"]
           updated_at?: string
         }
         Update: {
+          account_source?: string | null
           amount?: number
           appointment_id?: string | null
           category?: string
@@ -728,8 +737,11 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           id?: string
+          is_personal?: boolean
           payment_method?: string | null
           provider_id?: string | null
+          revenue_type?: string | null
+          status?: string
           transaction_date?: string
           type?: Database["public"]["Enums"]["transaction_type"]
           updated_at?: string
@@ -3236,6 +3248,7 @@ export type Database = {
         | "COMPLETED"
         | "CANCELLED"
         | "NO_SHOW"
+        | "BLOCKED"
       business_vertical: "BEAUTY" | "SALES" | "GYM"
       client_status: "ACTIVE" | "INACTIVE" | "LOST"
       company_plan: "starter" | "professional" | "premium"
@@ -3438,6 +3451,7 @@ export const Constants = {
         "COMPLETED",
         "CANCELLED",
         "NO_SHOW",
+        "BLOCKED",
       ],
       business_vertical: ["BEAUTY", "SALES", "GYM"],
       client_status: ["ACTIVE", "INACTIVE", "LOST"],

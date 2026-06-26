@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -37,6 +38,7 @@ import {
   ArrowDown,
   TrendingUp,
   Wallet,
+  Trash2,
 } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -142,8 +144,11 @@ function AgendaPage() {
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const [incomeDialogOpen, setIncomeDialogOpen] = useState(false);
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
+  const [blockDialogOpen, setBlockDialogOpen] = useState(false);
+  const [closeMonthOpen, setCloseMonthOpen] = useState(false);
 
   const isEmployee = profile?.role === "employee";
+  const isAdm = profile?.role === "owner" || profile?.role === "admin";
   const shouldRestrictAgenda = isEmployee && !profile?.permissions?.view_other_professionals_agenda;
 
   const { data: myProfessional } = useQuery({
@@ -490,13 +495,35 @@ function AgendaPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Agenda</h1>
           <p className="text-sm text-muted-foreground">{agendaRange.label}</p>
         </div>
-        <PeriodFilter
-          value={agendaPeriod}
-          onChange={setAgendaPeriod}
-          months={apptHistory.data?.months ?? []}
-          years={apptHistory.data?.years ?? []}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button onClick={() => setNewApptOpen(true)} className="hidden md:flex">
+            <Plus className="h-4 w-4 mr-1" /> Agendar
+          </Button>
+          {isAdm && (
+            <Button onClick={() => setBlockDialogOpen(true)} variant="outline" className="hidden md:flex">
+              <X className="h-4 w-4 mr-1" /> Bloquear Horário
+            </Button>
+          )}
+          <PeriodFilter
+            value={agendaPeriod}
+            onChange={setAgendaPeriod}
+            months={apptHistory.data?.months ?? []}
+            years={apptHistory.data?.years ?? []}
+          />
+        </div>
       </header>
+
+      {/* Mobile Actions: placed below date filters and before daily list */}
+      <div className="flex flex-col gap-2 md:hidden w-full">
+        <Button onClick={() => setNewApptOpen(true)} className="w-full">
+          <Plus className="h-4 w-4 mr-1" /> Novo Agendamento
+        </Button>
+        {isAdm && (
+          <Button onClick={() => setBlockDialogOpen(true)} variant="outline" className="w-full">
+            <X className="h-4 w-4 mr-1" /> Bloquear Horário
+          </Button>
+        )}
+      </div>
 
       <Card className="p-4 space-y-4">
         <div className="flex flex-wrap items-center gap-2">
@@ -644,6 +671,16 @@ function AgendaPage() {
         </DialogContent>
       </Dialog>
 
+      <BlockSlotDialog
+        open={blockDialogOpen}
+        onOpenChange={setBlockDialogOpen}
+        companyId={companyId || null}
+        onChanged={() => {
+          queryClient.invalidateQueries({ queryKey: ["appointments", companyId] });
+          queryClient.invalidateQueries({ queryKey: ["estimativa-faturamento", companyId] });
+        }}
+      />
+
       {/* === SECTION 1: ESTIMATIVA + CASH FLOW === */}
       <Card className="p-5 shadow-soft">
         <div className="flex items-center justify-between gap-3 mb-3">
@@ -700,24 +737,25 @@ function AgendaPage() {
 
       {/* === SECTION 2: DESPESAS === */}
       <Card className="p-5 shadow-soft space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <ArrowDown className="h-4 w-4 text-destructive" />
             <h2 className="font-semibold text-[15px]">Despesas · {expensesRange.label.toLowerCase()}</h2>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col items-center gap-2 w-full md:w-auto">
             <PeriodFilter
               value={expensesPeriod}
               onChange={setExpensesPeriod}
               months={txHistory.data?.months ?? []}
               years={txHistory.data?.years ?? []}
               compact
+              className="w-full max-w-xs sm:max-w-sm justify-between md:w-auto md:max-w-none"
             />
-            <div className="flex items-center gap-2">
-              <Button size="sm" onClick={() => setExpenseDialogOpen(true)}>
+            <div className="grid grid-cols-2 gap-2 w-full max-w-xs sm:max-w-sm md:flex md:w-auto">
+              <Button size="sm" onClick={() => setExpenseDialogOpen(true)} className="w-full">
                 <Plus className="h-4 w-4 mr-1" /> Lançamento
               </Button>
-              <Button size="sm" variant="outline" onClick={() => setProviderDialogOpen(true)}>
+              <Button size="sm" variant="outline" onClick={() => setProviderDialogOpen(true)} className="w-full">
                 <Plus className="h-4 w-4 mr-1" /> Fornecedor
               </Button>
             </div>
@@ -728,20 +766,21 @@ function AgendaPage() {
 
       {/* === SECTION 3: RECEITAS === */}
       <Card className="p-5 shadow-soft space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <ArrowUp className="h-4 w-4 text-success" />
             <h2 className="font-semibold text-[15px]">Receitas · {incomeRange.label.toLowerCase()}</h2>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col items-center gap-2 w-full md:w-auto">
             <PeriodFilter
               value={incomePeriod}
               onChange={setIncomePeriod}
               months={txHistory.data?.months ?? []}
               years={txHistory.data?.years ?? []}
               compact
+              className="w-full max-w-xs sm:max-w-sm justify-between md:w-auto md:max-w-none"
             />
-            <Button size="sm" onClick={() => setIncomeDialogOpen(true)}>
+            <Button size="sm" onClick={() => setIncomeDialogOpen(true)} className="w-full max-w-xs sm:max-w-sm md:w-auto">
               <Plus className="h-4 w-4 mr-1" /> Lançamento
             </Button>
           </div>
@@ -780,6 +819,30 @@ function AgendaPage() {
         onOpenChange={setProviderDialogOpen}
         companyId={companyId}
       />
+
+      {/* Botão de Fechar o Mês no final da página */}
+      <div className="flex justify-center pt-4">
+        <Button
+          onClick={() => setCloseMonthOpen(true)}
+          className="w-full max-w-md py-6 text-base font-semibold shadow-soft"
+          variant="secondary"
+        >
+          Fechar o Mês
+        </Button>
+      </div>
+
+      <CloseMonthDialog
+        open={closeMonthOpen}
+        onOpenChange={setCloseMonthOpen}
+        companyId={companyId || null}
+        currentMonth={expensesPeriod.month ?? new Date().toISOString().slice(0, 7)}
+        onChanged={() => {
+          queryClient.invalidateQueries({ queryKey: ["expenses", companyId] });
+          queryClient.invalidateQueries({ queryKey: ["incomes", companyId] });
+          queryClient.invalidateQueries({ queryKey: ["cashflow-month", companyId] });
+          queryClient.invalidateQueries({ queryKey: ["estimativa-faturamento", companyId] });
+        }}
+      />
     </div>
   );
 }
@@ -807,12 +870,14 @@ function PeriodFilter({
   months,
   years,
   compact,
+  className,
 }: {
   value: PeriodState;
   onChange: (p: PeriodState) => void;
   months: string[];
   years: number[];
   compact?: boolean;
+  className?: string;
 }) {
   const todayISO = toISODate(new Date());
   const dayLabel = value.mode === "today" && value.date && value.date !== todayISO
@@ -824,7 +889,7 @@ function PeriodFilter({
   const showYearDropdown = years.length > 1;
 
   return (
-    <div className={cn("flex items-center gap-1 rounded-lg border bg-muted/30 p-1", compact && "text-xs")}>
+    <div className={cn("flex items-center gap-1 rounded-lg border bg-muted/30 p-1", compact && "text-xs", className)}>
       <Popover>
         <PopoverTrigger asChild>
           <Button
@@ -968,11 +1033,29 @@ function TransactionList({
               )}
             </span>
             <div className="min-w-0">
-              <p className="text-sm font-medium truncate">{t.description || t.category}</p>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <p className="text-sm font-medium truncate">{t.description || t.category}</p>
+                {t.is_personal && (
+                  <Badge variant="outline" className="text-[10px] py-0 px-1 border-amber-500/40 bg-amber-500/5 text-amber-600 dark:text-amber-400">
+                    Pessoal
+                  </Badge>
+                )}
+                {t.revenue_type === "aporte" && (
+                  <Badge variant="outline" className="text-[10px] py-0 px-1 border-blue-500/40 bg-blue-500/5 text-blue-600 dark:text-blue-400">
+                    Aporte
+                  </Badge>
+                )}
+                {t.status === "PENDING" && (
+                  <Badge variant="outline" className="text-[10px] py-0 px-1 border-destructive/40 bg-destructive/5 text-destructive">
+                    Não Pago
+                  </Badge>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground truncate">
                 {new Date(t.transaction_date + "T00:00:00").toLocaleDateString("pt-BR")}
                 {" · "}
                 {t.category}
+                {t.account_source ? ` · ${t.account_source}` : ""}
                 {t.payment_method ? ` · ${t.payment_method}` : ""}
               </p>
             </div>
@@ -1016,6 +1099,12 @@ const txSchema = z.object({
   payment_method: z.string().max(40).optional().or(z.literal("")),
   transaction_date: z.string().min(1),
   provider_id: z.string().uuid().optional().or(z.literal("")),
+  account_source: z.string().min(1, "Selecione a fonte/saída"),
+  status: z.string().optional(),
+  is_personal: z.boolean().optional(),
+  revenue_type: z.string().optional(),
+  recurring: z.boolean().optional(),
+  recurring_months: z.coerce.number().min(1).max(36).optional(),
 });
 
 function NewTransactionDialog({
@@ -1055,6 +1144,12 @@ function NewTransactionDialog({
       payment_method: "",
       transaction_date: toISODate(new Date()),
       provider_id: "",
+      account_source: "Caixa Banco",
+      status: "PAID",
+      is_personal: false,
+      revenue_type: "receita",
+      recurring: false,
+      recurring_months: 1,
     },
   });
   const type = form.watch("type");
@@ -1071,26 +1166,61 @@ function NewTransactionDialog({
         payment_method: "",
         transaction_date: toISODate(new Date()),
         provider_id: "",
+        account_source: "Caixa Banco",
+        status: "PAID",
+        is_personal: false,
+        revenue_type: "receita",
+        recurring: false,
+        recurring_months: 1,
       });
     }
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, defaultType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function onSubmit(v: z.infer<typeof txSchema>) {
     if (!companyId) return;
-    const { error } = await supabase.from("financial_transactions").insert({
-      type: v.type,
-      category: v.category,
-      amount: v.amount,
-      transaction_date: v.transaction_date,
-      description: v.description || null,
-      payment_method: v.payment_method || null,
-      provider_id: v.provider_id || null,
-      company_id: companyId,
-    });
-    if (error) return toast.error(error.message);
-    toast.success(v.type === "INCOME" ? "Receita registrada" : "Despesa registrada");
-    onOpenChange(false);
-    onSaved();
+    const count = v.recurring && v.type === "EXPENSE" && v.recurring_months && v.recurring_months > 1
+      ? v.recurring_months
+      : 1;
+
+    try {
+      for (let i = 0; i < count; i++) {
+        const baseDate = new Date(v.transaction_date + "T00:00:00");
+        baseDate.setMonth(baseDate.getMonth() + i);
+        const transactionDate = toISODate(baseDate);
+
+        // Se for recorrência (count > 1), as parcelas futuras (i > 0) devem iniciar como pendentes (não pagas)
+        const currentStatus = i === 0 ? (v.status || "PAID") : "PENDING";
+
+        const { error } = await supabase.from("financial_transactions").insert({
+          type: v.type,
+          category: v.category,
+          amount: v.amount,
+          transaction_date: transactionDate,
+          description: v.description || null,
+          payment_method: v.payment_method || null,
+          provider_id: v.provider_id || null,
+          company_id: companyId,
+          account_source: v.account_source || null,
+          status: currentStatus,
+          is_personal: v.type === "EXPENSE" ? !!v.is_personal : false,
+          revenue_type: v.type === "INCOME" ? (v.revenue_type || "receita") : null,
+        });
+
+        if (error) throw error;
+      }
+
+      toast.success(
+        v.type === "INCOME"
+          ? "Receita registrada"
+          : count > 1
+          ? `Despesa e ${count - 1} recorrências registradas`
+          : "Despesa registrada"
+      );
+      onOpenChange(false);
+      onSaved();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
   }
 
   return (
@@ -1181,33 +1311,150 @@ function NewTransactionDialog({
               />
             </div>
           </div>
-          {type === "EXPENSE" && (
+
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>Fornecedor</Label>
+              <Label>{type === "INCOME" ? "Fonte *" : "Saída *"}</Label>
               <Controller
                 control={form.control}
-                name="provider_id"
+                name="account_source"
                 render={({ field }) => (
-                  <Select value={field.value || "none"} onValueChange={(v) => field.onChange(v === "none" ? "" : v)}>
+                  <Select value={field.value} onValueChange={field.onChange}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione um fornecedor (opcional)" />
+                      <SelectValue placeholder="Selecione" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">Nenhum</SelectItem>
-                      {(providersQuery.data ?? []).map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="Caixa Dinheiro">Caixa Dinheiro</SelectItem>
+                      <SelectItem value="Caixa Banco">Caixa Banco</SelectItem>
                     </SelectContent>
                   </Select>
                 )}
               />
+              {form.formState.errors.account_source && (
+                <p className="text-xs text-destructive">{form.formState.errors.account_source.message}</p>
+              )}
+            </div>
+
+            {type === "INCOME" && (
+              <div className="space-y-2">
+                <Label>Tipo de Receita</Label>
+                <Controller
+                  control={form.control}
+                  name="revenue_type"
+                  render={({ field }) => (
+                    <Select value={field.value || "receita"} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="receita">Receita Padrão</SelectItem>
+                        <SelectItem value="aporte">Aporte (Aporte de Capital)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
+            )}
+
+            {type === "EXPENSE" && (
+              <div className="space-y-2">
+                <Label>Destinação</Label>
+                <Controller
+                  control={form.control}
+                  name="is_personal"
+                  render={({ field }) => (
+                    <Select value={field.value ? "true" : "false"} onValueChange={(val) => field.onChange(val === "true")}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="false">Empresa (Comercial)</SelectItem>
+                        <SelectItem value="true">Pessoal (Particular)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
+            )}
+          </div>
+
+          {type === "EXPENSE" && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Status do Pagamento</Label>
+                <Controller
+                  control={form.control}
+                  name="status"
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="PAID">Paga</SelectItem>
+                        <SelectItem value="PENDING">Pendente (Não Paga)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Fornecedor</Label>
+                <Controller
+                  control={form.control}
+                  name="provider_id"
+                  render={({ field }) => (
+                    <Select value={field.value || "none"} onValueChange={(v) => field.onChange(v === "none" ? "" : v)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione (opcional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Nenhum</SelectItem>
+                        {(providersQuery.data ?? []).map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
             </div>
           )}
+
+          {type === "EXPENSE" && (
+            <div className="rounded-lg border p-3 bg-muted/20 space-y-3">
+              <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                <input
+                  type="checkbox"
+                  {...form.register("recurring")}
+                  className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4"
+                />
+                <span>Despesa Recorrente?</span>
+              </label>
+              {form.watch("recurring") && (
+                <div className="space-y-2">
+                  <Label>Número de meses (Repetições)</Label>
+                  <Input
+                    type="number"
+                    min="2"
+                    max="36"
+                    {...form.register("recurring_months")}
+                    placeholder="Ex: 3"
+                  />
+                  {form.formState.errors.recurring_months && (
+                    <p className="text-xs text-destructive">{form.formState.errors.recurring_months.message}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label>Descrição</Label>
-            <Input {...form.register("description")} />
+            <Input {...form.register("description")} placeholder="Ex: Aluguel da sala" />
           </div>
           <DialogFooter>
             <Button type="submit" disabled={form.formState.isSubmitting}>
@@ -1320,11 +1567,69 @@ function AppointmentRow({
   const { data: profile } = useCurrentProfile();
   const isAdm = profile?.role === "owner" || profile?.role === "admin";
 
+  async function unblock() {
+    const { error } = await supabase.from("appointments").delete().eq("id", a.id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Bloqueio de horário removido");
+    onChanged();
+  }
+
+  if (a.status === "BLOCKED") {
+    const startDt = new Date(a.start_datetime);
+    const endDt = new Date(a.end_datetime);
+    const calculatedDuration = Math.round((endDt.getTime() - startDt.getTime()) / 60_000);
+
+    return (
+      <li className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b sm:border-b-0 last:border-b-0">
+        <div className="flex items-center gap-3 min-w-0 flex-1 bg-destructive/5 border-l-4 border-destructive pl-3 py-1.5 rounded-r-lg">
+          <div className="text-center w-14 shrink-0">
+            <p className="text-sm font-semibold text-destructive">
+              {startDt.toLocaleTimeString("pt-BR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </p>
+            <p className="text-[10px] text-muted-foreground">{calculatedDuration}min</p>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-sm text-destructive truncate">Horário Bloqueado</p>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <p className="text-xs text-muted-foreground">
+                {a.notes ? a.notes : "Sem justificativa informada"}
+                {a.professionals?.name && ` · Prof: ${a.professionals.name}`}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-between sm:justify-end gap-1.5 shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0">
+          <span className={`text-[11px] rounded-full px-2 py-0.5 ${statusStyle(a.status)}`}>
+            {statusLabel(a.status)}
+          </span>
+          {isAdm && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={unblock}
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive h-8 px-2"
+              title="Remover Bloqueio"
+            >
+              <Trash2 className="h-4 w-4 mr-1" />
+              <span className="text-xs">Desbloquear</span>
+            </Button>
+          )}
+        </div>
+      </li>
+    );
+  }
+
   return (
     <li className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b sm:border-b-0 last:border-b-0">
       <Link
         to="/app/clients/$clientId"
-        params={{ clientId: a.client_id }}
+        params={{ clientId: a.client_id || "" }}
         className="flex items-center gap-3 min-w-0 flex-1 hover:opacity-80"
       >
         <div className="text-center w-14 shrink-0">
@@ -1618,6 +1923,7 @@ function statusLabel(s: string) {
         COMPLETED: "Concluído",
         CANCELLED: "Cancelado",
         NO_SHOW: "Faltou",
+        BLOCKED: "Bloqueado",
       } as Record<string, string>
     )[s] ?? s
   );
@@ -1631,6 +1937,7 @@ function statusStyle(s: string) {
         COMPLETED: "bg-primary/15 text-primary",
         CANCELLED: "bg-destructive/15 text-destructive",
         NO_SHOW: "bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300",
+        BLOCKED: "bg-destructive/15 text-destructive font-semibold border border-destructive/20",
       } as Record<string, string>
     )[s] ?? "bg-muted text-muted-foreground"
   );
@@ -1786,4 +2093,413 @@ function NewProviderDialog({
     </Dialog>
   );
 }
+
+const blockSchema = z.object({
+  professional_id: z.string().uuid("Selecione o profissional"),
+  date: z.string().min(1, "Data obrigatória"),
+  start_time: z.string().min(1, "Horário de início obrigatório"),
+  end_time: z.string().min(1, "Horário de término obrigatório"),
+  notes: z.string().max(200).optional().or(z.literal("")),
+});
+
+function BlockSlotDialog({
+  open,
+  onOpenChange,
+  companyId,
+  onChanged,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  companyId: string | null;
+  onChanged: () => void;
+}) {
+  const professionalsQuery = useQuery({
+    enabled: !!companyId && open,
+    queryKey: ["professionals-options", companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("professionals")
+        .select("id, name")
+        .eq("company_id", companyId!)
+        .eq("active", true)
+        .order("name");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const form = useForm<z.infer<typeof blockSchema>>({
+    resolver: zodResolver(blockSchema),
+    defaultValues: {
+      professional_id: "",
+      date: toISODate(new Date()),
+      start_time: "09:00",
+      end_time: "10:00",
+      notes: "",
+    },
+  });
+
+  useEffect(() => {
+    if (open) {
+      form.reset({
+        professional_id: "",
+        date: toISODate(new Date()),
+        start_time: "09:00",
+        end_time: "10:00",
+        notes: "",
+      });
+    }
+  }, [open]);
+
+  async function onSubmit(v: z.infer<typeof blockSchema>) {
+    if (!companyId) return;
+
+    const startDt = new Date(`${v.date}T${v.start_time}:00`);
+    const endDt = new Date(`${v.date}T${v.end_time}:00`);
+
+    if (endDt <= startDt) {
+      toast.error("O horário de término deve ser após o horário de início.");
+      return;
+    }
+
+    const { error } = await supabase.from("appointments").insert({
+      company_id: companyId,
+      client_id: null,
+      service_id: null,
+      professional_id: v.professional_id,
+      start_datetime: startDt.toISOString(),
+      end_datetime: endDt.toISOString(),
+      status: "BLOCKED",
+      notes: v.notes || "Horário Bloqueado",
+      price: 0,
+    });
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    toast.success("Horário bloqueado com sucesso!");
+    onChanged();
+    onOpenChange(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Bloquear Horário</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <div className="space-y-2">
+            <Label>Profissional *</Label>
+            <Controller
+              control={form.control}
+              name="professional_id"
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um profissional" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(professionalsQuery.data ?? []).map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            {form.formState.errors.professional_id && (
+              <p className="text-xs text-destructive">{form.formState.errors.professional_id.message}</p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label>Data *</Label>
+            <Input type="date" {...form.register("date")} />
+            {form.formState.errors.date && (
+              <p className="text-xs text-destructive">{form.formState.errors.date.message}</p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Início *</Label>
+              <Input type="time" {...form.register("start_time")} />
+              {form.formState.errors.start_time && (
+                <p className="text-xs text-destructive">{form.formState.errors.start_time.message}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Término *</Label>
+              <Input type="time" {...form.register("end_time")} />
+              {form.formState.errors.end_time && (
+                <p className="text-xs text-destructive">{form.formState.errors.end_time.message}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Justificativa / Notas</Label>
+            <Input {...form.register("notes")} placeholder="Ex: Almoço, Compromisso pessoal" />
+          </div>
+
+          <DialogFooter>
+            <Button type="submit" disabled={form.formState.isSubmitting}>
+              Bloquear Horário
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface CloseMonthDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  companyId: string | null;
+  currentMonth: string;
+  onChanged: () => void;
+}
+
+export function CloseMonthDialog({
+  open,
+  onOpenChange,
+  companyId,
+  currentMonth,
+  onChanged,
+}: CloseMonthDialogProps) {
+  const queryClient = useQueryClient();
+  const MONTH_NAMES_PT = [
+    "Janeiro",
+    "Fevereiro",
+    "Março",
+    "Abril",
+    "Maio",
+    "Junho",
+    "Julho",
+    "Agosto",
+    "Setembro",
+    "Outubro",
+    "Novembro",
+    "Dezembro",
+  ];
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [newDueDate, setNewDueDate] = useState<string>("");
+
+  const [yearStr, monthStr] = currentMonth.split("-");
+  const year = parseInt(yearStr || "2026", 10);
+  const month = parseInt(monthStr || "06", 10);
+  const start = `${currentMonth}-01`;
+  
+  // Calcular o fim do mês adicionando 1 mês e pegando o primeiro dia
+  const nextMonthDate = new Date(year, month, 1);
+  const end = nextMonthDate.toISOString().slice(0, 10);
+  const monthName = MONTH_NAMES_PT[month - 1] || "Mês Selecionado";
+
+  const { data: pendingExpenses = [], refetch, isLoading } = useQuery({
+    enabled: open && !!companyId,
+    queryKey: ["pending-expenses", companyId, currentMonth],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("financial_transactions")
+        .select("*")
+        .eq("company_id", companyId!)
+        .eq("type", "EXPENSE")
+        .eq("status", "PENDING")
+        .gte("transaction_date", start)
+        .lt("transaction_date", end)
+        .order("transaction_date", { ascending: true });
+
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  async function handlePay(id: string) {
+    const { error } = await supabase
+      .from("financial_transactions")
+      .update({ status: "PAID" })
+      .eq("id", id);
+
+    if (error) {
+      toast.error("Erro ao liquidar despesa: " + error.message);
+      return;
+    }
+
+    toast.success("Despesa liquidada com sucesso!");
+    refetch();
+    onChanged();
+  }
+
+  async function handleReschedule(tx: any) {
+    if (!newDueDate) {
+      toast.error("Selecione uma nova data de vencimento.");
+      return;
+    }
+
+    const originalDesc = tx.description || "";
+    const suffix = ` (alteração de data de vencimento não paga no mês de ${monthName} por esta razão a data foi alterada para a data escolhida)`;
+    const newDesc = originalDesc + suffix;
+
+    const { error } = await supabase
+      .from("financial_transactions")
+      .update({
+        transaction_date: newDueDate,
+        description: newDesc,
+      })
+      .eq("id", tx.id);
+
+    if (error) {
+      toast.error("Erro ao reprogramar despesa: " + error.message);
+      return;
+    }
+
+    toast.success("Despesa reprogramada com sucesso!");
+    setEditingId(null);
+    setNewDueDate("");
+    refetch();
+    onChanged();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-xl font-bold flex items-center gap-2 text-foreground">
+            <Wallet className="h-5 w-5 text-primary" />
+            Fechar Mês: {monthName} / {year}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 my-2">
+          <p className="text-sm text-muted-foreground">
+            Abaixo estão listadas todas as despesas que ficaram pendentes (não pagas) neste mês.
+            Você deve liquidar ou alterar o vencimento de cada uma para poder concluir o fechamento do período.
+          </p>
+
+          {isLoading ? (
+            <div className="flex justify-center py-8">
+              <span className="text-sm text-muted-foreground">Carregando despesas pendentes...</span>
+            </div>
+          ) : pendingExpenses.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center bg-muted/20 border border-dashed rounded-lg p-6">
+              <div className="rounded-full bg-primary/10 p-3 mb-3">
+                <Check className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="font-semibold text-lg">Tudo limpo!</h3>
+              <p className="text-sm text-muted-foreground max-w-sm mt-1">
+                Nenhuma despesa pendente encontrada para o mês de {monthName}. Tudo foi devidamente liquidado ou reprogramado.
+              </p>
+              <Button onClick={() => onOpenChange(false)} className="mt-4" variant="outline">
+                Fechar Janela
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {pendingExpenses.map((tx: any) => {
+                const isEditing = editingId === tx.id;
+
+                return (
+                  <div
+                    key={tx.id}
+                    className="flex flex-col p-4 rounded-lg bg-card border border-border/60 hover:border-border transition-colors duration-200 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <h4 className="font-medium text-sm text-foreground">{tx.description}</h4>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <CalendarIcon className="h-3.5 w-3.5" />
+                            {new Date(tx.transaction_date + "T00:00:00").toLocaleDateString("pt-BR")}
+                          </span>
+                          <span>•</span>
+                          <span className="font-semibold text-destructive">{formatBRL(tx.amount)}</span>
+                          {tx.account_source && (
+                            <>
+                              <span>•</span>
+                              <span className="bg-muted px-1.5 py-0.5 rounded text-[10px]">
+                                {tx.account_source}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {!isEditing && (
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setEditingId(tx.id);
+                              setNewDueDate(tx.transaction_date);
+                            }}
+                            className="h-8 px-2 text-xs flex items-center gap-1"
+                          >
+                            <CalendarIcon className="h-3 w-3" />
+                            Vencimento
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => handlePay(tx.id)}
+                            className="h-8 px-2 text-xs flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                          >
+                            <Check className="h-3 w-3" />
+                            Liquidar
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+
+                    {isEditing && (
+                      <div className="mt-4 pt-3 border-t border-dashed flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-muted/30 p-2.5 rounded-md">
+                        <div className="flex flex-col gap-1 w-full sm:max-w-xs">
+                          <Label className="text-xs text-muted-foreground">Novo Vencimento</Label>
+                          <Input
+                            type="date"
+                            value={newDueDate}
+                            onChange={(e) => setNewDueDate(e.target.value)}
+                            className="h-9 text-sm"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2 self-end sm:self-auto">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setEditingId(null);
+                              setNewDueDate("");
+                            }}
+                            className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground"
+                          >
+                            <X className="h-3.5 w-3.5 mr-1" />
+                            Cancelar
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => handleReschedule(tx)}
+                            className="h-8 px-3 text-xs bg-primary text-primary-foreground hover:bg-primary/95"
+                          >
+                            <Check className="h-3.5 w-3.5 mr-1" />
+                            Confirmar
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 
