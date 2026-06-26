@@ -685,6 +685,34 @@ function BookingPage() {
             <Badge className="mt-4" variant="secondary">
               Confirmação será enviada no WhatsApp
             </Badge>
+
+            <Card className="p-4 mt-6 text-left bg-accent/40 max-w-sm mx-auto space-y-3">
+              <div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
+                  Serviços Agendados
+                </div>
+                <div className="mt-2 space-y-1.5 max-h-32 overflow-y-auto">
+                  {selectedServices.map((s) => (
+                    <div key={s.id} className="flex justify-between items-center text-sm">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Scissors className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                        <span className="truncate">{s.name}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground flex-shrink-0 ml-2">
+                        {s.duration_minutes} min ·{" "}
+                        <span className="font-semibold text-foreground">
+                          {formatBRL(Number(s.price))}
+                        </span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="border-t pt-2 flex justify-between items-center text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                <span>Total</span>
+                <span className="text-sm font-bold text-foreground">{formatBRL(totalPrice)}</span>
+              </div>
+            </Card>
           </section>
         )}
       </main>

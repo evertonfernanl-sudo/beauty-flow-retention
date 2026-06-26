@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -54,7 +54,13 @@ import {
   CartesianGrid,
 } from "recharts";
 
+const agendaSearchSchema = z.object({
+  newAppt: z.boolean().optional(),
+  clientId: z.string().uuid().optional(),
+});
+
 export const Route = createFileRoute("/_authenticated/app/agenda")({
+  validateSearch: (search) => agendaSearchSchema.parse(search),
   head: () => ({ meta: [{ title: "Agenda · BeautyFlow" }] }),
   component: AgendaPage,
 });
@@ -125,6 +131,8 @@ function AgendaPage() {
   const { data: profile } = useCurrentProfile();
   const companyId = profile?.company?.id;
   const queryClient = useQueryClient();
+  const searchParams = Route.useSearch();
+  const navigate = useNavigate();
   const [agendaPeriod, setAgendaPeriod] = useState<PeriodState>({ mode: "today" });
   const [expensesPeriod, setExpensesPeriod] = useState<PeriodState>({ mode: "month" });
   const [incomePeriod, setIncomePeriod] = useState<PeriodState>({ mode: "month" });
@@ -374,6 +382,16 @@ function AgendaPage() {
       notes: "",
     },
   });
+
+  useEffect(() => {
+    if (searchParams.newAppt) {
+      setNewApptOpen(true);
+      if (searchParams.clientId) {
+        form.setValue("client_id", searchParams.clientId);
+      }
+      navigate({ search: {} as any, replace: true });
+    }
+  }, [searchParams.newAppt, searchParams.clientId, form, navigate]);
 
   const selectedServiceIds = form.watch("service_ids") || [];
   useMemo(() => {

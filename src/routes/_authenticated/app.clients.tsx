@@ -43,6 +43,8 @@ import {
   Pencil,
   Trash2,
   Heart,
+  RefreshCw,
+  Check,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useForm } from "react-hook-form";
@@ -99,6 +101,13 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: "BIRTHDAY", label: "Aniversariantes" },
 ];
 
+function formatShortName(fullName: string): string {
+  if (!fullName) return "";
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length <= 2) return fullName;
+  return `${parts[0]} ${parts[1]}`;
+}
+
 function ClientsPage() {
   const { data: profile } = useCurrentProfile();
   const companyId = profile?.company?.id;
@@ -118,6 +127,7 @@ function ClientsPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
   const [deleting, setDeleting] = useState<any | null>(null);
+  const [mergingSource, setMergingSource] = useState<any | null>(null);
   const navigate = useNavigate();
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -599,7 +609,7 @@ function ClientsPage() {
                 </Dialog>
 
                 <Button variant="outline" asChild>
-                  <Link to="/app/agenda">
+                  <Link to="/app/agenda" search={{ newAppt: true }}>
                     <Calendar className="h-4 w-4 mr-1" /> Agendar
                   </Link>
                 </Button>
@@ -761,7 +771,7 @@ function ClientsPage() {
 
                     {/* List Items */}
                     <ul className="divide-y">
-                      {filtered.map((c: any) => {
+                      {filtered.map((c: any, index: number) => {
                         const isBirthdayMonth =
                           c.birthday && new Date(c.birthday).getMonth() === new Date().getMonth();
                         const daysSince = c.last_visit
@@ -792,15 +802,19 @@ function ClientsPage() {
                             </div>
                             <div className="min-w-0 sticky left-[30px] z-10 bg-card group-hover:bg-muted/40 pl-3 -ml-3 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]">
                               <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-muted-foreground font-mono text-xs mr-1 shrink-0 select-none">
+                                  {index + 1}.
+                                </span>
                                 <span
                                   className="font-medium hover:underline cursor-pointer text-primary truncate block"
+                                  title={c.name}
                                   onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
                                     setHistoryClient(c);
                                   }}
                                 >
-                                  {c.name}
+                                  {formatShortName(c.name)}
                                 </span>
                                 {isBirthdayMonth && (
                                   <Badge variant="outline" className="gap-1 text-[9px] py-0 px-1 leading-none h-4 shrink-0">
@@ -831,7 +845,7 @@ function ClientsPage() {
                                 <span className="w-8" />
                               )}
                               <Button size="icon" variant="ghost" className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/5" asChild>
-                                <Link to="/app/agenda" aria-label="Agendar">
+                                <Link to="/app/agenda" search={{ newAppt: true, clientId: c.id }} aria-label="Agendar">
                                   <Calendar className="h-4 w-4" />
                                 </Link>
                               </Button>
@@ -853,6 +867,9 @@ function ClientsPage() {
                                   <DropdownMenuContent align="end">
                                     <DropdownMenuItem onSelect={() => setEditing(c)}>
                                       <Pencil className="h-4 w-4 mr-2" /> Editar
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onSelect={() => setMergingSource(c)}>
+                                      <RefreshCw className="h-4 w-4 mr-2" /> Mesclar
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                       onSelect={() => setDeleting(c)}
@@ -1033,6 +1050,16 @@ function ClientsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <MergeClientsDialog
+        sourceClient={mergingSource}
+        clients={list.data || []}
+        onClose={() => setMergingSource(null)}
+        onMerged={() => {
+          setMergingSource(null);
+          queryClient.invalidateQueries({ queryKey: ["clients", companyId] });
+        }}
+      />
     </div>
   );
 }
@@ -1192,4 +1219,168 @@ function AppointmentStatusPill({ status }: { status: string }) {
   const m = map[status] ?? map.SCHEDULED;
   return <span className={`text-[10px] rounded-full px-2 py-0.5 ${m.cls}`}>{m.label}</span>;
 }
+
+interface MergeClientsDialogProps {
+  sourceClient: any | null;
+  clients: any[];
+  onClose: () => void;
+  onMerged: () => void;
+}
+
+function MergeClientsDialog({ sourceClient, clients, onClose, onMerged }: MergeClientsDialogProps) {
+  const [search, setSearch] = useState("");
+  const [targetClient, setTargetClient] = useState<any | null>(null);
+  const [isMerging, setIsMerging] = useState(false);
+
+  useEffect(() => {
+    if (sourceClient) {
+      setSearch("");
+      setTargetClient(null);
+      setIsMerging(false);
+    }
+  }, [sourceClient]);
+
+  const availableClients = useMemo(() => {
+    if (!sourceClient) return [];
+    return clients.filter((c) => c.id !== sourceClient.id);
+  }, [clients, sourceClient]);
+
+  const filtered = useMemo(() => {
+    const s = search.trim().toLowerCase();
+    if (!s) return [];
+    return availableClients
+      .filter(
+        (c) =>
+          c.name.toLowerCase().includes(s) ||
+          (c.phone && c.phone.toLowerCase().includes(s))
+      )
+      .slice(0, 5);
+  }, [availableClients, search]);
+
+  async function handleMerge() {
+    if (!sourceClient || !targetClient) return;
+    setIsMerging(true);
+    try {
+      const { error } = await supabase.rpc("merge_clients", {
+        source_id: sourceClient.id,
+        target_id: targetClient.id,
+      });
+
+      if (error) {
+        toast.error("Erro ao mesclar clientes: " + error.message);
+      } else {
+        toast.success("Clientes mesclados com sucesso!");
+        onMerged();
+      }
+    } catch (err: any) {
+      toast.error("Erro inesperado: " + err.message);
+    } finally {
+      setIsMerging(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open={!!sourceClient}
+      onOpenChange={(o) => {
+        if (!o) onClose();
+      }}
+    >
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Mesclar Ficha de Cliente</DialogTitle>
+          <div className="text-sm text-muted-foreground space-y-2 mt-2">
+            <p>
+              Você está mesclando a ficha de <strong className="text-foreground">{sourceClient?.name}</strong>.
+            </p>
+            <p>
+              Esta ação moverá todos os agendamentos, mensagens, histórico de faturamento e outras relações para o cliente de destino, e depois <span className="text-destructive font-semibold">excluirá definitivamente</span> o cadastro de <strong className="text-foreground">{sourceClient?.name}</strong>.
+            </p>
+          </div>
+        </DialogHeader>
+
+        <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="search-target">Buscar cliente de destino (que será mantido)</Label>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="search-target"
+                placeholder="Digite o nome ou WhatsApp..."
+                className="pl-9"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                disabled={isMerging}
+              />
+            </div>
+          </div>
+
+          {search && filtered.length > 0 && (
+            <div className="border rounded-md divide-y max-h-40 overflow-y-auto bg-popover text-popover-foreground">
+              {filtered.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-muted transition-colors ${
+                    targetClient?.id === c.id ? "bg-muted font-medium" : ""
+                  }`}
+                  onClick={() => setTargetClient(c)}
+                  disabled={isMerging}
+                >
+                  <div>
+                    <div>{c.name}</div>
+                    {c.phone && <div className="text-xs text-muted-foreground">{c.phone}</div>}
+                  </div>
+                  {targetClient?.id === c.id && (
+                    <Check className="h-4 w-4 text-primary shrink-0" />
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {search && filtered.length === 0 && (
+            <p className="text-xs text-muted-foreground text-center py-2">
+              Nenhum cliente encontrado.
+            </p>
+          )}
+
+          {targetClient && (
+            <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3 space-y-1">
+              <span className="text-xs font-semibold text-primary uppercase tracking-wider block">
+                Destino Selecionado (Será Mantido)
+              </span>
+              <div className="font-medium text-sm">{targetClient.name}</div>
+              {targetClient.phone && (
+                <div className="text-xs text-muted-foreground">{targetClient.phone}</div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button variant="outline" onClick={onClose} disabled={isMerging}>
+            Cancelar
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={handleMerge}
+            disabled={!targetClient || isMerging}
+            className="gap-2"
+          >
+            {isMerging ? (
+              <>
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                Mesclando...
+              </>
+            ) : (
+              "Confirmar Mesclagem"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 

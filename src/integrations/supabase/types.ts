@@ -3189,6 +3189,13 @@ export type Database = {
         Args: { _body: string; _client_id: string }
         Returns: string
       }
+      merge_clients: {
+        Args: {
+          source_id: string
+          target_id: string
+        }
+        Returns: undefined
+      }
       normalize_name: { Args: { _name: string }; Returns: string }
       normalize_phone: { Args: { _phone: string }; Returns: string }
       predict_offering_from_amount: {
