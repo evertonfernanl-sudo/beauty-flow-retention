@@ -54,11 +54,18 @@ export const Route = createFileRoute("/agendar/$slug")({
   head: (ctx) => {
     const company = (ctx as { loaderData?: { company?: { name?: string } } }).loaderData?.company;
     const name = company?.name ?? "BeautyFlow";
+    const description = `Agende online com ${name} em poucos cliques.`;
     return {
       meta: [
         { title: `Agendar — ${name}` },
-        { name: "description", content: `Agende online com ${name} em poucos cliques.` },
+        { name: "description", content: description },
         { name: "robots", content: "index, follow" },
+        { property: "og:title", content: `Agendar — ${name}` },
+        { property: "og:description", content: description },
+        { property: "og:image", content: "" },
+        { name: "twitter:title", content: `Agendar — ${name}` },
+        { name: "twitter:description", content: description },
+        { name: "twitter:image", content: "" },
       ],
     };
   },

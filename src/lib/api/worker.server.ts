@@ -542,46 +542,112 @@ function parsePdfTextToRows(text: string): { headers: string[]; rows: Record<str
     .filter(Boolean);
   if (lines.length === 0) return { headers: [], rows: [] };
 
-  // 1) Try delimited table (CSV/TSV/semicolon/pipe leaked into PDF)
-  for (const delim of [";", "\t", "|", ","]) {
-    const headerCells = lines[0].split(delim).map((s) => s.trim());
-    if (headerCells.length >= 2 && lines.slice(1, 6).every((l) => l.split(delim).length >= 2)) {
-      const headers = headerCells;
-      const rows = lines.slice(1).map((l) => {
-        const parts = l.split(delim);
-        const o: Record<string, unknown> = {};
-        headers.forEach((h, i) => (o[h] = (parts[i] ?? "").trim()));
-        return o;
-      });
-      return { headers, rows };
-    }
-  }
-
-  // 2) Heuristic line-by-line extraction
-  const headers = ["nome", "telefone", "valor", "data", "descricao"];
-  const phoneRe = /(\(?\d{2}\)?\s*\d{4,5}-?\s*\d{4})/;
-  const amountRe = /R?\$?\s*([\d.]+,\d{2}|\d+\.\d{2})/;
-  const dateRe = /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}-\d{2}-\d{2})/;
+  const headers = ["data", "descricao", "valor"];
   const rows: Record<string, unknown>[] = [];
+
+  const fullDateRe = /\b(0?[1-9]|[12]\d|3[01])[\/\-](0?[1-9]|1[0-2])[\/\-](\d{2,4})\b/;
+  const isoDateRe = /\b(\d{4})-(0?[1-9]|1[0-2])-(0?[1-9]|[12]\d|3[01])\b/;
+  const dayMonthRe = /\b(0?[1-9]|[12]\d|3[01])[\/\-](0?[1-9]|1[0-2])\b/;
+
+  // Check if description is a balance row or header/footer noise
+  const isBalanceOrNoise = (desc: string): boolean => {
+    const d = desc.toLowerCase().trim();
+    if (!d) return true;
+    
+    // Exact balance keywords or other metadata we should ignore
+    const patterns = [
+      /^(saldo|saldo anterior|saldo atual|saldo do dia|saldo disponível|saldo em conta|saldos diários|saldo final|saldo c\/c|saldo d\/c|saldo de transações|total|total de débitos|total de créditos|subtotal|limite|limite contratado|resumo do dia)$/i,
+      /^(extrato de conta|extrato consolidado|extrato período|período de|folha|página|pagina|cnpj|demonstrativo de tarifas|extrato de movimentações)$/i,
+      /^(agencia|agência|conta|conta corrente|corrente|extrato mensal)$/i
+    ];
+    
+    return patterns.some(p => p.test(d));
+  };
+
   for (const line of lines) {
-    const phone = line.match(phoneRe)?.[1] ?? "";
-    const amount = line.match(amountRe)?.[1] ?? "";
-    const date = line.match(dateRe)?.[1] ?? "";
-    let rest = line;
-    [phone, amount, date].forEach((v) => {
-      if (v) rest = rest.replace(v, " ");
+    // 1) Find Date
+    let dateStr = "";
+    let dateRaw = "";
+    
+    let dateMatch = line.match(isoDateRe);
+    if (dateMatch) {
+      dateStr = dateMatch[0];
+      dateRaw = dateMatch[0];
+    } else {
+      dateMatch = line.match(fullDateRe);
+      if (dateMatch) {
+        dateStr = dateMatch[0];
+        dateRaw = dateMatch[0];
+      } else {
+        dateMatch = line.match(dayMonthRe);
+        if (dateMatch) {
+          const currentYear = new Date().getFullYear();
+          dateStr = `${dateMatch[0]}/${currentYear}`;
+          dateRaw = dateMatch[0];
+        }
+      }
+    }
+
+    if (!dateStr) continue;
+
+    // 2) Find Amount (only in the part before the word 'saldo' to avoid picking up the balance)
+    const parts = line.split(/saldo/i);
+    const textToSearch = parts[0];
+
+    const amountRe = /(-?\s*R?\$?\s*\d+(?:\.\d{3})*,\d{2}(?:\s*[DdCc\-\+])?|-?\s*R?\$?\s*\d+\.\d{2}(?:\s*[DdCc\-\+])?)/g;
+    const amountMatches = [...textToSearch.matchAll(amountRe)];
+    if (amountMatches.length === 0) continue;
+
+    // Take the last match in the pre-saldo text, which is typically the transaction amount
+    const amountRaw = amountMatches[amountMatches.length - 1][0];
+    
+    // Determine sign
+    let isNegative = false;
+    if (amountRaw.includes("-") || /d/i.test(amountRaw)) {
+      isNegative = true;
+    }
+
+    // Clean the numbers
+    let cleanAmount = amountRaw
+      .replace(/R?\$?\s*/gi, "") // remove currency symbol
+      .replace(/[-+DcDdCc]/g, "") // remove sign and debit/credit indicator
+      .trim();
+
+    if (cleanAmount.includes(",")) {
+      cleanAmount = cleanAmount.replace(/\./g, "").replace(",", ".");
+    }
+
+    const amountVal = parseFloat(cleanAmount);
+    if (isNaN(amountVal)) continue;
+
+    const finalVal = isNegative ? -Math.abs(amountVal) : amountVal;
+    
+    // Format back to Brazilian style for CSV compatibility (or standard string decimal)
+    // E.g. "150,00" or "-150,00"
+    const amountStr = finalVal.toLocaleString("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     });
-    rest = rest
+
+    // 3) Clean Description: remove date and amount strings from line
+    let description = line;
+    description = description.replace(dateRaw, " ");
+    description = description.replace(amountRaw, " ");
+    description = description
       .replace(/R\$\s*/gi, " ")
       .replace(/\s+/g, " ")
       .trim();
-    // Name = leading alpha tokens (>=2 chars, letters/spaces)
-    const nameMatch = rest.match(/^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ.\s]{2,}?)(?=\s{2,}|\s-|$|\s\d)/);
-    const name = (nameMatch?.[1] ?? "").trim();
-    const description = rest.replace(name, "").trim();
-    if (!name && !phone && !amount) continue;
-    rows.push({ nome: name, telefone: phone, valor: amount, data: date, descricao: description });
+
+    // Check if the remaining description is a balance row or noise
+    if (isBalanceOrNoise(description)) continue;
+
+    rows.push({
+      data: dateStr,
+      descricao: description,
+      valor: amountStr
+    });
   }
+
   return { headers, rows };
 }
 
