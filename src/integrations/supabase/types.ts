@@ -2140,6 +2140,7 @@ export type Database = {
       providers: {
         Row: {
           address: string | null
+          client_id: string | null
           company_id: string
           created_at: string
           document: string | null
@@ -2150,6 +2151,7 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          client_id?: string | null
           company_id: string
           created_at?: string
           document?: string | null
@@ -2160,6 +2162,7 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          client_id?: string | null
           company_id?: string
           created_at?: string
           document?: string | null
@@ -2169,6 +2172,34 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "providers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "birthday_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "providers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "providers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "top_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "providers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "vip_clients"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "providers_company_id_fkey"
             columns: ["company_id"]

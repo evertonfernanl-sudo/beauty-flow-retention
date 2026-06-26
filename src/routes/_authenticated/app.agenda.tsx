@@ -1619,6 +1619,7 @@ function statusStyle(s: string) {
 }
 
 const providerSchema = z.object({
+  client_id: z.string().uuid().optional().or(z.literal("")),
   name: z.string().min(1, "Nome é obrigatório"),
   document: z.string().optional().or(z.literal("")),
   phone: z.string().optional().or(z.literal("")),
@@ -1635,9 +1636,25 @@ function NewProviderDialog({
   companyId: string | null;
 }) {
   const queryClient = useQueryClient();
+
+  const clientsQuery = useQuery({
+    enabled: !!companyId && open,
+    queryKey: ["clients-options-for-providers", companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, name, phone")
+        .eq("company_id", companyId!)
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   const form = useForm<z.infer<typeof providerSchema>>({
     resolver: zodResolver(providerSchema),
     defaultValues: {
+      client_id: "",
       name: "",
       document: "",
       phone: "",
@@ -1648,6 +1665,7 @@ function NewProviderDialog({
   useEffect(() => {
     if (open) {
       form.reset({
+        client_id: "",
         name: "",
         document: "",
         phone: "",
@@ -1660,6 +1678,7 @@ function NewProviderDialog({
     if (!companyId) return;
     const { error } = await supabase.from("providers").insert({
       company_id: companyId,
+      client_id: v.client_id || null,
       name: v.name,
       document: v.document || null,
       phone: v.phone || null,
@@ -1679,6 +1698,40 @@ function NewProviderDialog({
           <DialogTitle>Cadastrar Fornecedor</DialogTitle>
         </DialogHeader>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <div className="space-y-2">
+            <Label>Associar a Cliente Existente (Opcional)</Label>
+            <Controller
+              control={form.control}
+              name="client_id"
+              render={({ field }) => (
+                <Select
+                  value={field.value || "none"}
+                  onValueChange={(val) => {
+                    field.onChange(val === "none" ? "" : val);
+                    if (val !== "none") {
+                      const selectedClient = (clientsQuery.data ?? []).find((c) => c.id === val);
+                      if (selectedClient) {
+                        form.setValue("name", selectedClient.name);
+                        form.setValue("phone", selectedClient.phone || "");
+                      }
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um cliente para importar dados" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nenhum (Criar avulso)</SelectItem>
+                    {(clientsQuery.data ?? []).map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name} {c.phone ? `(${c.phone})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </div>
           <div className="space-y-2">
             <Label>Nome *</Label>
             <Input {...form.register("name")} placeholder="Nome do fornecedor" />
