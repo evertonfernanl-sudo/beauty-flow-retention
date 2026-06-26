@@ -309,8 +309,10 @@ type Row = {
     occurred?: string;
     paymentMethod?: string;
     isExpense?: boolean;
+    isContribution?: boolean;
     isDuplicate?: boolean;
   };
+
 };
 
 function RowStatusBadge({ status, isDuplicate }: { status: string; isDuplicate?: boolean }) {
