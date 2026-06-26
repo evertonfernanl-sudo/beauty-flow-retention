@@ -26,6 +26,14 @@ import { formatPhoneBR } from "@/lib/phone";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
 
 export const Route = createFileRoute("/_authenticated/app/sie")({
   head: () => ({ meta: [{ title: "Importar Dados · BeautyFlow" }] }),
