@@ -348,6 +348,7 @@ function RowStatusBadge({ status, isDuplicate }: { status: string; isDuplicate?:
     applied: { label: "Aplicado", className: "bg-emerald-100 text-emerald-800 border-emerald-200" },
     skipped: { label: "Recusado", className: "bg-rose-50 text-rose-700 border-rose-200" },
     failed: { label: "Falhou", className: "bg-rose-100 text-rose-800 border-rose-200" },
+    internal: { label: "Mov. Interna", className: "bg-purple-50 text-purple-700 border-purple-200" },
   };
   const m = map[status] ?? { label: status, className: "bg-gray-100 text-gray-800" };
   return (
@@ -668,7 +669,7 @@ function ImportReview({ importId, status }: { importId: string; status: string }
                   className="border-t animate-fade-in hover:bg-muted/10 transition-colors"
                 >
                   <td className="p-1 w-8 text-center">
-                    {r.status !== "applied" && r.status !== "skipped" ? (
+                    {r.status !== "applied" && r.status !== "skipped" && r.status !== "internal" ? (
                       <Checkbox
                         checked={selectedRowIds.has(r.id)}
                         onCheckedChange={(checked) => handleSelectRow(r.id, !!checked)}
@@ -681,17 +682,17 @@ function ImportReview({ importId, status }: { importId: string; status: string }
                       >
                         ✓
                       </div>
-                    ) : (
+                    ) : r.status === "skipped" ? (
                       <div
                         className="text-rose-500 font-bold text-center"
                         title="Lançamento Recusado"
                       >
                         ✗
                       </div>
-                    )}
+                    ) : null}
                   </td>
                   <td className="p-1 font-medium">
-                    {r.status !== "applied" && r.status !== "skipped" ? (
+                    {r.status !== "applied" && r.status !== "skipped" && r.status !== "internal" && !r.parsed?.isBankFee && !r.parsed?.isBankInterest ? (
                       <button
                         type="button"
                         onClick={() => setPickerRow(r)}
@@ -734,79 +735,83 @@ function ImportReview({ importId, status }: { importId: string; status: string }
                     )}
                   </td>
                   <td className="p-1">
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center gap-1.5">
-                        <Switch
-                          id={`type-switch-${r.id}`}
-                          checked={isExpense}
-                          onCheckedChange={() => toggleIsExpense(r)}
-                          disabled={rowLocked}
-                        />
-                        <Label
-                          htmlFor={`type-switch-${r.id}`}
-                          className={`text-[10px] font-semibold cursor-pointer select-none transition-colors ${
-                            isExpense ? "text-rose-500" : "text-emerald-500"
-                          }`}
-                        >
-                          {isExpense ? "Despesa" : "Receita"}
-                        </Label>
+                    {r.status !== "internal" && !r.parsed?.isBankFee && !r.parsed?.isBankInterest ? (
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5">
+                          <Switch
+                            id={`type-switch-${r.id}`}
+                            checked={isExpense}
+                            onCheckedChange={() => toggleIsExpense(r)}
+                            disabled={rowLocked}
+                          />
+                          <Label
+                            htmlFor={`type-switch-${r.id}`}
+                            className={`text-[10px] font-semibold cursor-pointer select-none transition-colors ${
+                              isExpense ? "text-rose-500" : "text-emerald-500"
+                            }`}
+                          >
+                            {isExpense ? "Despesa" : "Receita"}
+                          </Label>
+                        </div>
+                        {isExpense ? (
+                          <Select
+                            value={r.parsed?.expenseScope ?? ""}
+                            onValueChange={(v) =>
+                              setExpenseScope(r, v as "empresa" | "pessoal")
+                            }
+                            disabled={rowLocked}
+                          >
+                            <SelectTrigger
+                              className={`h-6 text-[10px] px-2 py-0 w-[96px] ${
+                                !r.parsed?.expenseScope ? "border-amber-400" : ""
+                              }`}
+                            >
+                              <SelectValue placeholder="Selecionar" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="empresa" className="text-[11px]">
+                                Empresa
+                              </SelectItem>
+                              <SelectItem value="pessoal" className="text-[11px]">
+                                Pessoal
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Select
+                            value={
+                              r.parsed?.revenueKindSet
+                                ? r.parsed?.isContribution
+                                  ? "aporte"
+                                  : "receita"
+                                : ""
+                            }
+                            onValueChange={(v) =>
+                              setRevenueKind(r, v as "receita" | "aporte")
+                            }
+                            disabled={rowLocked}
+                          >
+                            <SelectTrigger
+                              className={`h-6 text-[10px] px-2 py-0 w-[96px] ${
+                                !r.parsed?.revenueKindSet ? "border-amber-400" : ""
+                              }`}
+                            >
+                              <SelectValue placeholder="Selecionar" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="receita" className="text-[11px]">
+                                Receita
+                              </SelectItem>
+                              <SelectItem value="aporte" className="text-[11px]">
+                                Aporte
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
                       </div>
-                      {isExpense ? (
-                        <Select
-                          value={r.parsed?.expenseScope ?? ""}
-                          onValueChange={(v) =>
-                            setExpenseScope(r, v as "empresa" | "pessoal")
-                          }
-                          disabled={rowLocked}
-                        >
-                          <SelectTrigger
-                            className={`h-6 text-[10px] px-2 py-0 w-[96px] ${
-                              !r.parsed?.expenseScope ? "border-amber-400" : ""
-                            }`}
-                          >
-                            <SelectValue placeholder="Selecionar" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="empresa" className="text-[11px]">
-                              Empresa
-                            </SelectItem>
-                            <SelectItem value="pessoal" className="text-[11px]">
-                              Pessoal
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <Select
-                          value={
-                            r.parsed?.revenueKindSet
-                              ? r.parsed?.isContribution
-                                ? "aporte"
-                                : "receita"
-                              : ""
-                          }
-                          onValueChange={(v) =>
-                            setRevenueKind(r, v as "receita" | "aporte")
-                          }
-                          disabled={rowLocked}
-                        >
-                          <SelectTrigger
-                            className={`h-6 text-[10px] px-2 py-0 w-[96px] ${
-                              !r.parsed?.revenueKindSet ? "border-amber-400" : ""
-                            }`}
-                          >
-                            <SelectValue placeholder="Selecionar" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="receita" className="text-[11px]">
-                              Receita
-                            </SelectItem>
-                            <SelectItem value="aporte" className="text-[11px]">
-                              Aporte
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    </div>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </td>
 
                   <td className="p-1 text-right tabular-nums">
@@ -820,7 +825,7 @@ function ImportReview({ importId, status }: { importId: string; status: string }
                     <RowStatusBadge status={r.status} isDuplicate={r.parsed?.isDuplicate} />
                   </td>
                   <td className="p-1 text-right">
-                    {r.status !== "applied" && r.status !== "skipped" && (
+                    {r.status !== "applied" && r.status !== "skipped" && r.status !== "internal" && !r.parsed?.isBankFee && !r.parsed?.isBankInterest && (
                       <div className="flex justify-end gap-1.5">
                         <Button
                           size="sm"

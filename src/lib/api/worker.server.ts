@@ -845,7 +845,8 @@ async function runImportParse(
       matched = 0,
       review = 0,
       failed = 0,
-      revenue = 0;
+      revenue = 0,
+      autoAppliedCount = 0;
 
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
@@ -860,70 +861,59 @@ async function runImportParse(
         (idx("payment") ? String(r[idx("payment")!] ?? "").trim() : null) ||
         detectPaymentMethod(description);
 
+      const specialCat = matchSpecialTransaction(description);
+      if (specialCat === "APLICACAO" || specialCat === "RESGATE") {
+        continue; // Skip APLICACAO and RESGATE completely
+      }
+
       let name = nameFromCol;
       let clientId: string | null = null;
       let clientFound = false;
+      let status = "matched";
+      let confidence = 0;
+      let autoApply = false;
+      let autoApplyTxId: string | null = null;
 
-      // Search description content to find the client name from the database (Brazilian bank statement match style)
-      if (!name && description && companyClients.length > 0) {
-        const descLower = description.toLowerCase();
-        const sortedClients = [...companyClients].sort((a, b) => b.name.length - a.name.length);
-        for (const client of sortedClients) {
-          const clientNameLower = client.name.toLowerCase().trim();
-          if (clientNameLower.length >= 4 && descLower.includes(clientNameLower)) {
-            name = client.name;
-            clientId = client.id;
-            clientFound = true;
-            break;
-          }
-        }
+      if (specialCat === "INTERNA") {
+        name = "Transferência Interna";
+        status = "internal";
+        confidence = 100;
+      } else if (specialCat === "TARIFA") {
+        name = "Tarifa Bancária";
+        status = "applied";
+        confidence = 100;
+        autoApply = true;
+      } else if (specialCat === "JUROS") {
+        name = "Juros Bancários";
+        status = "applied";
+        confidence = 100;
+        autoApply = true;
       }
 
-      if (!clientFound && name) {
-        const normName = jsNormalizeName(name);
-        if (normName) {
-          const { data: byNormName } = await admin
-            .from("clients")
-            .select("id, name")
-            .eq("company_id", job.company_id)
-            .eq("normalized_name", normName)
-            .limit(1);
-          if (byNormName && byNormName.length > 0) {
-            clientId = byNormName[0].id;
-            clientFound = true;
-            name = byNormName[0].name;
+      if (!specialCat) {
+        // Search description content to find the client name from the database (Brazilian bank statement match style)
+        if (!name && description && companyClients.length > 0) {
+          const descLower = description.toLowerCase();
+          const sortedClients = [...companyClients].sort((a, b) => b.name.length - a.name.length);
+          for (const client of sortedClients) {
+            const clientNameLower = client.name.toLowerCase().trim();
+            if (clientNameLower.length >= 4 && descLower.includes(clientNameLower)) {
+              name = client.name;
+              clientId = client.id;
+              clientFound = true;
+              break;
+            }
           }
         }
-      }
 
-      if (!clientFound && (name || phoneRaw)) {
-        const { data: dup } = await admin.rpc("find_duplicate_client", {
-          _company_id: job.company_id,
-          _name: name || "",
-          _phone: phoneRaw || "",
-          _threshold: 0.7,
-        });
-        const first = Array.isArray(dup) ? dup[0] : null;
-        if (first) {
-          clientId = first.id;
-          clientFound = true;
-          if (!name) {
-            name = first.name;
-          }
-        }
-      }
-
-      if (!name && description) {
-        const extracted = extractNameFromDescription(description);
-        if (extracted) {
-          name = extracted;
-          const normExtracted = jsNormalizeName(name);
-          if (normExtracted) {
+        if (!clientFound && name) {
+          const normName = jsNormalizeName(name);
+          if (normName) {
             const { data: byNormName } = await admin
               .from("clients")
               .select("id, name")
               .eq("company_id", job.company_id)
-              .eq("normalized_name", normExtracted)
+              .eq("normalized_name", normName)
               .limit(1);
             if (byNormName && byNormName.length > 0) {
               clientId = byNormName[0].id;
@@ -932,9 +922,47 @@ async function runImportParse(
             }
           }
         }
+
+        if (!clientFound && (name || phoneRaw)) {
+          const { data: dup } = await admin.rpc("find_duplicate_client", {
+            _company_id: job.company_id,
+            _name: name || "",
+            _phone: phoneRaw || "",
+            _threshold: 0.7,
+          });
+          const first = Array.isArray(dup) ? dup[0] : null;
+          if (first) {
+            clientId = first.id;
+            clientFound = true;
+            if (!name) {
+              name = first.name;
+            }
+          }
+        }
+
+        if (!name && description) {
+          const extracted = extractNameFromDescription(description);
+          if (extracted) {
+            name = extracted;
+            const normExtracted = jsNormalizeName(name);
+            if (normExtracted) {
+              const { data: byNormName } = await admin
+                .from("clients")
+                .select("id, name")
+                .eq("company_id", job.company_id)
+                .eq("normalized_name", normExtracted)
+                .limit(1);
+              if (byNormName && byNormName.length > 0) {
+                clientId = byNormName[0].id;
+                clientFound = true;
+                name = byNormName[0].name;
+              }
+            }
+          }
+        }
       }
 
-      const isExpense = isExpenseDescription(description) || (amountRaw != null && amountRaw < 0);
+      const isExpense = specialCat === "TARIFA" ? true : specialCat === "JUROS" ? false : (isExpenseDescription(description) || (amountRaw != null && amountRaw < 0));
       const amount = amountRaw != null ? Math.abs(amountRaw) : null;
 
       if (!name && !phoneRaw && amount == null) continue;
@@ -942,12 +970,12 @@ async function runImportParse(
 
       // Normalize phone via RPC for consistency with rest of system
       let phoneApi: string | null = null;
-      if (phoneRaw1) {
+      if (phoneRaw1 && !specialCat) {
         const { data: p } = await admin.rpc("normalize_phone", { _phone: phoneRaw1 });
         phoneApi = (p as string | null) ?? null;
       }
       let phoneApi2: string | null = null;
-      if (phoneRaw2) {
+      if (phoneRaw2 && !specialCat) {
         const { data: p } = await admin.rpc("normalize_phone", { _phone: phoneRaw2 });
         phoneApi2 = (p as string | null) ?? null;
       }
@@ -959,69 +987,71 @@ async function runImportParse(
       let amountMatch = false;
       let descMatch = false;
       let tenantPattern = false;
-      if (!isExpense && amount != null) {
-        const { data: pred } = await admin.rpc("predict_offering_from_amount", {
-          _company_id: job.company_id,
-          _amount: amount,
-        });
-        const p = Array.isArray(pred) ? pred[0] : null;
-        if (p?.entity_id) {
-          offeringId = p.entity_id;
-          offeringKind = p.entity_type;
-          offeringLabel = p.label;
-          amountMatch = true;
-          if (p.reason === "kb_amount") tenantPattern = true;
-        } else if (activeServices.length > 0) {
-          const matchedCombination = findServiceCombination(amount, activeServices);
-          if (matchedCombination && matchedCombination.length > 0) {
-            offeringId = matchedCombination[0].id;
-            offeringKind = "service";
-            offeringLabel = matchedCombination.map((s) => s.name).join(" + ");
+      if (!specialCat) {
+        if (!isExpense && amount != null) {
+          const { data: pred } = await admin.rpc("predict_offering_from_amount", {
+            _company_id: job.company_id,
+            _amount: amount,
+          });
+          const p = Array.isArray(pred) ? pred[0] : null;
+          if (p?.entity_id) {
+            offeringId = p.entity_id;
+            offeringKind = p.entity_type;
+            offeringLabel = p.label;
             amountMatch = true;
+            if (p.reason === "kb_amount") tenantPattern = true;
+          } else if (activeServices.length > 0) {
+            const matchedCombination = findServiceCombination(amount, activeServices);
+            if (matchedCombination && matchedCombination.length > 0) {
+              offeringId = matchedCombination[0].id;
+              offeringKind = "service";
+              offeringLabel = matchedCombination.map((s) => s.name).join(" + ");
+              amountMatch = true;
+            }
           }
         }
-      }
-      if (!isExpense && description) {
-        const { data: kb } = await admin
-          .from("import_knowledge_base")
-          .select("mapped_entity_id, mapped_entity_type, mapped_label, confidence")
-          .eq("company_id", job.company_id)
-          .eq("pattern_type", "description")
-          .eq("pattern_value", description.toLowerCase())
-          .order("confidence", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (kb?.mapped_entity_id) {
-          descMatch = true;
-          tenantPattern = true;
-          if (!offeringId) {
-            offeringId = kb.mapped_entity_id;
-            offeringKind = kb.mapped_entity_type;
-            offeringLabel = kb.mapped_label;
+        if (!isExpense && description) {
+          const { data: kb } = await admin
+            .from("import_knowledge_base")
+            .select("mapped_entity_id, mapped_entity_type, mapped_label, confidence")
+            .eq("company_id", job.company_id)
+            .eq("pattern_type", "description")
+            .eq("pattern_value", description.toLowerCase())
+            .order("confidence", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (kb?.mapped_entity_id) {
+            descMatch = true;
+            tenantPattern = true;
+            if (!offeringId) {
+              offeringId = kb.mapped_entity_id;
+              offeringKind = kb.mapped_entity_type;
+              offeringLabel = kb.mapped_label;
+            }
           }
         }
       }
 
-      let confidence = 0;
-      if (isExpense) {
-        confidence = 95;
-      } else {
-        const hasHistory = clientFound;
-        const { data: confData } = await admin.rpc("compute_import_confidence", {
-          _client_found: clientFound,
-          _amount_match: amountMatch,
-          _desc_match: descMatch,
-          _has_history: hasHistory,
-          _tenant_pattern: tenantPattern,
-        });
-        confidence = (confData as number) ?? 0;
+      if (!specialCat) {
+        if (isExpense) {
+          confidence = 95;
+        } else {
+          const hasHistory = clientFound;
+          const { data: confData } = await admin.rpc("compute_import_confidence", {
+            _client_found: clientFound,
+            _amount_match: amountMatch,
+            _desc_match: descMatch,
+            _has_history: hasHistory,
+            _tenant_pattern: tenantPattern,
+          });
+          confidence = (confData as number) ?? 0;
+        }
+        status = confidence >= 95 ? "matched" : confidence >= 70 ? "review" : "manual";
       }
-
-      const status = confidence >= 95 ? "matched" : confidence >= 70 ? "review" : "manual";
 
       // Duplicate detection
       let isDuplicate = false;
-      if (amount != null && occurred) {
+      if (!specialCat && amount != null && occurred) {
         if (isExpense) {
           let query = admin
             .from("financial_transactions")
@@ -1073,10 +1103,36 @@ async function runImportParse(
         }
       }
 
-      const finalStatus = isDuplicate ? "review" : status;
+      const finalStatus = specialCat ? status : (isDuplicate ? "review" : status);
 
       if (finalStatus === "matched") matched++;
       else if (finalStatus === "review") review++;
+
+      // Auto-apply if it is a fee or interest
+      if (autoApply && amount != null) {
+        const isExpense = specialCat === "TARIFA";
+        const category = isExpense ? "Despesa Empresa" : "Receita";
+        const { data: tx, error: txErr } = await admin
+          .from("financial_transactions")
+          .insert({
+            company_id: job.company_id,
+            type: isExpense ? "EXPENSE" : "INCOME",
+            category,
+            description: name, // "Tarifa Bancária" or "Juros Bancários"
+            amount: amount,
+            transaction_date: occurred ?? new Date().toISOString().slice(0, 10),
+            payment_method: paymentMethod ?? null,
+          })
+          .select("id")
+          .single();
+
+        if (!txErr && tx) {
+          autoApplyTxId = tx.id;
+          autoAppliedCount++;
+        } else {
+          console.error("Erro ao auto-aplicar transação especial:", txErr);
+        }
+      }
 
       // Retain only mapped columns for raw data
       const cleanRaw: Record<string, unknown> = {};
@@ -1087,42 +1143,60 @@ async function runImportParse(
         }
       }
 
-      const { error: rowErr } = await admin.from("import_rows").insert({
-        import_id,
-        company_id: job.company_id,
-        row_index: i,
-        raw: cleanRaw as never,
-        parsed: {
-          name,
-          phoneRaw: phoneRaw1,
-          phoneRaw2,
+      const { data: insertedRow, error: rowErr } = await admin
+        .from("import_rows")
+        .insert({
+          import_id,
+          company_id: job.company_id,
+          row_index: i,
+          raw: cleanRaw as never,
+          parsed: {
+            name,
+            phoneRaw: phoneRaw1,
+            phoneRaw2,
+            description,
+            amount,
+            occurred,
+            paymentMethod,
+            isExpense,
+            isDuplicate,
+            isInternalTransfer: specialCat === "INTERNA",
+            isBankFee: specialCat === "TARIFA",
+            isBankInterest: specialCat === "JUROS",
+            expenseScope: specialCat === "TARIFA" ? "empresa" : undefined,
+            revenueKindSet: specialCat === "JUROS" ? true : undefined,
+          } as never,
+          client_name: name || null,
+          client_phone: phoneApi,
+          client_phone2: phoneApi2,
           description,
           amount,
-          occurred,
-          paymentMethod,
-          isExpense,
-          isDuplicate,
-        } as never,
-        client_name: name || null,
-        client_phone: phoneApi,
-        client_phone2: phoneApi2,
-        description,
-        amount,
-        occurred_at: occurred,
-        payment_method: paymentMethod,
-        resolved_client_id: clientId,
-        resolved_offering_id: offeringId,
-        resolved_offering_kind: offeringKind,
-        confidence,
-        status: finalStatus,
-        notes: isDuplicate
-          ? "Possível duplicidade: já existe um lançamento com o mesmo valor e data."
-          : isExpense
-            ? "Despesa automática detectada"
-            : offeringLabel
-              ? `Sugestão: ${offeringLabel}`
-              : null,
-      });
+          occurred_at: occurred,
+          payment_method: paymentMethod,
+          resolved_client_id: clientId,
+          resolved_offering_id: offeringId,
+          resolved_offering_kind: offeringKind,
+          confidence,
+          status: finalStatus,
+          action_taken: autoApplyTxId ? (specialCat === "TARIFA" ? "create_expense" : "create_income") : null,
+          transaction_id: autoApplyTxId ?? null,
+          notes: specialCat === "INTERNA"
+            ? "Movimentação interna automática"
+            : specialCat === "TARIFA"
+              ? "Tarifa bancária automática"
+              : specialCat === "JUROS"
+                ? "Juros bancários automáticos"
+                : isDuplicate
+                  ? "Possível duplicidade: já existe um lançamento com o mesmo valor e data."
+                  : isExpense
+                    ? "Despesa automática detectada"
+                    : offeringLabel
+                      ? `Sugestão: ${offeringLabel}`
+                      : null,
+        })
+        .select("id")
+        .single();
+
       if (rowErr) {
         failed++;
         await admin.from("import_errors").insert({
@@ -1134,7 +1208,20 @@ async function runImportParse(
         continue;
       }
 
-      if (amount && status === "matched" && !isExpense) revenue += Number(amount);
+      if (autoApplyTxId && insertedRow) {
+        await admin.from("import_matches").insert({
+          import_id,
+          company_id: job.company_id,
+          row_id: insertedRow.id,
+          entity_type: "financial_transaction",
+          entity_id: autoApplyTxId,
+          confidence: 100,
+          reason: specialCat === "TARIFA" ? "created_expense" : "created_contribution",
+          action: "created",
+        });
+      }
+
+      if (amount && finalStatus === "matched" && !isExpense) revenue += Number(amount);
     }
 
     await admin
@@ -1146,6 +1233,7 @@ async function runImportParse(
         rows_review: review,
         rows_failed: failed,
         revenue_identified: revenue,
+        transactions_created: autoAppliedCount,
         finished_at: new Date().toISOString(),
       })
       .eq("id", import_id);
