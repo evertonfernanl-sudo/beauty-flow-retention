@@ -417,7 +417,31 @@ function ImportReview({ importId, status }: { importId: string; status: string }
     } catch (e) {
       toast.error("Erro ao alterar tipo: " + (e as Error).message);
       qc.invalidateQueries({ queryKey: ["sie-rows", importId] });
+  }
+
+  async function toggleIsContribution(row: Row) {
+    const currentParsed = row.parsed || {};
+    const nextIsContribution = !(currentParsed.isContribution ?? false);
+    const updatedParsed = { ...currentParsed, isContribution: nextIsContribution, isExpense: false };
+
+    qc.setQueryData(["sie-rows", importId], (old: Row[] | undefined) => {
+      if (!old) return [];
+      return old.map((item) => (item.id === row.id ? { ...item, parsed: updatedParsed } : item));
+    });
+
+    try {
+      const { error } = await supabase
+        .from("import_rows")
+        .update({ parsed: updatedParsed as any })
+        .eq("id", row.id);
+      if (error) throw error;
+      toast.success(`Lançamento alterado para ${nextIsContribution ? "Aporte" : "Receita"}`);
+    } catch (e) {
+      toast.error("Erro ao alterar tipo: " + (e as Error).message);
+      qc.invalidateQueries({ queryKey: ["sie-rows", importId] });
     }
+  }
+
   }
 
   if (status === "uploaded" || status === "processing") {
