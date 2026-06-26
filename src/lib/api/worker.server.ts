@@ -1151,12 +1151,18 @@ async function runImportApplyRow(
   const isContribution = !isExpense && Boolean(parsedObj.isContribution);
 
   if (isExpense || isContribution) {
+    const expenseScope = isExpense
+      ? (parsedObj.expenseScope === "pessoal" ? "Pessoal" : parsedObj.expenseScope === "empresa" ? "Empresa" : null)
+      : null;
+    const category = isExpense
+      ? expenseScope ? `Despesa ${expenseScope}` : "Despesa"
+      : "Aporte";
     const { data: tx, error: txErr } = await admin
       .from("financial_transactions")
       .insert({
         company_id: companyId,
         type: isExpense ? "EXPENSE" : "INCOME",
-        category: isExpense ? "Despesa" : "Aporte",
+        category,
         description:
           row.description ?? (isExpense ? "Despesa automática (import)" : "Aporte (import)"),
         amount: row.amount ?? 0,

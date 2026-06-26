@@ -33,6 +33,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 
 export const Route = createFileRoute("/_authenticated/app/sie")({
@@ -319,6 +326,10 @@ type Row = {
     isExpense?: boolean;
     isContribution?: boolean;
     isDuplicate?: boolean;
+    revenueKindSet?: boolean;
+    expenseScope?: "empresa" | "pessoal";
+    originalPayerName?: string;
+    clientIdOverride?: string;
   };
 
 };
@@ -351,6 +362,13 @@ function ImportReview({ importId, status }: { importId: string; status: string }
   const apply = useServerFn(applyImportRow);
   const applyBatch = useServerFn(applyImportBatch);
   const [busy, setBusy] = useState<string | null>(null);
+  const [pickerRow, setPickerRow] = useState<Row | null>(null);
+
+  function canConfirm(r: Row): boolean {
+    const p = r.parsed || {};
+    if (p.isExpense) return p.expenseScope === "empresa" || p.expenseScope === "pessoal";
+    return p.revenueKindSet === true;
+  }
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
 
   const rows = useQuery({
@@ -428,25 +446,92 @@ function ImportReview({ importId, status }: { importId: string; status: string }
     }
   }
 
-  async function toggleIsContribution(row: Row) {
+  async function setRevenueKind(row: Row, kind: "receita" | "aporte") {
     const currentParsed = row.parsed || {};
-    const nextIsContribution = !(currentParsed.isContribution ?? false);
-    const updatedParsed = { ...currentParsed, isContribution: nextIsContribution, isExpense: false };
-
+    const updatedParsed = {
+      ...currentParsed,
+      isExpense: false,
+      isContribution: kind === "aporte",
+      revenueKindSet: true,
+    };
     qc.setQueryData(["sie-rows", importId], (old: Row[] | undefined) => {
       if (!old) return [];
       return old.map((item) => (item.id === row.id ? { ...item, parsed: updatedParsed } : item));
     });
-
     try {
       const { error } = await supabase
         .from("import_rows")
         .update({ parsed: updatedParsed as any })
         .eq("id", row.id);
       if (error) throw error;
-      toast.success(`Lançamento alterado para ${nextIsContribution ? "Aporte" : "Receita"}`);
+      toast.success(`Lançamento definido como ${kind === "aporte" ? "Aporte" : "Receita"}`);
     } catch (e) {
       toast.error("Erro ao alterar tipo: " + (e as Error).message);
+      qc.invalidateQueries({ queryKey: ["sie-rows", importId] });
+    }
+  }
+
+  async function setExpenseScope(row: Row, scope: "empresa" | "pessoal") {
+    const currentParsed = row.parsed || {};
+    const updatedParsed = { ...currentParsed, expenseScope: scope, isExpense: true };
+    qc.setQueryData(["sie-rows", importId], (old: Row[] | undefined) => {
+      if (!old) return [];
+      return old.map((item) => (item.id === row.id ? { ...item, parsed: updatedParsed } : item));
+    });
+    try {
+      const { error } = await supabase
+        .from("import_rows")
+        .update({ parsed: updatedParsed as any })
+        .eq("id", row.id);
+      if (error) throw error;
+      toast.success(`Despesa classificada como ${scope === "empresa" ? "Empresa" : "Pessoal"}`);
+    } catch (e) {
+      toast.error("Erro ao classificar despesa: " + (e as Error).message);
+      qc.invalidateQueries({ queryKey: ["sie-rows", importId] });
+    }
+  }
+
+  async function setClientOverride(
+    row: Row,
+    client: { id: string; name: string; phone: string | null },
+  ) {
+    const currentParsed = row.parsed || {};
+    const originalPayerName = currentParsed.originalPayerName ?? row.client_name ?? "";
+    const updatedParsed = {
+      ...currentParsed,
+      originalPayerName,
+      clientIdOverride: client.id,
+    };
+    qc.setQueryData(["sie-rows", importId], (old: Row[] | undefined) => {
+      if (!old) return [];
+      return old.map((item) =>
+        item.id === row.id
+          ? {
+              ...item,
+              client_name: client.name,
+              client_phone: client.phone,
+              parsed: updatedParsed,
+              notes: originalPayerName ? `Pagador: ${originalPayerName}` : item.notes,
+            }
+          : item,
+      );
+    });
+    try {
+      const { error } = await supabase
+        .from("import_rows")
+        .update({
+          parsed: updatedParsed as any,
+          client_name: client.name,
+          client_phone: client.phone,
+          resolved_client_id: client.id,
+          notes: originalPayerName ? `Pagador: ${originalPayerName}` : null,
+          status: "matched",
+        })
+        .eq("id", row.id);
+      if (error) throw error;
+      toast.success(`Cliente associado: ${client.name}`);
+    } catch (e) {
+      toast.error("Erro ao associar cliente: " + (e as Error).message);
       qc.invalidateQueries({ queryKey: ["sie-rows", importId] });
     }
   }
@@ -605,7 +690,26 @@ function ImportReview({ importId, status }: { importId: string; status: string }
                       </div>
                     )}
                   </td>
-                  <td className="p-1 font-medium">{r.client_name || "—"}</td>
+                  <td className="p-1 font-medium">
+                    {r.status !== "applied" && r.status !== "skipped" ? (
+                      <button
+                        type="button"
+                        onClick={() => setPickerRow(r)}
+                        className="text-left hover:text-primary hover:underline underline-offset-2 transition-colors"
+                        title="Tocar para associar a outro cliente"
+                      >
+                        {r.client_name || "— associar cliente"}
+                      </button>
+                    ) : (
+                      <span>{r.client_name || "—"}</span>
+                    )}
+                    {r.parsed?.originalPayerName &&
+                      r.parsed.originalPayerName !== r.client_name && (
+                        <div className="text-[10px] text-muted-foreground italic mt-0.5">
+                          Pagador: {r.parsed.originalPayerName}
+                        </div>
+                      )}
+                  </td>
                   <td className="p-1 tabular-nums">
                     {r.client_phone ? formatPhoneBR(r.client_phone) : "—"}
                   </td>
@@ -647,17 +751,50 @@ function ImportReview({ importId, status }: { importId: string; status: string }
                           {isExpense ? "Despesa" : "Receita"}
                         </Label>
                       </div>
-                      {!isExpense && (
+                      {isExpense ? (
                         <Select
-                          value={isContribution ? "aporte" : "receita"}
-                          onValueChange={(v) => {
-                            const next = v === "aporte";
-                            if (next !== isContribution) toggleIsContribution(r);
-                          }}
+                          value={r.parsed?.expenseScope ?? ""}
+                          onValueChange={(v) =>
+                            setExpenseScope(r, v as "empresa" | "pessoal")
+                          }
                           disabled={rowLocked}
                         >
-                          <SelectTrigger className="h-6 text-[10px] px-2 py-0 w-[88px]">
-                            <SelectValue />
+                          <SelectTrigger
+                            className={`h-6 text-[10px] px-2 py-0 w-[96px] ${
+                              !r.parsed?.expenseScope ? "border-amber-400" : ""
+                            }`}
+                          >
+                            <SelectValue placeholder="Selecionar" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="empresa" className="text-[11px]">
+                              Empresa
+                            </SelectItem>
+                            <SelectItem value="pessoal" className="text-[11px]">
+                              Pessoal
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Select
+                          value={
+                            r.parsed?.revenueKindSet
+                              ? r.parsed?.isContribution
+                                ? "aporte"
+                                : "receita"
+                              : ""
+                          }
+                          onValueChange={(v) =>
+                            setRevenueKind(r, v as "receita" | "aporte")
+                          }
+                          disabled={rowLocked}
+                        >
+                          <SelectTrigger
+                            className={`h-6 text-[10px] px-2 py-0 w-[96px] ${
+                              !r.parsed?.revenueKindSet ? "border-amber-400" : ""
+                            }`}
+                          >
+                            <SelectValue placeholder="Selecionar" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="receita" className="text-[11px]">
@@ -693,9 +830,15 @@ function ImportReview({ importId, status }: { importId: string; status: string }
                               ? "bg-amber-500 text-white hover:bg-amber-600 shadow-sm"
                               : "hover:bg-primary/10 hover:text-primary"
                           }
-                          disabled={busy !== null}
+                          disabled={busy !== null || !canConfirm(r)}
                           onClick={() => approve(r.id)}
-                          title="Confirmar lançamento"
+                          title={
+                            canConfirm(r)
+                              ? "Confirmar lançamento"
+                              : isExpense
+                                ? "Selecione Empresa ou Pessoal"
+                                : "Selecione Receita ou Aporte"
+                          }
                         >
                           {busy === r.id ? (
                             <Loader2 className="h-3 w-3 animate-spin" />
@@ -726,7 +869,92 @@ function ImportReview({ importId, status }: { importId: string; status: string }
           </tbody>
         </table>
       </div>
+      <ClientPickerDialog
+        row={pickerRow}
+        onClose={() => setPickerRow(null)}
+        onPick={(client) => {
+          if (pickerRow) setClientOverride(pickerRow, client);
+          setPickerRow(null);
+        }}
+      />
     </div>
+  );
+}
+
+function ClientPickerDialog({
+  row,
+  onClose,
+  onPick,
+}: {
+  row: Row | null;
+  onClose: () => void;
+  onPick: (client: { id: string; name: string; phone: string | null }) => void;
+}) {
+  const profile = useCurrentProfile().data;
+  const companyId = profile?.company?.id;
+  const [search, setSearch] = useState("");
+
+  const clients = useQuery({
+    enabled: !!companyId && !!row,
+    queryKey: ["sie-client-picker", companyId, search],
+    queryFn: async () => {
+      let q = supabase
+        .from("clients")
+        .select("id, name, phone")
+        .eq("company_id", companyId!)
+        .order("name", { ascending: true })
+        .limit(50);
+      if (search.trim()) q = q.ilike("name", `%${search.trim()}%`);
+      const { data, error } = await q;
+      if (error) throw error;
+      return (data ?? []) as Array<{ id: string; name: string; phone: string | null }>;
+    },
+  });
+
+  return (
+    <Dialog open={!!row} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Associar cliente</DialogTitle>
+        </DialogHeader>
+        {row?.parsed?.originalPayerName || row?.client_name ? (
+          <p className="text-xs text-muted-foreground -mt-2">
+            Pagador no extrato:{" "}
+            <strong>{row?.parsed?.originalPayerName ?? row?.client_name}</strong> — será mantido
+            como anotação.
+          </p>
+        ) : null}
+        <Input
+          autoFocus
+          placeholder="Buscar cliente por nome…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <div className="max-h-80 overflow-y-auto divide-y border rounded-md">
+          {clients.isLoading ? (
+            <div className="p-3 text-sm text-muted-foreground">Carregando…</div>
+          ) : (clients.data ?? []).length === 0 ? (
+            <div className="p-3 text-sm text-muted-foreground">Nenhum cliente encontrado.</div>
+          ) : (
+            (clients.data ?? []).map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => onPick(c)}
+                className="w-full text-left px-3 py-2 hover:bg-muted/60 transition-colors"
+              >
+                <div className="font-medium text-sm">{c.name}</div>
+                {c.phone && (
+                  <div className="text-xs text-muted-foreground tabular-nums">
+                    {formatPhoneBR(c.phone)}
+                  </div>
+                )}
+              </button>
+            ))
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
