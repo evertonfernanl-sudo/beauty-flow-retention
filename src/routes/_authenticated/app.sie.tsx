@@ -362,6 +362,13 @@ function ImportReview({ importId, status }: { importId: string; status: string }
   const apply = useServerFn(applyImportRow);
   const applyBatch = useServerFn(applyImportBatch);
   const [busy, setBusy] = useState<string | null>(null);
+  const [pickerRow, setPickerRow] = useState<Row | null>(null);
+
+  function canConfirm(r: Row): boolean {
+    const p = r.parsed || {};
+    if (p.isExpense) return p.expenseScope === "empresa" || p.expenseScope === "pessoal";
+    return p.revenueKindSet === true;
+  }
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
 
   const rows = useQuery({
