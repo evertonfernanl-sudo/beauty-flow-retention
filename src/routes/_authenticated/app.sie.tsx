@@ -26,6 +26,14 @@ import { formatPhoneBR } from "@/lib/phone";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
 
 export const Route = createFileRoute("/_authenticated/app/sie")({
   head: () => ({ meta: [{ title: "Importar Dados · BeautyFlow" }] }),
@@ -309,8 +317,10 @@ type Row = {
     occurred?: string;
     paymentMethod?: string;
     isExpense?: boolean;
+    isContribution?: boolean;
     isDuplicate?: boolean;
   };
+
 };
 
 function RowStatusBadge({ status, isDuplicate }: { status: string; isDuplicate?: boolean }) {
@@ -417,6 +427,30 @@ function ImportReview({ importId, status }: { importId: string; status: string }
       qc.invalidateQueries({ queryKey: ["sie-rows", importId] });
     }
   }
+
+  async function toggleIsContribution(row: Row) {
+    const currentParsed = row.parsed || {};
+    const nextIsContribution = !(currentParsed.isContribution ?? false);
+    const updatedParsed = { ...currentParsed, isContribution: nextIsContribution, isExpense: false };
+
+    qc.setQueryData(["sie-rows", importId], (old: Row[] | undefined) => {
+      if (!old) return [];
+      return old.map((item) => (item.id === row.id ? { ...item, parsed: updatedParsed } : item));
+    });
+
+    try {
+      const { error } = await supabase
+        .from("import_rows")
+        .update({ parsed: updatedParsed as any })
+        .eq("id", row.id);
+      if (error) throw error;
+      toast.success(`Lançamento alterado para ${nextIsContribution ? "Aporte" : "Receita"}`);
+    } catch (e) {
+      toast.error("Erro ao alterar tipo: " + (e as Error).message);
+      qc.invalidateQueries({ queryKey: ["sie-rows", importId] });
+    }
+  }
+
 
   if (status === "uploaded" || status === "processing") {
     return (
@@ -540,6 +574,9 @@ function ImportReview({ importId, status }: { importId: string; status: string }
           <tbody>
             {(rows.data ?? []).map((r) => {
               const isExpense = r.parsed?.isExpense ?? false;
+              const isContribution = r.parsed?.isContribution ?? false;
+              const rowLocked = r.status === "applied" || r.status === "skipped" || busy != null;
+
               return (
                 <tr
                   key={r.id}
@@ -593,23 +630,48 @@ function ImportReview({ importId, status }: { importId: string; status: string }
                     )}
                   </td>
                   <td className="p-1">
-                    <div className="flex items-center gap-1.5">
-                      <Switch
-                        id={`type-switch-${r.id}`}
-                        checked={isExpense}
-                        onCheckedChange={() => toggleIsExpense(r)}
-                        disabled={r.status === "applied" || r.status === "skipped" || busy != null}
-                      />
-                      <Label
-                        htmlFor={`type-switch-${r.id}`}
-                        className={`text-[10px] font-semibold cursor-pointer select-none transition-colors ${
-                          isExpense ? "text-rose-500" : "text-emerald-500"
-                        }`}
-                      >
-                        {isExpense ? "Despesa" : "Receita"}
-                      </Label>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-1.5">
+                        <Switch
+                          id={`type-switch-${r.id}`}
+                          checked={isExpense}
+                          onCheckedChange={() => toggleIsExpense(r)}
+                          disabled={rowLocked}
+                        />
+                        <Label
+                          htmlFor={`type-switch-${r.id}`}
+                          className={`text-[10px] font-semibold cursor-pointer select-none transition-colors ${
+                            isExpense ? "text-rose-500" : "text-emerald-500"
+                          }`}
+                        >
+                          {isExpense ? "Despesa" : "Receita"}
+                        </Label>
+                      </div>
+                      {!isExpense && (
+                        <Select
+                          value={isContribution ? "aporte" : "receita"}
+                          onValueChange={(v) => {
+                            const next = v === "aporte";
+                            if (next !== isContribution) toggleIsContribution(r);
+                          }}
+                          disabled={rowLocked}
+                        >
+                          <SelectTrigger className="h-6 text-[10px] px-2 py-0 w-[88px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="receita" className="text-[11px]">
+                              Receita
+                            </SelectItem>
+                            <SelectItem value="aporte" className="text-[11px]">
+                              Aporte
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
                     </div>
                   </td>
+
                   <td className="p-1 text-right tabular-nums">
                     {r.amount != null ? `R$ ${Number(r.amount).toFixed(2)}` : "—"}
                   </td>

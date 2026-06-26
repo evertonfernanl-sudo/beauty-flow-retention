@@ -1142,18 +1142,23 @@ async function runImportApplyRow(
 
   const companyId = row.company_id as string;
 
+  const parsedObj =
+    row.parsed && typeof row.parsed === "object" ? (row.parsed as any) : {};
   const isExpense =
-    row.parsed && typeof row.parsed === "object" && "isExpense" in (row.parsed as any)
-      ? (row.parsed as any).isExpense
+    "isExpense" in parsedObj
+      ? Boolean(parsedObj.isExpense)
       : isExpenseDescription(row.description) || (row.amount != null && row.amount < 0);
-  if (isExpense) {
+  const isContribution = !isExpense && Boolean(parsedObj.isContribution);
+
+  if (isExpense || isContribution) {
     const { data: tx, error: txErr } = await admin
       .from("financial_transactions")
       .insert({
         company_id: companyId,
-        type: "EXPENSE",
-        category: "Despesa",
-        description: row.description ?? "Despesa automática (import)",
+        type: isExpense ? "EXPENSE" : "INCOME",
+        category: isExpense ? "Despesa" : "Aporte",
+        description:
+          row.description ?? (isExpense ? "Despesa automática (import)" : "Aporte (import)"),
         amount: row.amount ?? 0,
         transaction_date: row.occurred_at ?? new Date().toISOString().slice(0, 10),
         payment_method: row.payment_method ?? null,
@@ -1167,7 +1172,7 @@ async function runImportApplyRow(
       .from("import_rows")
       .update({
         status: "applied",
-        action_taken: "create_expense",
+        action_taken: isExpense ? "create_expense" : "create_contribution",
         transaction_id: transactionId,
       })
       .eq("id", row_id);
@@ -1179,7 +1184,7 @@ async function runImportApplyRow(
       entity_type: "financial_transaction",
       entity_id: transactionId,
       confidence: row.confidence,
-      reason: "created_expense",
+      reason: isExpense ? "created_expense" : "created_contribution",
       action: "created",
     });
 
@@ -1199,6 +1204,7 @@ async function runImportApplyRow(
 
     return { transactionId };
   }
+
 
   let clientId: string | null = row.resolved_client_id;
   let createdClient = false;
