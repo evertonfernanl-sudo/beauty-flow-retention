@@ -439,25 +439,92 @@ function ImportReview({ importId, status }: { importId: string; status: string }
     }
   }
 
-  async function toggleIsContribution(row: Row) {
+  async function setRevenueKind(row: Row, kind: "receita" | "aporte") {
     const currentParsed = row.parsed || {};
-    const nextIsContribution = !(currentParsed.isContribution ?? false);
-    const updatedParsed = { ...currentParsed, isContribution: nextIsContribution, isExpense: false };
-
+    const updatedParsed = {
+      ...currentParsed,
+      isExpense: false,
+      isContribution: kind === "aporte",
+      revenueKindSet: true,
+    };
     qc.setQueryData(["sie-rows", importId], (old: Row[] | undefined) => {
       if (!old) return [];
       return old.map((item) => (item.id === row.id ? { ...item, parsed: updatedParsed } : item));
     });
-
     try {
       const { error } = await supabase
         .from("import_rows")
         .update({ parsed: updatedParsed as any })
         .eq("id", row.id);
       if (error) throw error;
-      toast.success(`Lançamento alterado para ${nextIsContribution ? "Aporte" : "Receita"}`);
+      toast.success(`Lançamento definido como ${kind === "aporte" ? "Aporte" : "Receita"}`);
     } catch (e) {
       toast.error("Erro ao alterar tipo: " + (e as Error).message);
+      qc.invalidateQueries({ queryKey: ["sie-rows", importId] });
+    }
+  }
+
+  async function setExpenseScope(row: Row, scope: "empresa" | "pessoal") {
+    const currentParsed = row.parsed || {};
+    const updatedParsed = { ...currentParsed, expenseScope: scope, isExpense: true };
+    qc.setQueryData(["sie-rows", importId], (old: Row[] | undefined) => {
+      if (!old) return [];
+      return old.map((item) => (item.id === row.id ? { ...item, parsed: updatedParsed } : item));
+    });
+    try {
+      const { error } = await supabase
+        .from("import_rows")
+        .update({ parsed: updatedParsed as any })
+        .eq("id", row.id);
+      if (error) throw error;
+      toast.success(`Despesa classificada como ${scope === "empresa" ? "Empresa" : "Pessoal"}`);
+    } catch (e) {
+      toast.error("Erro ao classificar despesa: " + (e as Error).message);
+      qc.invalidateQueries({ queryKey: ["sie-rows", importId] });
+    }
+  }
+
+  async function setClientOverride(
+    row: Row,
+    client: { id: string; name: string; phone: string | null },
+  ) {
+    const currentParsed = row.parsed || {};
+    const originalPayerName = currentParsed.originalPayerName ?? row.client_name ?? "";
+    const updatedParsed = {
+      ...currentParsed,
+      originalPayerName,
+      clientIdOverride: client.id,
+    };
+    qc.setQueryData(["sie-rows", importId], (old: Row[] | undefined) => {
+      if (!old) return [];
+      return old.map((item) =>
+        item.id === row.id
+          ? {
+              ...item,
+              client_name: client.name,
+              client_phone: client.phone,
+              parsed: updatedParsed,
+              notes: originalPayerName ? `Pagador: ${originalPayerName}` : item.notes,
+            }
+          : item,
+      );
+    });
+    try {
+      const { error } = await supabase
+        .from("import_rows")
+        .update({
+          parsed: updatedParsed as any,
+          client_name: client.name,
+          client_phone: client.phone,
+          resolved_client_id: client.id,
+          notes: originalPayerName ? `Pagador: ${originalPayerName}` : null,
+          status: "matched",
+        })
+        .eq("id", row.id);
+      if (error) throw error;
+      toast.success(`Cliente associado: ${client.name}`);
+    } catch (e) {
+      toast.error("Erro ao associar cliente: " + (e as Error).message);
       qc.invalidateQueries({ queryKey: ["sie-rows", importId] });
     }
   }
