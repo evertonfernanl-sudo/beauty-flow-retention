@@ -536,25 +536,95 @@ function detectPaymentMethod(desc: string | null | undefined): string | null {
 }
 
 function parsePdfTextToRows(text: string): { headers: string[]; rows: Record<string, unknown>[] } {
-  const lines = text
-    .split(/\r?\n/)
+  // 1. Extração / Normalização inicial das linhas
+  const rawLines = text.split(/\r?\n/);
+  const normalizedLines = rawLines
     .map((l) => l.replace(/\s+/g, " ").trim())
     .filter(Boolean);
-  if (lines.length === 0) return { headers: [], rows: [] };
+  
+  if (normalizedLines.length === 0) {
+    return { headers: [], rows: [] };
+  }
 
-  const headers = ["data", "descricao", "valor"];
-  const rows: Record<string, unknown>[] = [];
+  // 2. Limpeza do conteúdo (remover cabeçalhos, rodapés, saldos, resumos, CNPJ, etc.)
+  const isNoiseOrBalanceLine = (line: string): boolean => {
+    const l = line.toLowerCase().trim();
+    
+    // Expressões para detectar termos de saldos ou informações consolidadas de cabeçalho/rodapé
+    const balancePatterns = [
+      /\b(saldo anterior|saldo atual|saldo do dia|saldo disponível|saldo em conta|saldos diários|saldo final|saldo c\/c|saldo d\/c|saldo de transações|resumo do dia|total de débitos|total de créditos|total de saídas|total de entradas|saldo consolidado|limite contratado|limite cheque especial|resumo do período|resumo do periodo)\b/i,
+      /\b(extrato de conta|extrato consolidado|extrato período|período de|folha|página|pagina|cnpj|demonstrativo de tarifas|extrato de movimentações|extrato mensal)\b/i,
+      /^(agência|agencia|conta corrente|conta poupança|conta poupanca|nº da conta|agência\/conta|agencia\/conta|agência e conta)\s*(:|-)?\s*\d+/i
+    ];
+    
+    return balancePatterns.some((pattern) => pattern.test(l));
+  };
 
+  const cleanedLines = normalizedLines.filter((line) => !isNoiseOrBalanceLine(line));
+
+  // 3. Definição das Expressões Regulares de Data
   const fullDateRe = /\b(0?[1-9]|[12]\d|3[01])[\/\-](0?[1-9]|1[0-2])[\/\-](\d{2,4})\b/;
   const isoDateRe = /\b(\d{4})-(0?[1-9]|1[0-2])-(0?[1-9]|[12]\d|3[01])\b/;
   const dayMonthRe = /\b(0?[1-9]|[12]\d|3[01])[\/\-](0?[1-9]|1[0-2])\b/;
 
-  // Check if description is a balance row or header/footer noise
-  const isBalanceOrNoise = (desc: string): boolean => {
+  const findDateInLine = (line: string): { dateStr: string; dateRaw: string } | null => {
+    let match = line.match(isoDateRe);
+    if (match) return { dateStr: match[0], dateRaw: match[0] };
+    
+    match = line.match(fullDateRe);
+    if (match) return { dateStr: match[0], dateRaw: match[0] };
+    
+    match = line.match(dayMonthRe);
+    if (match) {
+      const currentYear = new Date().getFullYear();
+      return { dateStr: `${match[0]}/${currentYear}`, dateRaw: match[0] };
+    }
+    
+    return null;
+  };
+
+  // 4. Identificação e agrupamento das movimentações por blocos de data (suporta descrições multilinhas)
+  interface RawTx {
+    date: string;
+    dateRaw: string;
+    lines: string[];
+  }
+
+  const txBlocks: RawTx[] = [];
+  let currentTx: RawTx | null = null;
+
+  for (const line of cleanedLines) {
+    const dateInfo = findDateInLine(line);
+    if (dateInfo) {
+      if (currentTx) {
+        txBlocks.push(currentTx);
+      }
+      currentTx = {
+        date: dateInfo.dateStr,
+        dateRaw: dateInfo.dateRaw,
+        lines: [line],
+      };
+    } else {
+      if (currentTx) {
+        currentTx.lines.push(line);
+      }
+    }
+  }
+  if (currentTx) {
+    txBlocks.push(currentTx);
+  }
+
+  // 5. Conversão das movimentações para dados estruturados
+  const headers = ["data", "descricao", "valor"];
+  const rows: Record<string, unknown>[] = [];
+
+  const amountRe = /(-?\s*R?\$?\s*\d+(?:\.\d{3})*,\d{2}(?:\s*[DdCc\-\+])?|-?\s*R?\$?\s*\d+\.\d{2}(?:\s*[DdCc\-\+])?)/g;
+
+  // Check if description is a balance row or noise
+  const isBalanceOrNoiseDescription = (desc: string): boolean => {
     const d = desc.toLowerCase().trim();
     if (!d) return true;
     
-    // Exact balance keywords or other metadata we should ignore
     const patterns = [
       /^(saldo|saldo anterior|saldo atual|saldo do dia|saldo disponível|saldo em conta|saldos diários|saldo final|saldo c\/c|saldo d\/c|saldo de transações|total|total de débitos|total de créditos|subtotal|limite|limite contratado|resumo do dia)$/i,
       /^(extrato de conta|extrato consolidado|extrato período|período de|folha|página|pagina|cnpj|demonstrativo de tarifas|extrato de movimentações)$/i,
@@ -564,53 +634,32 @@ function parsePdfTextToRows(text: string): { headers: string[]; rows: Record<str
     return patterns.some(p => p.test(d));
   };
 
-  for (const line of lines) {
-    // 1) Find Date
-    let dateStr = "";
-    let dateRaw = "";
-    
-    let dateMatch = line.match(isoDateRe);
-    if (dateMatch) {
-      dateStr = dateMatch[0];
-      dateRaw = dateMatch[0];
-    } else {
-      dateMatch = line.match(fullDateRe);
-      if (dateMatch) {
-        dateStr = dateMatch[0];
-        dateRaw = dateMatch[0];
-      } else {
-        dateMatch = line.match(dayMonthRe);
-        if (dateMatch) {
-          const currentYear = new Date().getFullYear();
-          dateStr = `${dateMatch[0]}/${currentYear}`;
-          dateRaw = dateMatch[0];
-        }
-      }
-    }
+  for (const tx of txBlocks) {
+    const blockText = tx.lines.join(" ");
 
-    if (!dateStr) continue;
-
-    // 2) Find Amount (only in the part before the word 'saldo' to avoid picking up the balance)
-    const parts = line.split(/saldo/i);
+    // Se houver a palavra 'saldo' no texto do bloco, corta ali para evitar pegar o saldo final da linha
+    const parts = blockText.split(/saldo/i);
     const textToSearch = parts[0];
 
-    const amountRe = /(-?\s*R?\$?\s*\d+(?:\.\d{3})*,\d{2}(?:\s*[DdCc\-\+])?|-?\s*R?\$?\s*\d+\.\d{2}(?:\s*[DdCc\-\+])?)/g;
     const amountMatches = [...textToSearch.matchAll(amountRe)];
-    if (amountMatches.length === 0) continue;
+    if (amountMatches.length === 0) {
+      // Movimentação incompleta (sem valor): ignorar
+      continue;
+    }
 
-    // Take the last match in the pre-saldo text, which is typically the transaction amount
+    // O valor monetário da transação é o último match do bloco (antes de 'saldo')
     const amountRaw = amountMatches[amountMatches.length - 1][0];
     
-    // Determine sign
+    // Determinar sinal (débito ou negativo)
     let isNegative = false;
     if (amountRaw.includes("-") || /d/i.test(amountRaw)) {
       isNegative = true;
     }
 
-    // Clean the numbers
+    // Limpar o valor
     let cleanAmount = amountRaw
-      .replace(/R?\$?\s*/gi, "") // remove currency symbol
-      .replace(/[-+DcDdCc]/g, "") // remove sign and debit/credit indicator
+      .replace(/R?\$?\s*/gi, "") // remove moeda
+      .replace(/[-+DcDdCc]/g, "") // remove sinal e indicador
       .trim();
 
     if (cleanAmount.includes(",")) {
@@ -618,33 +667,37 @@ function parsePdfTextToRows(text: string): { headers: string[]; rows: Record<str
     }
 
     const amountVal = parseFloat(cleanAmount);
-    if (isNaN(amountVal)) continue;
+    if (isNaN(amountVal)) {
+      // Incompleto/Inválido: ignorar
+      continue;
+    }
 
     const finalVal = isNegative ? -Math.abs(amountVal) : amountVal;
     
-    // Format back to Brazilian style for CSV compatibility (or standard string decimal)
-    // E.g. "150,00" or "-150,00"
+    // Formatando de volta para o padrão pt-BR (ex: "-150,00")
     const amountStr = finalVal.toLocaleString("pt-BR", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
 
-    // 3) Clean Description: remove date and amount strings from line
-    let description = line;
-    description = description.replace(dateRaw, " ");
+    // Limpar a descrição removendo a data e o valor do texto original
+    let description = blockText;
+    description = description.replace(tx.dateRaw, " ");
     description = description.replace(amountRaw, " ");
     description = description
       .replace(/R\$\s*/gi, " ")
       .replace(/\s+/g, " ")
       .trim();
 
-    // Check if the remaining description is a balance row or noise
-    if (isBalanceOrNoise(description)) continue;
+    // Validar se sobrou uma descrição válida que não seja saldo/ruído
+    if (isBalanceOrNoiseDescription(description)) {
+      continue;
+    }
 
     rows.push({
-      data: dateStr,
+      data: tx.date,
       descricao: description,
-      valor: amountStr
+      valor: amountStr,
     });
   }
 
