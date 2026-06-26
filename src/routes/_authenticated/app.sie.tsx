@@ -417,6 +417,7 @@ function ImportReview({ importId, status }: { importId: string; status: string }
     } catch (e) {
       toast.error("Erro ao alterar tipo: " + (e as Error).message);
       qc.invalidateQueries({ queryKey: ["sie-rows", importId] });
+    }
   }
 
   async function toggleIsContribution(row: Row) {
@@ -442,7 +443,6 @@ function ImportReview({ importId, status }: { importId: string; status: string }
     }
   }
 
-  }
 
   if (status === "uploaded" || status === "processing") {
     return (
