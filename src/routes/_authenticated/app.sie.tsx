@@ -622,23 +622,48 @@ function ImportReview({ importId, status }: { importId: string; status: string }
                     )}
                   </td>
                   <td className="p-1">
-                    <div className="flex items-center gap-1.5">
-                      <Switch
-                        id={`type-switch-${r.id}`}
-                        checked={isExpense}
-                        onCheckedChange={() => toggleIsExpense(r)}
-                        disabled={r.status === "applied" || r.status === "skipped" || busy != null}
-                      />
-                      <Label
-                        htmlFor={`type-switch-${r.id}`}
-                        className={`text-[10px] font-semibold cursor-pointer select-none transition-colors ${
-                          isExpense ? "text-rose-500" : "text-emerald-500"
-                        }`}
-                      >
-                        {isExpense ? "Despesa" : "Receita"}
-                      </Label>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-1.5">
+                        <Switch
+                          id={`type-switch-${r.id}`}
+                          checked={isExpense}
+                          onCheckedChange={() => toggleIsExpense(r)}
+                          disabled={rowLocked}
+                        />
+                        <Label
+                          htmlFor={`type-switch-${r.id}`}
+                          className={`text-[10px] font-semibold cursor-pointer select-none transition-colors ${
+                            isExpense ? "text-rose-500" : "text-emerald-500"
+                          }`}
+                        >
+                          {isExpense ? "Despesa" : "Receita"}
+                        </Label>
+                      </div>
+                      {!isExpense && (
+                        <Select
+                          value={isContribution ? "aporte" : "receita"}
+                          onValueChange={(v) => {
+                            const next = v === "aporte";
+                            if (next !== isContribution) toggleIsContribution(r);
+                          }}
+                          disabled={rowLocked}
+                        >
+                          <SelectTrigger className="h-6 text-[10px] px-2 py-0 w-[88px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="receita" className="text-[11px]">
+                              Receita
+                            </SelectItem>
+                            <SelectItem value="aporte" className="text-[11px]">
+                              Aporte
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
                     </div>
                   </td>
+
                   <td className="p-1 text-right tabular-nums">
                     {r.amount != null ? `R$ ${Number(r.amount).toFixed(2)}` : "—"}
                   </td>
