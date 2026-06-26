@@ -566,6 +566,9 @@ function ImportReview({ importId, status }: { importId: string; status: string }
           <tbody>
             {(rows.data ?? []).map((r) => {
               const isExpense = r.parsed?.isExpense ?? false;
+              const isContribution = r.parsed?.isContribution ?? false;
+              const rowLocked = r.status === "applied" || r.status === "skipped" || busy != null;
+
               return (
                 <tr
                   key={r.id}
