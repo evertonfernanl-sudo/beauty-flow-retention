@@ -738,6 +738,86 @@ function normalizeAndMapHeaders(rawHeaders: string[]): string[] {
   });
 }
 
+function matchSpecialTransaction(desc: string | null | undefined): "APLICACAO" | "RESGATE" | "INTERNA" | "TARIFA" | "JUROS" | null {
+  if (!desc) return null;
+  const s = desc.toLowerCase().trim();
+  
+  const aplicacaoKeywords = [
+    "aplicacao", "aplicação", "dinheiro aplicado", "guardar na caixinha", 
+    "guardar dinheiro", "investimento automatico", "investimento automático", 
+    "transferencia para cofrinho", "transferência para cofrinho",
+    "transferencia para investimento", "transferência para investimento", 
+    "mover para reserva", "saldo aplicado", "aplicacao poupanca", "aplicação poupança", 
+    "aplicacao investimento", "aplicação investimento", "debit investment", 
+    "investment deposit", "funds allocation", "cash allocation", "aplicacao cdb", 
+    "aplicação cdb", "aplicacao rdb", "aplicação rdb", "aplicacao fundos", "aplicação fundos",
+    "aplicacao renda fixa", "aplicação renda fixa"
+  ];
+  if (aplicacaoKeywords.some(kw => s.includes(kw))) {
+    return "APLICACAO";
+  }
+  
+  const resgateKeywords = [
+    "resgate", "dinheiro retirado", "retirado da caixinha", "retirada do cofrinho", 
+    "retirada caixinha", "transferencia da reserva", "transferência da reserva", 
+    "resgate automatico", "resgate automático", "resgate rdb", "resgate cdb", 
+    "resgate caixinha"
+  ];
+  if (resgateKeywords.some(kw => s.includes(kw))) {
+    return "RESGATE";
+  }
+  
+  const internaKeywords = [
+    "transferencia entre contas", "transferência entre contas", 
+    "movimentacao interna", "movimentação interna", 
+    "transferencia interna", "transferência interna", 
+    "mesmo titular", "transf entre contas", "transf. entre contas"
+  ];
+  if (internaKeywords.some(kw => s.includes(kw))) {
+    return "INTERNA";
+  }
+  
+  const tarifaKeywords = [
+    "tarifa", "taxa", "mensalidade", "pacote de servicos", "pacote de serviços", 
+    "anuidade", "tarifa pix", "tarifa ted", "tarifa doc", "custo de transacao", 
+    "custo de transação", "debit fee", "bank fee"
+  ];
+  if (tarifaKeywords.some(kw => s.includes(kw))) {
+    return "TARIFA";
+  }
+  
+  const jurosKeywords = [
+    "juros", "rendimento", "remuneracao", "remuneração", "juros sobre capital", 
+    "rendimentos caixinha", "receita de juros", "rendimento caixinha", 
+    "rendimento conta", "interest earned"
+  ];
+  if (jurosKeywords.some(kw => s.includes(kw))) {
+    return "JUROS";
+  }
+  
+  return null;
+}
+
+function inferBankName(filename: string | null | undefined, description: string | null | undefined): string {
+  const name = (filename ?? "").toLowerCase();
+  const desc = (description ?? "").toLowerCase();
+  
+  if (name.includes("itau") || name.includes("itaú") || desc.includes("itau") || desc.includes("itaú")) return "Itaú";
+  if (name.includes("nubank") || name.includes("nu ") || name.includes("nu_") || desc.includes("nubank")) return "Nubank";
+  if (name.includes("bradesco") || desc.includes("bradesco")) return "Bradesco";
+  if (name.includes("inter") || desc.includes("inter")) return "Banco Inter";
+  if (name.includes("santander") || desc.includes("santander")) return "Santander";
+  if (name.includes("caixa") || name.includes("cef") || desc.includes("caixa") || desc.includes("cef")) return "Caixa Econômica";
+  if (name.includes("brasil") || name.includes("bb") || desc.includes("brasil") || desc.includes("bb")) return "Banco do Brasil";
+  if (name.includes("c6") || desc.includes("c6")) return "C6 Bank";
+  if (name.includes("stone") || desc.includes("stone")) return "Stone";
+  if (name.includes("pagseguro") || name.includes("pagbank") || desc.includes("pagseguro") || desc.includes("pagbank")) return "PagBank";
+  if (name.includes("picpay") || desc.includes("picpay")) return "PicPay";
+  if (name.includes("mercado pago") || name.includes("mercadopago") || desc.includes("mercado pago") || desc.includes("mercadopago")) return "Mercado Pago";
+  
+  return "Banco Importado";
+}
+
 async function runImportParse(
   admin: Admin,
   job: { payload: Record<string, unknown> | null; company_id: string | null },
@@ -771,7 +851,7 @@ async function runImportParse(
 
     const { data: imp, error: impErr } = await admin
       .from("imports")
-      .select("id, source, storage_path, company_id")
+      .select("id, source, storage_path, company_id, filename")
       .eq("id", import_id)
       .single();
     if (impErr || !imp) throw new Error(impErr?.message ?? "import not found");
@@ -862,9 +942,6 @@ async function runImportParse(
         detectPaymentMethod(description);
 
       const specialCat = matchSpecialTransaction(description);
-      if (specialCat === "APLICACAO" || specialCat === "RESGATE") {
-        continue; // Skip APLICACAO and RESGATE completely
-      }
 
       let name = nameFromCol;
       let clientId: string | null = null;
@@ -876,8 +953,9 @@ async function runImportParse(
 
       if (specialCat === "INTERNA") {
         name = "Transferência Interna";
-        status = "internal";
+        status = "applied";
         confidence = 100;
+        autoApply = true;
       } else if (specialCat === "TARIFA") {
         name = "Tarifa Bancária";
         status = "applied";
@@ -885,6 +963,16 @@ async function runImportParse(
         autoApply = true;
       } else if (specialCat === "JUROS") {
         name = "Juros Bancários";
+        status = "applied";
+        confidence = 100;
+        autoApply = true;
+      } else if (specialCat === "APLICACAO") {
+        name = "Aplicação Financeira";
+        status = "applied";
+        confidence = 100;
+        autoApply = true;
+      } else if (specialCat === "RESGATE") {
+        name = "Resgate de Investimento";
         status = "applied";
         confidence = 100;
         autoApply = true;
@@ -962,7 +1050,7 @@ async function runImportParse(
         }
       }
 
-      const isExpense = specialCat === "TARIFA" ? true : specialCat === "JUROS" ? false : (isExpenseDescription(description) || (amountRaw != null && amountRaw < 0));
+      const isExpense = (specialCat === "TARIFA" || specialCat === "APLICACAO") ? true : (specialCat === "JUROS" || specialCat === "RESGATE") ? false : (isExpenseDescription(description) || (amountRaw != null && amountRaw < 0));
       const amount = amountRaw != null ? Math.abs(amountRaw) : null;
 
       if (!name && !phoneRaw && amount == null) continue;
@@ -1108,20 +1196,66 @@ async function runImportParse(
       if (finalStatus === "matched") matched++;
       else if (finalStatus === "review") review++;
 
-      // Auto-apply if it is a fee or interest
+      // Auto-apply if it is a fee, interest, or bank movement
       if (autoApply && amount != null) {
-        const isExpense = specialCat === "TARIFA";
-        const category = isExpense ? "Despesa Empresa" : "Receita";
+        let isExpense = true;
+        let category = "Despesa Empresa";
+        
+        if (specialCat === "JUROS" || specialCat === "RESGATE") {
+          isExpense = false;
+          category = specialCat === "JUROS" ? "Juros Bancários" : "Resgate";
+        } else if (specialCat === "APLICACAO") {
+          isExpense = true;
+          category = "Aplicação";
+        } else if (specialCat === "TARIFA") {
+          isExpense = true;
+          category = "Tarifa Bancária";
+        } else if (specialCat === "INTERNA") {
+          isExpense = amountRaw != null ? amountRaw < 0 : true;
+          category = "Movimentação Interna";
+        }
+
+        // Infer bank name from filename or description
+        const bankName = inferBankName(imp?.filename, description);
+        
+        // Find or create provider
+        const { data: existingProviders } = await admin
+          .from("providers")
+          .select("id")
+          .eq("company_id", job.company_id)
+          .eq("name", bankName)
+          .limit(1);
+          
+        let providerId: string | null = null;
+        if (existingProviders && existingProviders.length > 0) {
+          providerId = existingProviders[0].id;
+        } else {
+          const { data: newProvider, error: pErr } = await admin
+            .from("providers")
+            .insert({
+              company_id: job.company_id,
+              name: bankName,
+            })
+            .select("id")
+            .single();
+          if (!pErr && newProvider) {
+            providerId = newProvider.id;
+          } else {
+            console.error("Erro ao auto-criar fornecedor bancário:", pErr);
+          }
+        }
+
         const { data: tx, error: txErr } = await admin
           .from("financial_transactions")
           .insert({
             company_id: job.company_id,
             type: isExpense ? "EXPENSE" : "INCOME",
             category,
-            description: name, // "Tarifa Bancária" or "Juros Bancários"
+            description: name,
             amount: amount,
             transaction_date: occurred ?? new Date().toISOString().slice(0, 10),
             payment_method: paymentMethod ?? null,
+            provider_id: providerId,
           })
           .select("id")
           .single();
@@ -1163,8 +1297,10 @@ async function runImportParse(
             isInternalTransfer: specialCat === "INTERNA",
             isBankFee: specialCat === "TARIFA",
             isBankInterest: specialCat === "JUROS",
-            expenseScope: specialCat === "TARIFA" ? "empresa" : undefined,
-            revenueKindSet: specialCat === "JUROS" ? true : undefined,
+            isInvestmentApply: specialCat === "APLICACAO",
+            isInvestmentRedeem: specialCat === "RESGATE",
+            expenseScope: isExpense ? "empresa" : undefined,
+            revenueKindSet: !isExpense ? true : undefined,
           } as never,
           client_name: name || null,
           client_phone: phoneApi,
@@ -1178,7 +1314,7 @@ async function runImportParse(
           resolved_offering_kind: offeringKind,
           confidence,
           status: finalStatus,
-          action_taken: autoApplyTxId ? (specialCat === "TARIFA" ? "create_expense" : "create_income") : null,
+          action_taken: autoApplyTxId ? (isExpense ? "create_expense" : "create_income") : null,
           transaction_id: autoApplyTxId ?? null,
           notes: specialCat === "INTERNA"
             ? "Movimentação interna automática"
@@ -1186,13 +1322,17 @@ async function runImportParse(
               ? "Tarifa bancária automática"
               : specialCat === "JUROS"
                 ? "Juros bancários automáticos"
-                : isDuplicate
-                  ? "Possível duplicidade: já existe um lançamento com o mesmo valor e data."
-                  : isExpense
-                    ? "Despesa automática detectada"
-                    : offeringLabel
-                      ? `Sugestão: ${offeringLabel}`
-                      : null,
+                : specialCat === "APLICACAO"
+                  ? "Aplicação automática detectada"
+                  : specialCat === "RESGATE"
+                    ? "Resgate automático de investimento"
+                    : isDuplicate
+                      ? "Possível duplicidade: já existe um lançamento com o mesmo valor e data."
+                      : isExpense
+                        ? "Despesa automática detectada"
+                        : offeringLabel
+                          ? `Sugestão: ${offeringLabel}`
+                          : null,
         })
         .select("id")
         .single();
@@ -1216,7 +1356,7 @@ async function runImportParse(
           entity_type: "financial_transaction",
           entity_id: autoApplyTxId,
           confidence: 100,
-          reason: specialCat === "TARIFA" ? "created_expense" : "created_contribution",
+          reason: isExpense ? "created_expense" : "created_contribution",
           action: "created",
         });
       }

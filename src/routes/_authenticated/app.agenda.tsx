@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentProfile } from "@/lib/hooks/use-current-profile";
@@ -133,6 +133,7 @@ function AgendaPage() {
   const [newApptOpen, setNewApptOpen] = useState(false);
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const [incomeDialogOpen, setIncomeDialogOpen] = useState(false);
+  const [providerDialogOpen, setProviderDialogOpen] = useState(false);
 
   const isEmployee = profile?.role === "employee";
   const shouldRestrictAgenda = isEmployee && !profile?.permissions?.view_other_professionals_agenda;
@@ -694,9 +695,14 @@ function AgendaPage() {
               years={txHistory.data?.years ?? []}
               compact
             />
-            <Button size="sm" onClick={() => setExpenseDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-1" /> Lançamento
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button size="sm" onClick={() => setExpenseDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-1" /> Lançamento
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setProviderDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-1" /> Fornecedor
+              </Button>
+            </div>
           </div>
         </div>
         <TransactionList rows={expensesList.data ?? []} loading={expensesList.isLoading} kind="EXPENSE" />
@@ -750,6 +756,11 @@ function AgendaPage() {
           queryClient.invalidateQueries({ queryKey: ["estimativa-faturamento", companyId] });
           queryClient.invalidateQueries({ queryKey: ["tx-history-buckets", companyId] });
         }}
+      />
+      <NewProviderDialog
+        open={providerDialogOpen}
+        onOpenChange={setProviderDialogOpen}
+        companyId={companyId}
       />
     </div>
   );
@@ -986,6 +997,7 @@ const txSchema = z.object({
   amount: z.coerce.number().min(0.01).max(1_000_000),
   payment_method: z.string().max(40).optional().or(z.literal("")),
   transaction_date: z.string().min(1),
+  provider_id: z.string().uuid().optional().or(z.literal("")),
 });
 
 function NewTransactionDialog({
@@ -1001,6 +1013,20 @@ function NewTransactionDialog({
   defaultType: "INCOME" | "EXPENSE";
   onSaved: () => void;
 }) {
+  const providersQuery = useQuery({
+    enabled: !!companyId && open,
+    queryKey: ["providers-select", companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("providers")
+        .select("id, name")
+        .eq("company_id", companyId!)
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   const form = useForm<z.infer<typeof txSchema>>({
     resolver: zodResolver(txSchema),
     defaultValues: {
@@ -1010,6 +1036,7 @@ function NewTransactionDialog({
       amount: 0,
       payment_method: "",
       transaction_date: toISODate(new Date()),
+      provider_id: "",
     },
   });
   const type = form.watch("type");
@@ -1025,6 +1052,7 @@ function NewTransactionDialog({
         amount: 0,
         payment_method: "",
         transaction_date: toISODate(new Date()),
+        provider_id: "",
       });
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1032,9 +1060,13 @@ function NewTransactionDialog({
   async function onSubmit(v: z.infer<typeof txSchema>) {
     if (!companyId) return;
     const { error } = await supabase.from("financial_transactions").insert({
-      ...v,
+      type: v.type,
+      category: v.category,
+      amount: v.amount,
+      transaction_date: v.transaction_date,
       description: v.description || null,
       payment_method: v.payment_method || null,
+      provider_id: v.provider_id || null,
       company_id: companyId,
     });
     if (error) return toast.error(error.message);
@@ -1131,6 +1163,30 @@ function NewTransactionDialog({
               />
             </div>
           </div>
+          {type === "EXPENSE" && (
+            <div className="space-y-2">
+              <Label>Fornecedor</Label>
+              <Controller
+                control={form.control}
+                name="provider_id"
+                render={({ field }) => (
+                  <Select value={field.value || "none"} onValueChange={(v) => field.onChange(v === "none" ? "" : v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um fornecedor (opcional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhum</SelectItem>
+                      {(providersQuery.data ?? []).map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </div>
+          )}
           <div className="space-y-2">
             <Label>Descrição</Label>
             <Input {...form.register("description")} />
@@ -1561,3 +1617,102 @@ function statusStyle(s: string) {
     )[s] ?? "bg-muted text-muted-foreground"
   );
 }
+
+const providerSchema = z.object({
+  name: z.string().min(1, "Nome é obrigatório"),
+  document: z.string().optional().or(z.literal("")),
+  phone: z.string().optional().or(z.literal("")),
+  address: z.string().optional().or(z.literal("")),
+});
+
+function NewProviderDialog({
+  open,
+  onOpenChange,
+  companyId,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  companyId: string | null;
+}) {
+  const queryClient = useQueryClient();
+  const form = useForm<z.infer<typeof providerSchema>>({
+    resolver: zodResolver(providerSchema),
+    defaultValues: {
+      name: "",
+      document: "",
+      phone: "",
+      address: "",
+    },
+  });
+
+  useEffect(() => {
+    if (open) {
+      form.reset({
+        name: "",
+        document: "",
+        phone: "",
+        address: "",
+      });
+    }
+  }, [open]);
+
+  async function onSubmit(v: z.infer<typeof providerSchema>) {
+    if (!companyId) return;
+    const { error } = await supabase.from("providers").insert({
+      company_id: companyId,
+      name: v.name,
+      document: v.document || null,
+      phone: v.phone || null,
+      address: v.address || null,
+    });
+
+    if (error) return toast.error(error.message);
+    toast.success("Fornecedor cadastrado com sucesso!");
+    queryClient.invalidateQueries({ queryKey: ["providers-select", companyId] });
+    onOpenChange(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Cadastrar Fornecedor</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <div className="space-y-2">
+            <Label>Nome *</Label>
+            <Input {...form.register("name")} placeholder="Nome do fornecedor" />
+            {form.formState.errors.name && (
+              <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label>CNPJ / CPF</Label>
+            <Input {...form.register("document")} placeholder="00.000.000/0000-00 ou 000.000.000-00" />
+            {form.formState.errors.document && (
+              <p className="text-xs text-destructive">{form.formState.errors.document.message}</p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label>Telefone</Label>
+            <Input {...form.register("phone")} placeholder="(00) 00000-0000" />
+            {form.formState.errors.phone && (
+              <p className="text-xs text-destructive">{form.formState.errors.phone.message}</p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label>Endereço</Label>
+            <Input {...form.register("address")} placeholder="Endereço completo" />
+            {form.formState.errors.address && (
+              <p className="text-xs text-destructive">{form.formState.errors.address.message}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button type="submit">Salvar</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+

@@ -699,6 +699,7 @@ export type Database = {
           description: string | null
           id: string
           payment_method: string | null
+          provider_id: string | null
           transaction_date: string
           type: Database["public"]["Enums"]["transaction_type"]
           updated_at: string
@@ -713,6 +714,7 @@ export type Database = {
           description?: string | null
           id?: string
           payment_method?: string | null
+          provider_id?: string | null
           transaction_date?: string
           type: Database["public"]["Enums"]["transaction_type"]
           updated_at?: string
@@ -727,6 +729,7 @@ export type Database = {
           description?: string | null
           id?: string
           payment_method?: string | null
+          provider_id?: string | null
           transaction_date?: string
           type?: Database["public"]["Enums"]["transaction_type"]
           updated_at?: string
@@ -760,6 +763,13 @@ export type Database = {
             referencedRelation: "retention_report"
             referencedColumns: ["company_id"]
           },
+          {
+            foreignKeyName: "financial_transactions_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "providers"
+            referencedColumns: ["id"]
+          }
         ]
       }
       import_errors: {
@@ -2125,6 +2135,61 @@ export type Database = {
             referencedRelation: "retention_report"
             referencedColumns: ["company_id"]
           },
+        ]
+      }
+      providers: {
+        Row: {
+          address: string | null
+          company_id: string
+          created_at: string
+          document: string | null
+          id: string
+          name: string
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          company_id: string
+          created_at?: string
+          document?: string | null
+          id?: string
+          name: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          company_id?: string
+          created_at?: string
+          document?: string | null
+          id?: string
+          name?: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "providers_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "providers_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "providers_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          }
         ]
       }
       recovery_opportunities: {
