@@ -402,6 +402,16 @@ const isPaymentHeader = (h: string): boolean => {
   );
 };
 
+function jsNormalizeName(name: string | null | undefined): string | null {
+  if (!name) return null;
+  let s = name.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // remove accents
+  s = s.toUpperCase();
+  s = s.replace(/[^A-Z0-9 ]/g, " "); // replace non-alphanumeric with space
+  s = s.replace(/\s+\b(DA|DE|DO|DAS|DOS|E)\b\s+/gi, " "); // remove Portuguese connectives
+  s = s.replace(/\s+/g, " "); // collapse spaces
+  return s.trim();
+}
+
 function findHeaderRowIndex(rows: unknown[][]): number {
   let bestIndex = 0;
   let maxMatches = 0;
@@ -775,9 +785,29 @@ async function runImportParse(
     let rows: Record<string, unknown>[] = [];
     let headers: string[] = [];
 
-    if (imp.source === "csv") {
-      const text = await file.text();
-      const parsed = Papa.parse<string[]>(text, { skipEmptyLines: true, delimiter: "" });
+    if (imp.source === "csv" || imp.source === "pdf") {
+      let csvText = "";
+      if (imp.source === "csv") {
+        csvText = await file.text();
+      } else {
+        const { extractText, getDocumentProxy } = await import("unpdf");
+        const buf = new Uint8Array(await file.arrayBuffer());
+        const pdf = await getDocumentProxy(buf);
+        const { text } = await extractText(pdf, { mergePages: true });
+        const fullText = Array.isArray(text) ? text.join("\n") : String(text ?? "");
+        if (!fullText.trim()) throw new Error("PDF sem texto extraível (pode ser escaneado).");
+        const parsedPdf = parsePdfTextToRows(fullText);
+        if (parsedPdf.rows.length === 0) {
+          throw new Error("Nenhuma linha de extrato identificada no PDF");
+        }
+        // Convert extracted text to CSV format preserving rows
+        csvText = Papa.unparse({
+          fields: parsedPdf.headers,
+          data: parsedPdf.rows.map((r) => parsedPdf.headers.map((h) => r[h] ?? "")),
+        });
+      }
+
+      const parsed = Papa.parse<string[]>(csvText, { skipEmptyLines: true, delimiter: "" });
       const data = parsed.data as string[][];
       if (data.length === 0) throw new Error("CSV vazio");
       const hIdx = findHeaderRowIndex(data);
@@ -802,23 +832,6 @@ async function runImportParse(
       rows = aoa.slice(hIdx + 1).map((r) => {
         const o: Record<string, unknown> = {};
         headers.forEach((h, i) => (o[h] = (r as unknown[])[i]));
-        return o;
-      });
-    } else if (imp.source === "pdf") {
-      const { extractText, getDocumentProxy } = await import("unpdf");
-      const buf = new Uint8Array(await file.arrayBuffer());
-      const pdf = await getDocumentProxy(buf);
-      const { text } = await extractText(pdf, { mergePages: true });
-      const fullText = Array.isArray(text) ? text.join("\n") : String(text ?? "");
-      if (!fullText.trim()) throw new Error("PDF sem texto extraível (pode ser escaneado).");
-      const parsed = parsePdfTextToRows(fullText);
-      headers = normalizeAndMapHeaders(parsed.headers);
-      rows = parsed.rows.map((r) => {
-        const o: Record<string, unknown> = {};
-        headers.forEach((h, i) => {
-          const origKey = parsed.headers[i];
-          o[h] = r[origKey];
-        });
         return o;
       });
     } else {
@@ -866,6 +879,23 @@ async function runImportParse(
         }
       }
 
+      if (!clientFound && name) {
+        const normName = jsNormalizeName(name);
+        if (normName) {
+          const { data: byNormName } = await admin
+            .from("clients")
+            .select("id, name")
+            .eq("company_id", job.company_id)
+            .eq("normalized_name", normName)
+            .limit(1);
+          if (byNormName && byNormName.length > 0) {
+            clientId = byNormName[0].id;
+            clientFound = true;
+            name = byNormName[0].name;
+          }
+        }
+      }
+
       if (!clientFound && (name || phoneRaw)) {
         const { data: dup } = await admin.rpc("find_duplicate_client", {
           _company_id: job.company_id,
@@ -887,6 +917,20 @@ async function runImportParse(
         const extracted = extractNameFromDescription(description);
         if (extracted) {
           name = extracted;
+          const normExtracted = jsNormalizeName(name);
+          if (normExtracted) {
+            const { data: byNormName } = await admin
+              .from("clients")
+              .select("id, name")
+              .eq("company_id", job.company_id)
+              .eq("normalized_name", normExtracted)
+              .limit(1);
+            if (byNormName && byNormName.length > 0) {
+              clientId = byNormName[0].id;
+              clientFound = true;
+              name = byNormName[0].name;
+            }
+          }
         }
       }
 
@@ -1220,16 +1264,19 @@ async function runImportApplyRow(
     const phoneToUse = row.client_phone ?? null;
     const phone2ToUse = row.client_phone2 ?? null;
 
-    // Search by exact name (case-insensitive) to prevent duplicate client registrations
-    const { data: byName } = await admin
-      .from("clients")
-      .select("id")
-      .eq("company_id", companyId)
-      .ilike("name", nameToUse)
-      .limit(1);
+    // Search by normalized name to prevent duplicate client registrations
+    const normNameToUse = jsNormalizeName(nameToUse);
+    if (normNameToUse) {
+      const { data: byName } = await admin
+        .from("clients")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("normalized_name", normNameToUse)
+        .limit(1);
 
-    if (byName && byName.length > 0) {
-      clientId = byName[0].id;
+      if (byName && byName.length > 0) {
+        clientId = byName[0].id;
+      }
     }
 
     // If not found by name, and phone exists, check phone
