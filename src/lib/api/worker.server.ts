@@ -526,7 +526,7 @@ function parseDate(v: unknown): string | null {
 
 function detectPaymentMethod(desc: string | null | undefined): string | null {
   if (!desc) return null;
-  const s = desc.toLowerCase();
+const s = desc.toLowerCase();
   if (/\bpix\b/.test(s)) return "PIX";
   if (/cart(ã|a)o|credit|debito|débito/.test(s)) return "CARD";
   if (/dinheiro|cash|esp(é|e)cie/.test(s)) return "CASH";
@@ -536,8 +536,38 @@ function detectPaymentMethod(desc: string | null | undefined): string | null {
 }
 
 function parsePdfTextToRows(text: string): { headers: string[]; rows: Record<string, unknown>[] } {
-  // 1. Extração / Normalização inicial das linhas
-  const rawLines = text.split(/\r?\n/);
+  // Definição das Expressões Regulares de Data
+  const fullDateRe = /\b(0?[1-9]|[12]\d|3[01])[\/\-](0?[1-9]|1[0-2])[\/\-](\d{2,4})\b/g;
+  const isoDateRe = /\b(\d{4})-(0?[1-9]|1[0-2])-(0?[1-9]|[12]\d|3[01])\b/g;
+  const dayMonthRe = /\b(0?[1-9]|[12]\d|3[01])[\/\-](0?[1-9]|1[0-2])\b/g;
+  const textMonthRe = /\b(0?[1-9]|[12]\d|3[01])\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)(?:\s+(\d{2,4}))?\b/gi;
+  
+  // Regex refinada com lookahead negativo para evitar engolir a primeira letra de palavras como "Crédito"
+  const amountRe = /(-?\s*R?\$?\s*\d+(?:\.\d{3})*,\d{2}(?:\s+[DdCc](?!\w))?)/g;
+
+  // Pré-processamento 1: Limpeza estrutural de cabeçalhos e rodapés estáticos do Nubank
+  let preparedText = text;
+  
+  // Remove rodapé institucional de suporte do Nubank
+  preparedText = preparedText.replace(/Tem alguma dúvida\? Mande uma mensagem para nosso time de atendimento pelo chat do app ou ligue 4020 0185.*?Atendimento das 8h às 18h em dias úteis\./gi, "\n");
+  
+  // Remove linha de extrato gerado
+  preparedText = preparedText.replace(/Extrato gerado dia \d{2} de [a-zA-Z]+ de \d{4} às \d{2}:\d{2}/gi, "\n");
+  
+  // Remove numeração de página (ex: 1 de 4, 2 de 4)
+  preparedText = preparedText.replace(/\b\d+ de \d+\b/g, "\n");
+  
+  // Remove cabeçalhos de titular/conta do Nubank (suporta caracteres acentuados)
+  preparedText = preparedText.replace(/[a-zA-ZÀ-ÿ\s]+ •••\.\d{3}\.\d{3}-••\s+\d*(?:CPF)?\s*Agência\s*Conta\s*\d+-\d+\s*a?\d*\s*DE\s+[a-zA-Z]+\s+DE\s+\d{4}\s+\d+\s+DE\s+[a-zA-Z]+\s+DE\s+\d{4}\s+VALORES EM\s*(?:R\$)?/gi, "\n");
+  preparedText = preparedText.replace(/[a-zA-ZÀ-ÿ\s]+ •••\.\d{3}\.\d{3}-••\s+\d*(?:CPF)?\s*Agência\s*Conta\s*\d+-\d+/gi, "\n");
+
+  // Pré-processamento 2: Inserir quebras de linha antes de datas e após valores monetários
+  preparedText = preparedText.replace(textMonthRe, "\n$&");
+  preparedText = preparedText.replace(fullDateRe, "\n$&");
+  preparedText = preparedText.replace(isoDateRe, "\n$&");
+  preparedText = preparedText.replace(amountRe, "$&\n");
+
+  const rawLines = preparedText.split(/\r?\n/);
   const normalizedLines = rawLines
     .map((l) => l.replace(/\s+/g, " ").trim())
     .filter(Boolean);
@@ -546,120 +576,66 @@ function parsePdfTextToRows(text: string): { headers: string[]; rows: Record<str
     return { headers: [], rows: [] };
   }
 
-  // 2. Limpeza do conteúdo (remover cabeçalhos, rodapés, saldos, resumos, CNPJ, etc.)
-  const isNoiseOrBalanceLine = (line: string): boolean => {
-    const l = line.toLowerCase().trim();
-    
-    // Expressões para detectar termos de saldos ou informações consolidadas de cabeçalho/rodapé
-    const balancePatterns = [
-      /\b(saldo anterior|saldo atual|saldo do dia|saldo disponível|saldo em conta|saldos diários|saldo final|saldo c\/c|saldo d\/c|saldo de transações|resumo do dia|total de débitos|total de créditos|total de saídas|total de entradas|saldo consolidado|limite contratado|limite cheque especial|resumo do período|resumo do periodo)\b/i,
-      /\b(extrato de conta|extrato consolidado|extrato período|período de|folha|página|pagina|cnpj|demonstrativo de tarifas|extrato de movimentações|extrato mensal)\b/i,
-      /^(agência|agencia|conta corrente|conta poupança|conta poupanca|nº da conta|agência\/conta|agencia\/conta|agência e conta)\s*(:|-)?\s*\d+/i
-    ];
-    
-    return balancePatterns.some((pattern) => pattern.test(l));
+  const parseTextMonth = (m: string): string => {
+    const map: Record<string, string> = {
+      jan: "01", fev: "02", mar: "03", abr: "04", mai: "05", jun: "06",
+      jul: "07", ago: "08", set: "09", out: "10", nov: "11", dez: "12"
+    };
+    return map[m.toLowerCase().substring(0, 3)] ?? "01";
   };
 
-  const cleanedLines = normalizedLines.filter((line) => !isNoiseOrBalanceLine(line));
+  const extractDate = (line: string): { dateStr: string; dateRaw: string; rest: string } | null => {
+    const textMonthReLocal = /\b(0?[1-9]|[12]\d|3[01])\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)(?:\s+(\d{2,4}))?\b/i;
+    const fullDateReLocal = /\b(0?[1-9]|[12]\d|3[01])[\/\-](0?[1-9]|1[0-2])[\/\-](\d{2,4})\b/;
+    const isoDateReLocal = /\b(\d{4})-(0?[1-9]|1[0-2])-(0?[1-9]|[12]\d|3[01])\b/;
+    const dayMonthReLocal = /\b(0?[1-9]|[12]\d|3[01])[\/\-](0?[1-9]|1[0-2])\b/;
 
-  // 3. Definição das Expressões Regulares de Data
-  const fullDateRe = /\b(0?[1-9]|[12]\d|3[01])[\/\-](0?[1-9]|1[0-2])[\/\-](\d{2,4})\b/;
-  const isoDateRe = /\b(\d{4})-(0?[1-9]|1[0-2])-(0?[1-9]|[12]\d|3[01])\b/;
-  const dayMonthRe = /\b(0?[1-9]|[12]\d|3[01])[\/\-](0?[1-9]|1[0-2])\b/;
+    let match = line.match(isoDateReLocal);
+    if (match) {
+      return { dateStr: match[0], dateRaw: match[0], rest: line.replace(match[0], " ").trim() };
+    }
+    
+    match = line.match(fullDateReLocal);
+    if (match) {
+      return { dateStr: match[0], dateRaw: match[0], rest: line.replace(match[0], " ").trim() };
+    }
 
-  const findDateInLine = (line: string): { dateStr: string; dateRaw: string } | null => {
-    let match = line.match(isoDateRe);
-    if (match) return { dateStr: match[0], dateRaw: match[0] };
+    match = line.match(textMonthReLocal);
+    if (match) {
+      const day = match[1].padStart(2, "0");
+      const monthStr = match[2];
+      const year = match[3] ? (match[3].length === 2 ? `20${match[3]}` : match[3]) : new Date().getFullYear().toString();
+      const monthNum = parseTextMonth(monthStr);
+      const formatted = `${day}/${monthNum}/${year}`;
+      return { dateStr: formatted, dateRaw: match[0], rest: line.replace(match[0], " ").trim() };
+    }
     
-    match = line.match(fullDateRe);
-    if (match) return { dateStr: match[0], dateRaw: match[0] };
-    
-    match = line.match(dayMonthRe);
+    match = line.match(dayMonthReLocal);
     if (match) {
       const currentYear = new Date().getFullYear();
-      return { dateStr: `${match[0]}/${currentYear}`, dateRaw: match[0] };
+      return { dateStr: `${match[0]}/${currentYear}`, dateRaw: match[0], rest: line.replace(match[0], " ").trim() };
     }
     
     return null;
   };
 
-  // 4. Identificação e agrupamento das movimentações por blocos de data (suporta descrições multilinhas)
-  interface RawTx {
-    date: string;
-    dateRaw: string;
-    lines: string[];
-  }
-
-  const txBlocks: RawTx[] = [];
-  let currentTx: RawTx | null = null;
-
-  for (const line of cleanedLines) {
-    const dateInfo = findDateInLine(line);
-    if (dateInfo) {
-      if (currentTx) {
-        txBlocks.push(currentTx);
-      }
-      currentTx = {
-        date: dateInfo.dateStr,
-        dateRaw: dateInfo.dateRaw,
-        lines: [line],
-      };
-    } else {
-      if (currentTx) {
-        currentTx.lines.push(line);
-      }
-    }
-  }
-  if (currentTx) {
-    txBlocks.push(currentTx);
-  }
-
-  // 5. Conversão das movimentações para dados estruturados
-  const headers = ["data", "descricao", "valor"];
-  const rows: Record<string, unknown>[] = [];
-
-  const amountRe = /(-?\s*R?\$?\s*\d+(?:\.\d{3})*,\d{2}(?:\s*[DdCc\-\+])?|-?\s*R?\$?\s*\d+\.\d{2}(?:\s*[DdCc\-\+])?)/g;
-
-  // Check if description is a balance row or noise
-  const isBalanceOrNoiseDescription = (desc: string): boolean => {
-    const d = desc.toLowerCase().trim();
-    if (!d) return true;
-    
-    const patterns = [
-      /^(saldo|saldo anterior|saldo atual|saldo do dia|saldo disponível|saldo em conta|saldos diários|saldo final|saldo c\/c|saldo d\/c|saldo de transações|total|total de débitos|total de créditos|subtotal|limite|limite contratado|resumo do dia)$/i,
-      /^(extrato de conta|extrato consolidado|extrato período|período de|folha|página|pagina|cnpj|demonstrativo de tarifas|extrato de movimentações)$/i,
-      /^(agencia|agência|conta|conta corrente|corrente|extrato mensal)$/i
-    ];
-    
-    return patterns.some(p => p.test(d));
-  };
-
-  for (const tx of txBlocks) {
-    const blockText = tx.lines.join(" ");
-
-    // Se houver a palavra 'saldo' no texto do bloco, corta ali para evitar pegar o saldo final da linha
-    const parts = blockText.split(/saldo/i);
+  const extractAmount = (line: string): { amountStr: string; amountRaw: string; rest: string } | null => {
+    const amountReLocal = /(-?\s*R?\$?\s*\d+(?:\.\d{3})*,\d{2}(?:\s+[DdCc](?!\w))?)/;
+    const parts = line.split(/saldo/i);
     const textToSearch = parts[0];
-
-    const amountMatches = [...textToSearch.matchAll(amountRe)];
-    if (amountMatches.length === 0) {
-      // Movimentação incompleta (sem valor): ignorar
-      continue;
-    }
-
-    // O valor monetário da transação é o último match do bloco (antes de 'saldo')
-    const amountRaw = amountMatches[amountMatches.length - 1][0];
     
-    // Determinar sinal (débito ou negativo)
+    const match = textToSearch.match(amountReLocal);
+    if (!match) return null;
+    
+    const amountRaw = match[0];
     let isNegative = false;
     if (amountRaw.includes("-") || /d/i.test(amountRaw)) {
       isNegative = true;
     }
 
-    // Limpar o valor
     let cleanAmount = amountRaw
-      .replace(/R?\$?\s*/gi, "") // remove moeda
-      .replace(/[-+DcDdCc]/g, "") // remove sinal e indicador
+      .replace(/R?\$?\s*/gi, "")
+      .replace(/[-+DcDdCc]/g, "")
       .trim();
 
     if (cleanAmount.includes(",")) {
@@ -667,40 +643,149 @@ function parsePdfTextToRows(text: string): { headers: string[]; rows: Record<str
     }
 
     const amountVal = parseFloat(cleanAmount);
-    if (isNaN(amountVal)) {
-      // Incompleto/Inválido: ignorar
-      continue;
-    }
+    if (isNaN(amountVal)) return null;
 
     const finalVal = isNegative ? -Math.abs(amountVal) : amountVal;
     
-    // Formatando de volta para o padrão pt-BR (ex: "-150,00")
     const amountStr = finalVal.toLocaleString("pt-BR", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
 
-    // Limpar a descrição removendo a data e o valor do texto original
-    let description = blockText;
-    description = description.replace(tx.dateRaw, " ");
-    description = description.replace(amountRaw, " ");
-    description = description
-      .replace(/R\$\s*/gi, " ")
-      .replace(/\s+/g, " ")
-      .trim();
+    const rest = line.replace(amountRaw, " ").trim();
+    return { amountStr, amountRaw, rest };
+  };
 
-    // Validar se sobrou uma descrição válida que não seja saldo/ruído
-    if (isBalanceOrNoiseDescription(description)) {
+  const isBalanceOrNoiseDescription = (desc: string): boolean => {
+    const d = desc.toLowerCase().trim();
+    if (!d) return true;
+    
+    const patterns = [
+      /^(saldo|saldo anterior|saldo atual|saldo do dia|saldo disponível|saldo em conta|saldos diários|saldo final|saldo c\/c|saldo d\/c|saldo de transações|total|total de débitos|total de créditos|subtotal|limite|limite contratado|resumo do dia|movimentações)$/i,
+      /^(extrato de conta|extrato consolidado|extrato período|período de|folha|página|pagina|cnpj|demonstrativo de tarifas|extrato de movimentações)$/i,
+      /^(agencia|agência|conta|conta corrente|corrente|extrato mensal)$/i,
+      /\btotal de (entradas|saídas)\b/i
+    ];
+    
+    return patterns.some(p => p.test(d));
+  };
+
+  const isNoiseOrBalanceLine = (line: string): boolean => {
+    const l = line.toLowerCase().trim();
+    const balancePatterns = [
+      /\b(saldo anterior|saldo atual|saldo do dia|saldo disponível|saldo em conta|saldos diários|saldo final|saldo c\/c|saldo d\/c|saldo de transações|resumo do dia|total de débitos|total de créditos|total de saídas|total de entradas|saldo consolidado|limite contratado|limite cheque especial|resumo do período|resumo do periodo)\b/i,
+      /\b(extrato de conta|extrato consolidado|extrato período|período de|folha|página|pagina|cnpj|demonstrativo de tarifas|extrato de movimentações|extrato mensal)\b/i,
+      /^(agência|agencia|conta corrente|conta poupança|conta poupanca|nº da conta|agência\/conta|agencia\/conta|agência e conta)\s*(:|-)?\s*\d+/i,
+      /\b(tem alguma dúvida|mande uma mensagem|atendimento 24h|fale com a ouvidoria|ouvidoria em|nubank\.com\.br|extrato gerado dia|de 4|valores em r\$|valores em)\b/i,
+      /\b(cpf|agência conta|agência\/conta|agencia\/conta|agência e conta)\b/i,
+      /•••\.\d{3}\.\d{3}-••/i,
+      /^[a-zA-ZÀ-ÿ\s]+ •••\.\d{3}\.\d{3}-••\s+0001CPF/i
+    ];
+    return balancePatterns.some((pattern) => pattern.test(l));
+  };
+
+  type LineEventType = "DATE" | "AMOUNT" | "DESCRIPTION" | "NOISE";
+  interface LineEvent {
+    type: LineEventType;
+    payload?: any;
+  }
+
+  const metrics = {
+    linesExtracted: normalizedLines.length,
+    eventsDate: 0,
+    eventsDescription: 0,
+    eventsAmount: 0,
+    eventsNoise: 0,
+    transactionsGenerated: 0,
+    csvRowsExported: 0
+  };
+
+  const events: LineEvent[] = [];
+
+  // FASE 1: Camada de Classificação de Linhas
+  for (const line of normalizedLines) {
+    const hasDateCheck = extractDate(line) !== null;
+    const hasAmountCheck = extractAmount(line) !== null;
+
+    if (isNoiseOrBalanceLine(line) && !hasDateCheck && !hasAmountCheck) {
+      events.push({ type: "NOISE" });
+      metrics.eventsNoise++;
       continue;
     }
 
-    rows.push({
-      data: tx.date,
-      descricao: description,
-      valor: amountStr,
-    });
+    let rest = line;
+    let hasDate = false;
+    let hasAmount = false;
+
+    // 1. Identificação de Data
+    const dateInfo = extractDate(rest);
+    if (dateInfo) {
+      events.push({ type: "DATE", payload: { date: dateInfo.dateStr } });
+      metrics.eventsDate++;
+      rest = dateInfo.rest;
+      hasDate = true;
+    }
+
+    // 2. Identificação de Valor
+    const amountInfo = extractAmount(rest);
+    if (amountInfo) {
+      events.push({ type: "AMOUNT", payload: { amount: amountInfo.amountStr } });
+      metrics.eventsAmount++;
+      rest = amountInfo.rest;
+      hasAmount = true;
+    }
+
+    // 3. Identificação de Descrição
+    const cleanDesc = rest.replace(/R\$\s*/gi, " ").replace(/\s+/g, " ").trim();
+    if (cleanDesc && !isBalanceOrNoiseDescription(cleanDesc)) {
+      events.push({ type: "DESCRIPTION", payload: { text: cleanDesc } });
+      metrics.eventsDescription++;
+    } else {
+      if (!hasDate && !hasAmount) {
+        events.push({ type: "NOISE" });
+        metrics.eventsNoise++;
+      }
+    }
   }
 
+  // FASE 2: Máquina de Estados que Consome Eventos
+  let currentDate = "";
+  let accumulatedDesc: string[] = [];
+  const rows: Record<string, unknown>[] = [];
+
+  for (const event of events) {
+    if (event.type === "NOISE") {
+      continue;
+    }
+    if (event.type === "DATE") {
+      currentDate = event.payload.date;
+      continue;
+    }
+    if (event.type === "DESCRIPTION") {
+      accumulatedDesc.push(event.payload.text);
+      continue;
+    }
+    if (event.type === "AMOUNT") {
+      if (accumulatedDesc.length > 0) {
+        const descriptionStr = accumulatedDesc.join(" ");
+        if (currentDate && descriptionStr) {
+          rows.push({
+            data: currentDate,
+            descricao: descriptionStr,
+            valor: event.payload.amount
+          });
+          metrics.transactionsGenerated++;
+        }
+        accumulatedDesc = [];
+      }
+    }
+  }
+
+  metrics.csvRowsExported = rows.length;
+
+  console.log("[Worker PDF Parser Metrics]:", JSON.stringify(metrics, null, 2));
+
+  const headers = ["data", "descricao", "valor"];
   return { headers, rows };
 }
 
