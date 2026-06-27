@@ -1270,8 +1270,10 @@ function MergeClientsDialog({ sourceClient, clients, onClose, onMerged }: MergeC
     setIsMerging(true);
     try {
       await merge({
-        sourceId: sourceClient.id,
-        targetId: targetClient.id,
+        data: {
+          sourceId: sourceClient.id,
+          targetId: targetClient.id,
+        },
       });
       toast.success("Clientes mesclados com sucesso!");
       onMerged();
