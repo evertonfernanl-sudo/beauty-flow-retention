@@ -1182,7 +1182,9 @@ async function runImportParse(
               const pageImages = await extractImages(pdf, i);
               if (pageImages && pageImages.length > 0) {
                 if (!worker) {
-                  worker = await createWorker("por");
+                  worker = await createWorker("por", 1, {
+                    cachePath: process.cwd(),
+                  });
                 }
                 
                 for (let idx = 0; idx < pageImages.length; idx++) {

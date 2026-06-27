@@ -86,7 +86,21 @@ function SiePage() {
         .order("created_at", { ascending: false })
         .limit(30);
       if (error) throw error;
-      return (data ?? []) as ImportRow[];
+
+      const now = new Date().getTime();
+      const mapped = (data ?? []).map((imp) => {
+        const createdTime = new Date(imp.created_at).getTime();
+        const elapsed = now - createdTime;
+        if ((imp.status === "processing" || imp.status === "uploaded") && elapsed > 120_000) {
+          return {
+            ...imp,
+            status: "failed",
+            last_error: imp.last_error || "O processamento síncrono excedeu o limite de 2 minutos e foi interrompido na nuvem (Gateway Timeout). O arquivo pode ser muito complexo ou o motor de OCR sofreu timeout do container da plataforma.",
+          };
+        }
+        return imp;
+      });
+      return mapped as ImportRow[];
     },
     refetchInterval: 5_000,
   });
