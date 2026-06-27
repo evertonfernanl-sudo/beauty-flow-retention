@@ -350,6 +350,8 @@ type Row = {
     expenseScope?: "empresa" | "pessoal";
     originalPayerName?: string;
     clientIdOverride?: string;
+    isBankFee?: boolean;
+    isBankInterest?: boolean;
   };
 
 };
