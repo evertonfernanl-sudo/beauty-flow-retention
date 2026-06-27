@@ -2661,6 +2661,7 @@ export type Database = {
           amount: number
           billing_cycle: string
           canceled_at: string | null
+          cancellation_reason: string | null
           company_id: string
           created_at: string
           current_period_end: string
@@ -2677,6 +2678,7 @@ export type Database = {
           amount?: number
           billing_cycle?: string
           canceled_at?: string | null
+          cancellation_reason?: string | null
           company_id: string
           created_at?: string
           current_period_end?: string
@@ -2693,6 +2695,7 @@ export type Database = {
           amount?: number
           billing_cycle?: string
           canceled_at?: string | null
+          cancellation_reason?: string | null
           company_id?: string
           created_at?: string
           current_period_end?: string

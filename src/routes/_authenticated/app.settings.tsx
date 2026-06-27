@@ -76,6 +76,8 @@ import {
   deleteCompanyMember,
   updateUserPermissions,
 } from "@/lib/api/users.functions";
+import { cancelSubscription } from "@/lib/api/billing.functions";
+import { jsPDF } from "jspdf";
 
 const settingsSearchSchema = z.object({
   tab: z.string().optional().catch("company"),
@@ -506,6 +508,38 @@ function UsersTab({
     },
   });
 
+  useEffect(() => {
+    if (members.data && members.data.length === 1 && companyId) {
+      const singleMember = members.data[0];
+      if (!singleMember.activeProfessional) {
+        (async () => {
+          const { data: existingProf } = await supabase
+            .from("professionals")
+            .select("id")
+            .eq("user_id", singleMember.user_id)
+            .maybeSingle();
+
+          if (existingProf) {
+            await supabase
+              .from("professionals")
+              .update({ active: true })
+              .eq("id", existingProf.id);
+          } else {
+            await supabase.from("professionals").insert({
+              company_id: companyId,
+              user_id: singleMember.user_id,
+              name: singleMember.profile?.name || "Administrador",
+              email: singleMember.profile?.email ?? null,
+              active: true,
+            });
+          }
+          qc.invalidateQueries({ queryKey: ["members", companyId] });
+          qc.invalidateQueries({ queryKey: ["professionals-options", companyId] });
+        })();
+      }
+    }
+  }, [members.data, companyId, qc]);
+
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast.success(`${label} copiado!`);
@@ -750,11 +784,15 @@ function UsersTab({
                 </Badge>
                 <div className="flex items-center gap-1.5 mr-2">
                   <span className="text-xs text-muted-foreground hidden sm:inline">
-                    Presta atendimento?
+                    {members.data?.length <= 1
+                      ? "Presta atendimento (obrigatório para único usuário)"
+                      : "Presta atendimento?"}
                   </span>
                   <Switch
-                    checked={m.activeProfessional}
+                    checked={members.data?.length <= 1 ? true : m.activeProfessional}
+                    disabled={members.data?.length <= 1}
                     onCheckedChange={async (checked) => {
+                      if (members.data?.length <= 1) return;
                       const { data: existingProf } = await supabase
                         .from("professionals")
                         .select("id")
@@ -960,6 +998,11 @@ function UsersTab({
 
 // ========================== PLAN ==========================
 function PlanTab({ companyId, isOwner, qc }: { companyId?: string; isOwner: boolean; qc: any }) {
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("preco");
+  const [cancelFeedback, setCancelFeedback] = useState("");
+  const [canceling, setCanceling] = useState(false);
+
   const plans = useQuery({
     queryKey: ["plans"],
     queryFn: async () => {
@@ -999,11 +1042,209 @@ function PlanTab({ companyId, isOwner, qc }: { companyId?: string; isOwner: bool
     : 0;
 
   async function upgrade(_planId: string) {
-    // Plan changes must go through a verified server-side billing flow.
-    // Direct client writes to subscriptions / companies.plan are blocked by RLS
-    // and a database trigger. Wire this button to your checkout / billing webhook.
     toast.info("Checkout em breve. Entre em contato com o suporte para alterar seu plano.");
   }
+
+  const handleCancelSubscription = async () => {
+    if (!companyId) return;
+    setCanceling(true);
+    try {
+      // 1. Carregar lista de clientes
+      const { data: clients, error: clientsErr } = await supabase
+        .from("clients")
+        .select("name, phone, email")
+        .eq("company_id", companyId);
+
+      if (clientsErr) throw new Error(`Erro ao exportar clientes: ${clientsErr.message}`);
+
+      // 2. Carregar agenda em aberto (agendamentos futuros)
+      const { data: appointments, error: appErr } = await supabase
+        .from("appointments")
+        .select(`
+          start_datetime, 
+          status, 
+          price, 
+          notes, 
+          clients (name, phone), 
+          services (name), 
+          professionals (name)
+        `)
+        .eq("company_id", companyId)
+        .in("status", ["SCHEDULED", "CONFIRMED"])
+        .gte("start_datetime", new Date().toISOString())
+        .order("start_datetime", { ascending: true });
+
+      if (appErr) throw new Error(`Erro ao exportar agendamentos: ${appErr.message}`);
+
+      // 3. Gerar PDF de backup usando jsPDF
+      const doc = new jsPDF();
+      let y = 20;
+
+      // Cabeçalho Principal
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.setTextColor(156, 39, 176); // Roxo do BeautyFlow
+      doc.text("BACKUP DE DADOS - BEAUTYFLOW", 14, y);
+      y += 8;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text("Relatório gerado em decorrência do cancelamento da assinatura.", 14, y);
+      y += 6;
+      doc.text(`Data de geração: ${new Date().toLocaleString("pt-BR")}`, 14, y);
+      y += 12;
+
+      // Seção 1: Lista de Clientes
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(0, 0, 0);
+      doc.text(`1. Clientes Cadastrados (${clients?.length ?? 0})`, 14, y);
+      y += 8;
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text("Nome", 14, y);
+      doc.text("Telefone", 90, y);
+      doc.text("E-mail", 140, y);
+      y += 4;
+      doc.line(14, y, 196, y);
+      y += 6;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      
+      const clientList = clients ?? [];
+      if (clientList.length === 0) {
+        doc.text("Nenhum cliente cadastrado.", 14, y);
+        y += 10;
+      } else {
+        for (const c of clientList) {
+          if (y > 275) {
+            doc.addPage();
+            y = 20;
+            // Cabeçalho da página nova para tabela de clientes
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(10);
+            doc.text("Nome", 14, y);
+            doc.text("Telefone", 90, y);
+            doc.text("E-mail", 140, y);
+            y += 4;
+            doc.line(14, y, 196, y);
+            y += 6;
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(9);
+          }
+          
+          const emailStr = c.email || "—";
+          const phoneStr = c.phone || "—";
+          const nameTrunc = c.name.length > 35 ? c.name.substring(0, 32) + "..." : c.name;
+          const emailTrunc = emailStr.length > 30 ? emailStr.substring(0, 27) + "..." : emailStr;
+
+          doc.text(nameTrunc, 14, y);
+          doc.text(phoneStr, 90, y);
+          doc.text(emailTrunc, 140, y);
+          y += 6;
+        }
+      }
+
+      y += 10;
+
+      // Seção 2: Agenda em Aberto (Nova Página)
+      doc.addPage();
+      y = 20;
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(0, 0, 0);
+      doc.text(`2. Agenda em Aberto - Próximos Agendamentos (${appointments?.length ?? 0})`, 14, y);
+      y += 8;
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.text("Data/Hora", 14, y);
+      doc.text("Cliente", 48, y);
+      doc.text("Serviço", 100, y);
+      doc.text("Profissional", 145, y);
+      doc.text("Valor", 180, y);
+      y += 4;
+      doc.line(14, y, 196, y);
+      y += 6;
+
+      doc.setFont("helvetica", "normal");
+      
+      const appList = appointments ?? [];
+      if (appList.length === 0) {
+        doc.setFontSize(9);
+        doc.text("Nenhum agendamento futuro em aberto encontrado.", 14, y);
+      } else {
+        for (const app of appList) {
+          if (y > 275) {
+            doc.addPage();
+            y = 20;
+            // Cabeçalho da página nova para tabela de agendamentos
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(9);
+            doc.text("Data/Hora", 14, y);
+            doc.text("Cliente", 48, y);
+            doc.text("Serviço", 100, y);
+            doc.text("Profissional", 145, y);
+            doc.text("Valor", 180, y);
+            y += 4;
+            doc.line(14, y, 196, y);
+            y += 6;
+            doc.setFont("helvetica", "normal");
+          }
+
+          const clientName = (app.clients as any)?.name || "—";
+          const serviceName = (app.services as any)?.name || "—";
+          const profName = (app.professionals as any)?.name || "—";
+          const dateStr = new Date(app.start_datetime).toLocaleString("pt-BR", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit"
+          });
+
+          const clientTrunc = clientName.length > 25 ? clientName.substring(0, 22) + "..." : clientName;
+          const serviceTrunc = serviceName.length > 22 ? serviceName.substring(0, 19) + "..." : serviceName;
+          const profTrunc = profName.length > 18 ? profName.substring(0, 15) + "..." : profName;
+          const priceStr = app.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+          doc.setFontSize(8);
+          doc.text(dateStr, 14, y);
+          doc.text(clientTrunc, 48, y);
+          doc.text(serviceTrunc, 100, y);
+          doc.text(profTrunc, 145, y);
+          doc.text(priceStr, 180, y);
+          y += 6;
+        }
+      }
+
+      doc.save("backup_beautyflow_dados.pdf");
+
+      // 4. Executar cancelamento via Server Function
+      const mappedReason = {
+        preco: "Preço muito alto",
+        recursos: "Falta de recursos necessários",
+        dificuldade: "Dificuldade para configurar / usar",
+        migracao: "Migrando para outro sistema",
+        outros: "Outro motivo"
+      }[cancelReason] || "Cancelamento";
+
+      const finalReasonText = `${mappedReason}. Observações: ${cancelFeedback.trim() || "Nenhuma"}`;
+      await cancelSubscription({ data: { reason: finalReasonText } });
+
+      toast.success("Assinatura cancelada com sucesso. Seu backup de clientes e agenda foi baixado!");
+      setCancelDialogOpen(false);
+      qc.invalidateQueries({ queryKey: ["subscription", companyId] });
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao realizar o cancelamento.");
+    } finally {
+      setCanceling(false);
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -1017,9 +1258,11 @@ function PlanTab({ companyId, isOwner, qc }: { companyId?: string; isOwner: bool
             <p className="text-sm text-muted-foreground">
               {sub.data?.status === "TRIAL"
                 ? `Trial até ${new Date(sub.data.trial_ends_at ?? sub.data.current_period_end).toLocaleDateString("pt-BR")}`
-                : sub.data
+                : sub.data?.status === "ACTIVE"
                   ? `Próxima cobrança: ${new Date(sub.data.current_period_end).toLocaleDateString("pt-BR")}`
-                  : "—"}
+                  : sub.data?.status === "CANCELED"
+                    ? "Assinatura cancelada"
+                    : "—"}
             </p>
           </div>
           <Badge
@@ -1043,6 +1286,18 @@ function PlanTab({ companyId, isOwner, qc }: { companyId?: string; isOwner: bool
                 Você utilizou {Math.round(usagePct)}% do seu plano.
               </p>
             )}
+          </div>
+        )}
+
+        {sub.data && (sub.data.status === "ACTIVE" || sub.data.status === "TRIAL") && isOwner && (
+          <div className="mt-5 border-t pt-4 flex justify-end">
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setCancelDialogOpen(true)}
+            >
+              Cancelar Assinatura
+            </Button>
           </div>
         )}
       </Card>
@@ -1075,7 +1330,7 @@ function PlanTab({ companyId, isOwner, qc }: { companyId?: string; isOwner: bool
               </ul>
               <Button
                 className="mt-4"
-                disabled={isCurrent || !isOwner}
+                disabled={isCurrent || !isOwner || sub.data?.status === "CANCELED"}
                 onClick={() => upgrade(p.id)}
               >
                 {isCurrent ? "Plano atual" : "Fazer upgrade"}
@@ -1084,6 +1339,71 @@ function PlanTab({ companyId, isOwner, qc }: { companyId?: string; isOwner: bool
           );
         })}
       </div>
+
+      {/* Cancel Subscription Dialog */}
+      <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive font-semibold">Cancelar Assinatura BeautyFlow</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2 text-sm">
+            <p className="text-muted-foreground leading-relaxed">
+              Sentimos muito em ver você partir. Por favor, selecione abaixo o principal motivo do cancelamento para que possamos melhorar a plataforma:
+            </p>
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="cancel-reason">Motivo do cancelamento *</Label>
+                <Select value={cancelReason} onValueChange={setCancelReason}>
+                  <SelectTrigger className="w-full mt-1.5">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="preco">Preço muito alto / Custo benefício</SelectItem>
+                    <SelectItem value="recursos">Falta de recursos necessários</SelectItem>
+                    <SelectItem value="dificuldade">Dificuldade para configurar / usar</SelectItem>
+                    <SelectItem value="migracao">Migrando para outro sistema</SelectItem>
+                    <SelectItem value="outros">Outros motivos</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="cancel-feedback">Observações adicionais (opcional)</Label>
+                <Textarea
+                  id="cancel-feedback"
+                  className="mt-1.5 min-h-[80px]"
+                  placeholder="Escreva aqui seu feedback..."
+                  value={cancelFeedback}
+                  onChange={(e) => setCancelFeedback(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="p-3 bg-muted/60 rounded-lg border border-primary/10 text-xs leading-relaxed text-muted-foreground">
+              ⚠️ **Importante**: Ao confirmar, sua assinatura será cancelada. O BeautyFlow gerará automaticamente um arquivo PDF para download contendo todos os seus **clientes cadastrados** e **agendamentos futuros em aberto** como backup dos seus dados.
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setCancelDialogOpen(false)} disabled={canceling}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleCancelSubscription}
+              disabled={canceling}
+            >
+              {canceling ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  Cancelando...
+                </>
+              ) : (
+                "Confirmar Cancelamento e Baixar Backup"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
