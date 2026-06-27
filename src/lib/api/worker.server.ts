@@ -842,8 +842,8 @@ export function extractNameFromDescription(desc: string | null | undefined): str
 
   // 1) Common Pix/TED/Fornecedor prefixes with explicit name boundaries
   const regexes = [
-    /(?:pix\s+recebido\s+de|pix\s+de|transferência\s+recebida\s+de|recebido\s+de|pix\s+recebido|ted\s+recebida|credito\s+pix|transf\s+recebida|transferencia|ted|doc)\s*:?\s*-?\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i,
-    /(?:pix\s+enviado\s+des\s*:|pix\s+qr\s+code\s+estatic\s+rem\s*:|pix\s+qr\s+code\s+dinamico\s+des\s*:|pix\s+qr\s+code\s+estatico\s+des\s*:|pix\s+enviado\s+para|pix\s+para|pix\s+enviado)\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i,
+    /(?:p[ix\s]?x\s+recebido\s+de|p[ix\s]?x\s+de|transferência\s+recebida\s+de|recebido\s+de|p[ix\s]?x\s+recebido|ted\s+recebida|credito\s+p[ix\s]?x|transf\s+recebida|transferencia|ted|doc)\s*:?\s*-?\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i,
+    /(?:p[ix\s]?x\s+enviado\s+des\s*:|p[ix\s]?x\s+qr\s+code\s+estatic\s+rem\s*:|p[ix\s]?x\s+qr\s+code\s+dinamico\s+des\s*:|p[ix\s]?x\s+qr\s+code\s+estatico\s+des\s*:|p[ix\s]?x\s+enviado\s+para|p[ix\s]?x\s+para|p[ix\s]?x\s+enviado)\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i,
     /(?:recebimento\s+fornecedor\s+administradora\s+de\s+consorcio\s+naci|recebimento\s+fornecedor)\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i
   ];
 
