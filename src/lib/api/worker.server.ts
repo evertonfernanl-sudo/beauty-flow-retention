@@ -1,5 +1,15 @@
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// @ts-ignore
+globalThis.__dirname = __dirname;
+// @ts-ignore
+globalThis.__filename = __filename;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Admin = any;
