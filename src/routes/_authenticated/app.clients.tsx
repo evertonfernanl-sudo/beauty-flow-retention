@@ -1,5 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { mergeClientsServer } from "@/lib/api/clients.functions";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentProfile } from "@/lib/hooks/use-current-profile";
@@ -1231,6 +1233,7 @@ function MergeClientsDialog({ sourceClient, clients, onClose, onMerged }: MergeC
   const [search, setSearch] = useState("");
   const [targetClient, setTargetClient] = useState<any | null>(null);
   const [isMerging, setIsMerging] = useState(false);
+  const merge = useServerFn(mergeClientsServer);
 
   useEffect(() => {
     if (sourceClient) {
@@ -1257,23 +1260,23 @@ function MergeClientsDialog({ sourceClient, clients, onClose, onMerged }: MergeC
       .slice(0, 5);
   }, [availableClients, search]);
 
+  const getClientOrderNumber = (clientId: string) => {
+    const idx = clients.findIndex((c) => c.id === clientId);
+    return idx !== -1 ? idx + 1 : "";
+  };
+
   async function handleMerge() {
     if (!sourceClient || !targetClient) return;
     setIsMerging(true);
     try {
-      const { error } = await supabase.rpc("merge_clients", {
-        source_id: sourceClient.id,
-        target_id: targetClient.id,
+      await merge({
+        sourceId: sourceClient.id,
+        targetId: targetClient.id,
       });
-
-      if (error) {
-        toast.error("Erro ao mesclar clientes: " + error.message);
-      } else {
-        toast.success("Clientes mesclados com sucesso!");
-        onMerged();
-      }
+      toast.success("Clientes mesclados com sucesso!");
+      onMerged();
     } catch (err: any) {
-      toast.error("Erro inesperado: " + err.message);
+      toast.error("Erro ao mesclar clientes: " + (err.message || err));
     } finally {
       setIsMerging(false);
     }
@@ -1291,10 +1294,10 @@ function MergeClientsDialog({ sourceClient, clients, onClose, onMerged }: MergeC
           <DialogTitle>Mesclar Ficha de Cliente</DialogTitle>
           <div className="text-sm text-muted-foreground space-y-2 mt-2">
             <p>
-              Você está mesclando a ficha de <strong className="text-foreground">{sourceClient?.name}</strong>.
+              Você está mesclando a ficha de <strong className="text-foreground">#{getClientOrderNumber(sourceClient?.id)} {sourceClient?.name}</strong>.
             </p>
             <p>
-              Esta ação moverá todos os agendamentos, mensagens, histórico de faturamento e outras relações para o cliente de destino, e depois <span className="text-destructive font-semibold">excluirá definitivamente</span> o cadastro de <strong className="text-foreground">{sourceClient?.name}</strong>.
+              Esta ação moverá todos os agendamentos, mensagens, histórico de faturamento e outras relações para o cliente de destino, e depois <span className="text-destructive font-semibold">excluirá definitivamente</span> o cadastro de <strong className="text-foreground">#{getClientOrderNumber(sourceClient?.id)} {sourceClient?.name}</strong>.
             </p>
           </div>
         </DialogHeader>
@@ -1328,7 +1331,7 @@ function MergeClientsDialog({ sourceClient, clients, onClose, onMerged }: MergeC
                   disabled={isMerging}
                 >
                   <div>
-                    <div>{c.name}</div>
+                    <div>{getClientOrderNumber(c.id)}. {c.name}</div>
                     {c.phone && <div className="text-xs text-muted-foreground">{c.phone}</div>}
                   </div>
                   {targetClient?.id === c.id && (
@@ -1350,7 +1353,7 @@ function MergeClientsDialog({ sourceClient, clients, onClose, onMerged }: MergeC
               <span className="text-xs font-semibold text-primary uppercase tracking-wider block">
                 Destino Selecionado (Será Mantido)
               </span>
-              <div className="font-medium text-sm">{targetClient.name}</div>
+              <div className="font-medium text-sm">#{getClientOrderNumber(targetClient.id)} {targetClient.name}</div>
               {targetClient.phone && (
                 <div className="text-xs text-muted-foreground">{targetClient.phone}</div>
               )}
