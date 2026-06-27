@@ -658,14 +658,11 @@ export function parsePdfTextToRows(text: string): { headers: string[]; rows: Rec
   };
 
   const extractAmount = (line: string): { amountStr: string; amountRaw: string; rest: string } | null => {
-    const amountReLocal = /(-?\s*R?\$?\s*\d+(?:\.\d{3})*,\d{2}(?:\s+[DdCc](?!\w))?)/;
-    const parts = line.split(/saldo/i);
-    const textToSearch = parts[0];
+    const amountReGlobal = /(-?\s*R?\$?\s*\d+(?:\.\d{3})*(?:,\d{2}|\.\d{2})(?:\s+[DdCc](?!\w))?)/g;
+    const matches = line.match(amountReGlobal);
+    if (!matches || matches.length === 0) return null;
     
-    const match = textToSearch.match(amountReLocal);
-    if (!match) return null;
-    
-    const amountRaw = match[0];
+    const amountRaw = matches[0];
     let isNegative = false;
     if (amountRaw.includes("-") || /d/i.test(amountRaw)) {
       isNegative = true;
@@ -738,85 +735,72 @@ export function parsePdfTextToRows(text: string): { headers: string[]; rows: Rec
     csvRowsExported: 0
   };
 
-  const events: LineEvent[] = [];
+  let currentDate = "";
+  const rows: Record<string, unknown>[] = [];
+  let lastTransaction: { data: string; descricao: string[]; valor: string } | null = null;
 
-  // FASE 1: Camada de Classificação de Linhas
   for (const line of normalizedLines) {
-    const hasDateCheck = extractDate(line) !== null;
-    const hasAmountCheck = extractAmount(line) !== null;
+    const hasDateCheck = extractDate(line);
+    const hasAmountCheck = extractAmount(line);
 
+    // Se for uma linha apenas de ruído (e sem data/valor), ignora
     if (isNoiseOrBalanceLine(line) && !hasDateCheck && !hasAmountCheck) {
-      events.push({ type: "NOISE" });
-      metrics.eventsNoise++;
       continue;
     }
 
-    let rest = line;
-    let hasDate = false;
-    let hasAmount = false;
-
-    // 1. Identificação de Data
-    const dateInfo = extractDate(rest);
-    if (dateInfo) {
-      events.push({ type: "DATE", payload: { date: dateInfo.dateStr } });
-      metrics.eventsDate++;
-      rest = dateInfo.rest;
-      hasDate = true;
+    if (hasDateCheck) {
+      currentDate = hasDateCheck.dateStr;
     }
 
-    // 2. Identificação de Valor
-    const amountInfo = extractAmount(rest);
-    if (amountInfo) {
-      events.push({ type: "AMOUNT", payload: { amount: amountInfo.amountStr } });
-      metrics.eventsAmount++;
-      rest = amountInfo.rest;
-      hasAmount = true;
-    }
+    if (hasAmountCheck) {
+      // Se já temos uma transação anterior acumulando, salva no array
+      if (lastTransaction) {
+        rows.push({
+          data: lastTransaction.data,
+          descricao: lastTransaction.descricao.join(" "),
+          valor: lastTransaction.valor
+        });
+      }
 
-    // 3. Identificação de Descrição
-    const cleanDesc = rest.replace(/R\$\s*/gi, " ").replace(/\s+/g, " ").trim();
-    if (cleanDesc && !isBalanceOrNoiseDescription(cleanDesc)) {
-      events.push({ type: "DESCRIPTION", payload: { text: cleanDesc } });
-      metrics.eventsDescription++;
+      // Inicia a nova transação
+      let descText = line;
+      if (hasDateCheck) {
+        descText = descText.replace(hasDateCheck.dateStr, "");
+      }
+      descText = descText.replace(hasAmountCheck.amountRaw, "");
+      
+      // Limpa os cifrões e espaços múltiplos
+      descText = descText.replace(/R\$\s*/gi, " ").replace(/\s+/g, " ").trim();
+
+      lastTransaction = {
+        data: currentDate,
+        descricao: descText ? [descText] : [],
+        valor: hasAmountCheck.amountStr
+      };
+      metrics.transactionsGenerated++;
     } else {
-      if (!hasDate && !hasAmount) {
-        events.push({ type: "NOISE" });
-        metrics.eventsNoise++;
+      // Se não tem valor de transação, ela é um complemento de descrição da transação anterior
+      let descText = line;
+      if (hasDateCheck) {
+        descText = descText.replace(hasDateCheck.dateStr, "");
+      }
+      descText = descText.replace(/R\$\s*/gi, " ").replace(/\s+/g, " ").trim();
+
+      if (descText && !isBalanceOrNoiseDescription(descText)) {
+        if (lastTransaction) {
+          lastTransaction.descricao.push(descText);
+        }
       }
     }
   }
 
-  // FASE 2: Máquina de Estados que Consome Eventos
-  let currentDate = "";
-  let accumulatedDesc: string[] = [];
-  const rows: Record<string, unknown>[] = [];
-
-  for (const event of events) {
-    if (event.type === "NOISE") {
-      continue;
-    }
-    if (event.type === "DATE") {
-      currentDate = event.payload.date;
-      continue;
-    }
-    if (event.type === "DESCRIPTION") {
-      accumulatedDesc.push(event.payload.text);
-      continue;
-    }
-    if (event.type === "AMOUNT") {
-      if (accumulatedDesc.length > 0) {
-        const descriptionStr = accumulatedDesc.join(" ");
-        if (currentDate && descriptionStr) {
-          rows.push({
-            data: currentDate,
-            descricao: descriptionStr,
-            valor: event.payload.amount
-          });
-          metrics.transactionsGenerated++;
-        }
-        accumulatedDesc = [];
-      }
-    }
+  // Não esquecer de empurrar a última transação pendente
+  if (lastTransaction) {
+    rows.push({
+      data: lastTransaction.data,
+      descricao: lastTransaction.descricao.join(" "),
+      valor: lastTransaction.valor
+    });
   }
 
   metrics.csvRowsExported = rows.length;
@@ -842,9 +826,12 @@ export function extractNameFromDescription(desc: string | null | undefined): str
 
   // 1) Common Pix/TED/Fornecedor prefixes with explicit name boundaries
   const regexes = [
-    /(?:p[ix\s]?x\s+recebido\s+de|p[ix\s]?x\s+de|transferência\s+recebida\s+de|recebido\s+de|p[ix\s]?x\s+recebido|ted\s+recebida|credito\s+p[ix\s]?x|transf\s+recebida|transferencia|ted|doc)\s*:?\s*-?\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i,
-    /(?:p[ix\s]?x\s+enviado\s+des\s*:|p[ix\s]?x\s+qr\s+code\s+estatic\s+rem\s*:|p[ix\s]?x\s+qr\s+code\s+dinamico\s+des\s*:|p[ix\s]?x\s+qr\s+code\s+estatico\s+des\s*:|p[ix\s]?x\s+enviado\s+para|p[ix\s]?x\s+para|p[ix\s]?x\s+enviado)\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i,
-    /(?:recebimento\s+fornecedor\s+administradora\s+de\s+consorcio\s+naci|recebimento\s+fornecedor)\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i
+    /p[ixle\s]+(?:qr\s+code\s+)?(?:estatic[o]?|dinamic[o]?)?.*?(?:des|rem)\s*:?\s*-?\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i,
+    /(?:p[ixle\s]+recebido\s+de|p[ixle\s]+de|transferência\s+recebida\s+de|recebido\s+de|p[ixle\s]+recebido|ted\s+recebida|credito\s+p[ixle\s]+|transf\s+recebida|transferencia|ted|doc)\s*:?\s*-?\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i,
+    /(?:p[ixle\s]+enviado\s+des\s*:|p[ixle\s]+enviado\s+para|p[ixle\s]+para|p[ixle\s]+enviado)\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i,
+    /(?:recebimento\s+fornecedor\s+administradora\s+de\s+consorcio\s+naci|recebimento\s+fornecedor)\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i,
+    /\b(bco:\d+\s+age:\d+\s+cta:[\d\-]+)\b/i,
+    /(?:transf\s+saldo\s+c\/sal\s+p\/cc|transf|transferencia)\s*:?\s*-?\s*([A-Za-zÀ-ÿ0-9\s'\.\:\-/]{8,60})/i
   ];
 
   for (const re of regexes) {
