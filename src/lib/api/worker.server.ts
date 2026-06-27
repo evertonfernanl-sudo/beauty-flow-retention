@@ -434,6 +434,11 @@ const isPaymentHeader = (h: string): boolean => {
   );
 };
 
+const isBalanceHeader = (h: string): boolean => {
+  const norm = h.toLowerCase().trim();
+  return norm.includes("saldo") || norm.includes("balance");
+};
+
 function jsNormalizeName(name: string | null | undefined): string | null {
   if (!name) return null;
   let s = name.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // remove accents
@@ -467,7 +472,10 @@ function findHeaderRowIndex(rows: unknown[][]): number {
         isAmountHeader(cellStr) ||
         isDateHeader(cellStr) ||
         isDescriptionHeader(cellStr) ||
-        isPaymentHeader(cellStr)
+        isPaymentHeader(cellStr) ||
+        isCreditHeader(cellStr) ||
+        isDebitHeader(cellStr) ||
+        isBalanceHeader(cellStr)
       ) {
         matches++;
       }
@@ -482,43 +490,60 @@ function findHeaderRowIndex(rows: unknown[][]): number {
   return bestIndex;
 }
 
-export function detectColumns(headers: string[]): Record<string, number> {
-  const out: Record<string, number> = {};
+export interface CanonicalColumnMap {
+  date?: number;
+  description?: number;
+  beneficiary?: number;
+  phone1?: number;
+  phone2?: number;
+  email?: number;
+  credit?: number;
+  debit?: number;
+  amount?: number;
+  balance?: number;
+  payment?: number;
+}
+
+export function detectColumns(headers: string[]): CanonicalColumnMap {
+  const out: CanonicalColumnMap = {};
   headers.forEach((h, i) => {
     const norm = (h ?? "").toString().trim().toLowerCase();
 
-    if (out["name"] === undefined && (norm === "cliente" || isNameHeader(norm))) {
-      out["name"] = i;
+    if (out.beneficiary === undefined && (norm === "cliente" || isNameHeader(norm))) {
+      out.beneficiary = i;
     }
-    if (out["phone"] === undefined && (norm === "telefone 1" || isPhoneHeader(norm))) {
-      out["phone"] = i;
+    if (out.phone1 === undefined && (norm === "telefone 1" || isPhoneHeader(norm))) {
+      out.phone1 = i;
     }
     if (
-      out["phone2"] === undefined &&
-      (norm === "telefone 2" || (isPhoneHeader(norm) && i !== out["phone"]))
+      out.phone2 === undefined &&
+      (norm === "telefone 2" || (isPhoneHeader(norm) && i !== out.phone1))
     ) {
-      out["phone2"] = i;
+      out.phone2 = i;
     }
-    if (out["email"] === undefined && isEmailHeader(norm)) {
-      out["email"] = i;
+    if (out.email === undefined && isEmailHeader(norm)) {
+      out.email = i;
     }
-    if (out["credit"] === undefined && isCreditHeader(norm)) {
-      out["credit"] = i;
+    if (out.credit === undefined && isCreditHeader(norm)) {
+      out.credit = i;
     }
-    if (out["debit"] === undefined && isDebitHeader(norm)) {
-      out["debit"] = i;
+    if (out.debit === undefined && isDebitHeader(norm)) {
+      out.debit = i;
     }
-    if (out["amount"] === undefined && isAmountHeader(norm)) {
-      out["amount"] = i;
+    if (out.amount === undefined && isAmountHeader(norm)) {
+      out.amount = i;
     }
-    if (out["date"] === undefined && isDateHeader(norm)) {
-      out["date"] = i;
+    if (out.date === undefined && isDateHeader(norm)) {
+      out.date = i;
     }
-    if (out["description"] === undefined && (norm === "descrição" || isDescriptionHeader(norm))) {
-      out["description"] = i;
+    if (out.description === undefined && (norm === "descrição" || isDescriptionHeader(norm))) {
+      out.description = i;
     }
-    if (out["payment"] === undefined && isPaymentHeader(norm)) {
-      out["payment"] = i;
+    if (out.balance === undefined && isBalanceHeader(norm)) {
+      out.balance = i;
+    }
+    if (out.payment === undefined && isPaymentHeader(norm)) {
+      out.payment = i;
     }
   });
   return out;
@@ -1117,8 +1142,8 @@ export async function runImportParse(
       .download(imp.storage_path);
     if (dlErr || !file) throw new PipelineError(`download falhou: ${dlErr?.message}`, "DOWNLOAD");
 
-    let rows: Record<string, unknown>[] = [];
-    let headers: string[] = [];
+    // Camada 1 — Leitura
+    let rawMatrix: unknown[][] = [];
 
     if (imp.source === "csv" || imp.source === "pdf") {
       let csvText = "";
@@ -1315,15 +1340,7 @@ export async function runImportParse(
       }
 
       const parsed = Papa.parse<string[]>(csvText, { skipEmptyLines: true, delimiter: "" });
-      const data = parsed.data as string[][];
-      if (data.length === 0) throw new Error("CSV vazio");
-      const hIdx = findHeaderRowIndex(data);
-      headers = normalizeAndMapHeaders(data[hIdx]);
-      rows = data.slice(hIdx + 1).map((r) => {
-        const o: Record<string, unknown> = {};
-        headers.forEach((h, i) => (o[h] = r[i]));
-        return o;
-      });
+      rawMatrix = parsed.data;
     } else if (imp.source === "xlsx") {
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array", cellDates: true });
@@ -1333,21 +1350,67 @@ export async function runImportParse(
         raw: true,
         defval: null,
       });
-      if (aoa.length === 0) throw new Error("Planilha vazia");
-      const hIdx = findHeaderRowIndex(aoa);
-      headers = normalizeAndMapHeaders(aoa[hIdx] as string[]);
-      rows = aoa.slice(hIdx + 1).map((r) => {
-        const o: Record<string, unknown> = {};
-        headers.forEach((h, i) => (o[h] = (r as unknown[])[i]));
-        return o;
-      });
+      rawMatrix = aoa;
     } else {
       throw new Error(`Fonte não suportada nesta fase: ${imp.source}`);
     }
 
-    const cols = detectColumns(headers);
-    const idx = (k: string) => (cols[k] !== undefined ? headers[cols[k]] : null);
+    if (rawMatrix.length === 0) throw new Error("Arquivo de importação vazio");
 
+    // Camada 2 — Mapeamento de Cabeçalhos
+    const hIdx = findHeaderRowIndex(rawMatrix);
+    const rawHeaders = (rawMatrix[hIdx] ?? []).map((h) => String(h ?? "").trim());
+    const normalizedHeaders = normalizeAndMapHeaders(rawHeaders);
+    const cols = detectColumns(normalizedHeaders);
+
+    // Camada 3 — Modelo Canônico
+    interface CanonicalRow {
+      date: unknown;
+      description: unknown;
+      beneficiary: unknown;
+      phone1: unknown;
+      phone2: unknown;
+      email: unknown;
+      credit: unknown;
+      debit: unknown;
+      amount: unknown;
+      balance: unknown;
+      payment: unknown;
+      rawRecord: Record<string, unknown>;
+    }
+
+    const canonicalRows: CanonicalRow[] = [];
+    const dataRows = rawMatrix.slice(hIdx + 1);
+
+    for (const r of dataRows) {
+      if (!r || !Array.isArray(r)) continue;
+
+      const rawRecord: Record<string, unknown> = {};
+      const colIndices = Object.values(cols).filter((idx): idx is number => idx !== undefined);
+      colIndices.forEach((index) => {
+        const hName = normalizedHeaders[index];
+        if (hName !== undefined) {
+          rawRecord[hName] = r[index];
+        }
+      });
+
+      canonicalRows.push({
+        date: cols.date !== undefined ? r[cols.date] : null,
+        description: cols.description !== undefined ? r[cols.description] : null,
+        beneficiary: cols.beneficiary !== undefined ? r[cols.beneficiary] : null,
+        phone1: cols.phone1 !== undefined ? r[cols.phone1] : null,
+        phone2: cols.phone2 !== undefined ? r[cols.phone2] : null,
+        email: cols.email !== undefined ? r[cols.email] : null,
+        credit: cols.credit !== undefined ? r[cols.credit] : null,
+        debit: cols.debit !== undefined ? r[cols.debit] : null,
+        amount: cols.amount !== undefined ? r[cols.amount] : null,
+        balance: cols.balance !== undefined ? r[cols.balance] : null,
+        payment: cols.payment !== undefined ? r[cols.payment] : null,
+        rawRecord,
+      });
+    }
+
+    // Camada 4 — Interpretador Financeiro & Camada 5 — Importador
     let total = 0,
       matched = 0,
       review = 0,
@@ -1355,47 +1418,54 @@ export async function runImportParse(
       revenue = 0,
       autoAppliedCount = 0;
 
-    for (let i = 0; i < rows.length; i++) {
-      const r = rows[i];
-      const nameFromCol = idx("name") ? String(r[idx("name")!] ?? "").trim() : "";
-      const phoneRaw1 = idx("phone") ? String(r[idx("phone")!] ?? "").trim() : "";
-      const phoneRaw2 = idx("phone2") ? String(r[idx("phone2")!] ?? "").trim() : "";
-      const phoneRaw = phoneRaw1 || phoneRaw2;
-      const description = idx("description") ? String(r[idx("description")!] ?? "").trim() : null;
-      
-      // Lógica de leitura de valor para colunas separadas (Crédito e Débito) ou coluna única (Valor)
-      let amountRaw: number | null = null;
-      const creditCol = idx("credit");
-      const debitCol = idx("debit");
-      const amountCol = idx("amount");
+    for (let i = 0; i < canonicalRows.length; i++) {
+      const canonical = canonicalRows[i];
 
-      if (creditCol !== null || debitCol !== null) {
-        const creditVal = creditCol !== null ? parseAmount(r[creditCol]) : null;
-        const debitVal = debitCol !== null ? parseAmount(r[debitCol]) : null;
-        
-        if (creditVal !== null && creditVal !== 0 && !isNaN(creditVal)) {
-          amountRaw = Math.abs(creditVal);
-        } else if (debitVal !== null && debitVal !== 0 && !isNaN(debitVal)) {
-          amountRaw = -Math.abs(debitVal);
-        } else {
-          amountRaw = 0;
-        }
-      } else if (amountCol !== null) {
-        amountRaw = parseAmount(r[amountCol]);
+      const description = canonical.description ? String(canonical.description).trim() : null;
+      const balanceVal = canonical.balance !== null && canonical.balance !== undefined ? parseAmount(canonical.balance) : null;
+      
+      const isSaldoDesc = description && /^(saldo|saldo do dia|saldo dia|saldo anterior|saldo atual|saldo final|resumo do dia|total de|subtotal)/i.test(description.trim());
+      
+      let amountRaw: number | null = null;
+      const creditVal = canonical.credit !== null && canonical.credit !== undefined ? parseAmount(canonical.credit) : null;
+      const debitVal = canonical.debit !== null && canonical.debit !== undefined ? parseAmount(canonical.debit) : null;
+      const amountVal = canonical.amount !== null && canonical.amount !== undefined ? parseAmount(canonical.amount) : null;
+
+      if (creditVal !== null && creditVal !== 0 && !isNaN(creditVal)) {
+        amountRaw = Math.abs(creditVal);
+      } else if (debitVal !== null && debitVal !== 0 && !isNaN(debitVal)) {
+        amountRaw = -Math.abs(debitVal);
+      } else if (amountVal !== null && amountVal !== 0 && !isNaN(amountVal)) {
+        amountRaw = amountVal;
       }
 
-      // Pular linhas informativas de saldo intermediário ou com valor zero absoluto
-      const isSaldoDesc = description && /^(saldo|saldo do dia|saldo dia|saldo anterior|saldo atual|saldo final|resumo do dia|total de|subtotal)/i.test(description.trim());
-      if (amountRaw === 0 || amountRaw === null || isSaldoDesc) {
+      if (amountRaw === 0 || amountRaw === null || isSaldoDesc || (description === null && balanceVal !== null && amountRaw === null)) {
         continue;
       }
+
       const specialCat = matchSpecialTransaction(description);
 
+      let isExpense = false;
+      if (specialCat === "TARIFA" || specialCat === "APLICACAO") {
+        isExpense = true;
+      } else if (specialCat === "JUROS" || specialCat === "RESGATE") {
+        isExpense = false;
+      } else {
+        if (creditVal !== null && creditVal !== 0 && !isNaN(creditVal)) {
+          isExpense = false;
+        } else if (debitVal !== null && debitVal !== 0 && !isNaN(debitVal)) {
+          isExpense = true;
+        } else {
+          isExpense = isExpenseDescription(description) || (amountRaw !== null && amountRaw < 0);
+        }
+      }
+
+      const amount = amountRaw !== null ? Math.abs(amountRaw) : null;
       let name = "";
-      const nameFromFavorecido = idx("name") ? String(r[idx("name")!] ?? "").trim() : "";
+      const nameFromCol = canonical.beneficiary ? String(canonical.beneficiary).trim() : "";
       
-      if (nameFromFavorecido) {
-        name = nameFromFavorecido;
+      if (nameFromCol) {
+        name = nameFromCol;
       } else if (description) {
         const extracted = extractNameFromDescription(description);
         if (extracted) {
@@ -1410,10 +1480,11 @@ export async function runImportParse(
       let autoApply = false;
       let autoApplyTxId: string | null = null;
 
-      const occurred = parseDate(idx("date") ? r[idx("date")!] : null);
-      const paymentMethod =
-        (idx("payment") ? String(r[idx("payment")!] ?? "").trim() : null) ||
-        detectPaymentMethod(description);
+      const occurred = parseDate(canonical.date);
+      const paymentMethod = (canonical.payment ? String(canonical.payment).trim() : null) || detectPaymentMethod(description);
+      const phoneRaw1 = canonical.phone1 ? String(canonical.phone1).trim() : "";
+      const phoneRaw2 = canonical.phone2 ? String(canonical.phone2).trim() : "";
+      const phoneRaw = phoneRaw1 || phoneRaw2;
 
       if (specialCat === "INTERNA") {
         name = "Transferência Interna";
@@ -1443,15 +1514,6 @@ export async function runImportParse(
       }
 
       if (!specialCat && name) {
-        const cleanStr = (s: string) => {
-          return s
-            .toLowerCase()
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "")
-            .trim();
-        };
-
-        // 1) Busca por nome normalizado exato no banco
         const normName = jsNormalizeName(name);
         if (normName) {
           const { data: byNormName } = await admin
@@ -1467,7 +1529,6 @@ export async function runImportParse(
           }
         }
 
-        // 2) Busca fuzzy/duplicados no banco
         if (!clientFound) {
           const { data: dup } = await admin.rpc("find_duplicate_client", {
             _company_id: job.company_id,
@@ -1483,34 +1544,6 @@ export async function runImportParse(
         }
       }
 
-      let isExpense = false;
-      if (specialCat === "TARIFA" || specialCat === "APLICACAO") {
-        isExpense = true;
-      } else if (specialCat === "JUROS" || specialCat === "RESGATE") {
-        isExpense = false;
-      } else {
-        if (creditCol !== null || debitCol !== null) {
-          const creditVal = creditCol !== null ? parseAmount(r[creditCol]) : null;
-          const debitVal = debitCol !== null ? parseAmount(r[debitCol]) : null;
-          
-          if (creditVal !== null && creditVal !== 0 && !isNaN(creditVal)) {
-            isExpense = false; // Receita
-          } else if (debitVal !== null && debitVal !== 0 && !isNaN(debitVal)) {
-            isExpense = true; // Despesa
-          } else {
-            isExpense = amountRaw != null && amountRaw < 0;
-          }
-        } else {
-          isExpense = isExpenseDescription(description) || (amountRaw != null && amountRaw < 0);
-        }
-      }
-
-      const amount = amountRaw != null ? Math.abs(amountRaw) : null;
-
-      if (!name && !phoneRaw && amount == null) continue;
-      total++;
-
-      // Normalize phone via RPC for consistency with rest of system
       let phoneApi: string | null = null;
       if (phoneRaw1 && !specialCat) {
         const { data: p } = await admin.rpc("normalize_phone", { _phone: phoneRaw1 });
@@ -1522,15 +1555,14 @@ export async function runImportParse(
         phoneApi2 = (p as string | null) ?? null;
       }
 
-      // Offering prediction
       let offeringId: string | null = null;
       let offeringKind: string | null = null;
       let offeringLabel: string | null = null;
       let amountMatch = false;
       let descMatch = false;
       let tenantPattern = false;
-      if (!specialCat) {
-        if (!isExpense && amount != null) {
+      if (!specialCat && amount != null) {
+        if (!isExpense) {
           const { data: pred } = await admin.rpc("predict_offering_from_amount", {
             _company_id: job.company_id,
             _amount: amount,
@@ -1591,7 +1623,6 @@ export async function runImportParse(
         status = confidence >= 95 ? "matched" : confidence >= 70 ? "review" : "manual";
       }
 
-      // Duplicate detection
       let isDuplicate = false;
       if (!specialCat && amount != null && occurred) {
         if (isExpense) {
@@ -1606,9 +1637,7 @@ export async function runImportParse(
             query = query.ilike("description", description);
           }
           const { data: dupTx } = await query.limit(1);
-          if (dupTx && dupTx.length > 0) {
-            isDuplicate = true;
-          }
+          if (dupTx && dupTx.length > 0) isDuplicate = true;
         } else {
           if (clientId) {
             const startOfDay = `${occurred}T00:00:00.000Z`;
@@ -1622,9 +1651,7 @@ export async function runImportParse(
               .gte("start_datetime", startOfDay)
               .lte("start_datetime", endOfDay)
               .limit(1);
-            if (dupApp && dupApp.length > 0) {
-              isDuplicate = true;
-            }
+            if (dupApp && dupApp.length > 0) isDuplicate = true;
           }
           if (!isDuplicate) {
             let query = admin
@@ -1638,72 +1665,49 @@ export async function runImportParse(
               query = query.ilike("description", description);
             }
             const { data: dupTx } = await query.limit(1);
-            if (dupTx && dupTx.length > 0) {
-              isDuplicate = true;
-            }
+            if (dupTx && dupTx.length > 0) isDuplicate = true;
           }
         }
       }
 
       const finalStatus = specialCat ? status : (isDuplicate ? "review" : status);
-
       if (finalStatus === "matched") matched++;
       else if (finalStatus === "review") review++;
 
-      // Auto-apply if it is a fee, interest, or bank movement
       if (autoApply && amount != null) {
-        let isExpense = true;
+        let isExpenseLocal = true;
         let category = "Despesa Empresa";
-        
         if (specialCat === "JUROS" || specialCat === "RESGATE") {
-          isExpense = false;
+          isExpenseLocal = false;
           category = specialCat === "JUROS" ? "Juros Bancários" : "Resgate";
         } else if (specialCat === "APLICACAO") {
-          isExpense = true;
+          isExpenseLocal = true;
           category = "Aplicação";
         } else if (specialCat === "TARIFA") {
-          isExpense = true;
+          isExpenseLocal = true;
           category = "Tarifa Bancária";
         } else if (specialCat === "INTERNA") {
-          isExpense = amountRaw != null ? amountRaw < 0 : true;
+          isExpenseLocal = amountRaw! < 0;
           category = "Movimentação Interna";
         }
-
-        // Infer bank name from filename or description
         const bankName = inferBankName(imp?.filename, description);
-        
-        // Find or create provider
         const { data: existingProviders } = await admin
           .from("providers")
           .select("id")
           .eq("company_id", job.company_id)
           .eq("name", bankName)
           .limit(1);
-          
         let providerId: string | null = null;
-        if (existingProviders && existingProviders.length > 0) {
-          providerId = existingProviders[0].id;
-        } else {
-          const { data: newProvider, error: pErr } = await admin
-            .from("providers")
-            .insert({
-              company_id: job.company_id,
-              name: bankName,
-            })
-            .select("id")
-            .single();
-          if (!pErr && newProvider) {
-            providerId = newProvider.id;
-          } else {
-            console.error("Erro ao auto-criar fornecedor bancário:", pErr);
-          }
+        if (existingProviders && existingProviders.length > 0) providerId = existingProviders[0].id;
+        else {
+          const { data: newProvider } = await admin.from("providers").insert({ company_id: job.company_id, name: bankName }).select("id").single();
+          if (newProvider) providerId = newProvider.id;
         }
-
-        const { data: tx, error: txErr } = await admin
+        const { data: tx } = await admin
           .from("financial_transactions")
           .insert({
             company_id: job.company_id,
-            type: isExpense ? "EXPENSE" : "INCOME",
+            type: isExpenseLocal ? "EXPENSE" : "INCOME",
             category,
             description: name,
             amount: amount,
@@ -1713,31 +1717,20 @@ export async function runImportParse(
           })
           .select("id")
           .single();
-
-        if (!txErr && tx) {
+        if (tx) {
           autoApplyTxId = tx.id;
           autoAppliedCount++;
-        } else {
-          console.error("Erro ao auto-aplicar transação especial:", txErr);
         }
       }
 
-      // Retain only mapped columns for raw data
-      const cleanRaw: Record<string, unknown> = {};
-      for (const [key, index] of Object.entries(cols)) {
-        const hName = headers[index];
-        if (hName !== undefined) {
-          cleanRaw[hName] = r[hName];
-        }
-      }
-
+      total++;
       const { data: insertedRow, error: rowErr } = await admin
         .from("import_rows")
         .insert({
           import_id,
           company_id: job.company_id,
           row_index: i,
-          raw: cleanRaw as never,
+          raw: canonical.rawRecord as never,
           parsed: {
             name,
             phoneRaw: phoneRaw1,
@@ -1770,35 +1763,14 @@ export async function runImportParse(
           status: finalStatus,
           action_taken: autoApplyTxId ? (isExpense ? "create_expense" : "create_income") : null,
           transaction_id: autoApplyTxId ?? null,
-          notes: specialCat === "INTERNA"
-            ? "Movimentação interna automática"
-            : specialCat === "TARIFA"
-              ? "Tarifa bancária automática"
-              : specialCat === "JUROS"
-                ? "Juros bancários automáticos"
-                : specialCat === "APLICACAO"
-                  ? "Aplicação automática detectada"
-                  : specialCat === "RESGATE"
-                    ? "Resgate automático de investimento"
-                    : isDuplicate
-                      ? "Possível duplicidade: já existe um lançamento com o mesmo valor e data."
-                      : isExpense
-                        ? "Despesa automática detectada"
-                        : offeringLabel
-                          ? `Sugestão: ${offeringLabel}`
-                          : null,
+          notes: specialCat === "INTERNA" ? "Movimentação interna automática" : specialCat === "TARIFA" ? "Tarifa bancária automática" : specialCat === "JUROS" ? "Juros bancários automáticos" : specialCat === "APLICACAO" ? "Aplicação automática detectada" : specialCat === "RESGATE" ? "Resgate automático de investimento" : isDuplicate ? "Possível duplicidade: já existe um lançamento com o mesmo valor e data." : isExpense ? "Despesa automática detectada" : offeringLabel ? `Sugestão: ${offeringLabel}` : null,
         })
         .select("id")
         .single();
 
       if (rowErr) {
         failed++;
-        await admin.from("import_errors").insert({
-          import_id,
-          company_id: job.company_id,
-          code: "row_insert",
-          message: rowErr.message,
-        });
+        await admin.from("import_errors").insert({ import_id, company_id: job.company_id, code: "row_insert", message: rowErr.message });
         continue;
       }
 
