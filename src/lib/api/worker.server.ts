@@ -1380,21 +1380,31 @@ export async function runImportParse(
       if (amountRaw === 0 || amountRaw === null || isSaldoDesc) {
         continue;
       }
-
-      const occurred = parseDate(idx("date") ? r[idx("date")!] : null);
-      const paymentMethod =
-        (idx("payment") ? String(r[idx("payment")!] ?? "").trim() : null) ||
-        detectPaymentMethod(description);
-
       const specialCat = matchSpecialTransaction(description);
 
-      let name = nameFromCol;
+      let name = "";
+      const nameFromFavorecido = idx("name") ? String(r[idx("name")!] ?? "").trim() : "";
+      
+      if (nameFromFavorecido) {
+        name = nameFromFavorecido;
+      } else if (description) {
+        const extracted = extractNameFromDescription(description);
+        if (extracted) {
+          name = extracted;
+        }
+      }
+
       let clientId: string | null = null;
       let clientFound = false;
       let status = "matched";
       let confidence = 0;
       let autoApply = false;
       let autoApplyTxId: string | null = null;
+
+      const occurred = parseDate(idx("date") ? r[idx("date")!] : null);
+      const paymentMethod =
+        (idx("payment") ? String(r[idx("payment")!] ?? "").trim() : null) ||
+        detectPaymentMethod(description);
 
       if (specialCat === "INTERNA") {
         name = "Transferência Interna";
@@ -1423,8 +1433,7 @@ export async function runImportParse(
         autoApply = true;
       }
 
-      if (!specialCat) {
-        // Search description content to find the client name from the database (Brazilian bank statement match style)
+      if (!specialCat && name) {
         const cleanStr = (s: string) => {
           return s
             .toLowerCase()
@@ -1433,67 +1442,27 @@ export async function runImportParse(
             .trim();
         };
 
-        if (!name && description && companyClients.length > 0) {
-          const descClean = cleanStr(description);
-          const sortedClients = [...companyClients].sort((a, b) => b.name.length - a.name.length);
-          for (const client of sortedClients) {
-            const clientClean = cleanStr(client.name);
-            if (clientClean.length >= 4 && descClean.includes(clientClean)) {
-              name = client.name;
-              clientId = client.id;
-              clientFound = true;
-              break;
-            }
+        // 1) Busca por nome normalizado exato no banco
+        const normName = jsNormalizeName(name);
+        if (normName) {
+          const { data: byNormName } = await admin
+            .from("clients")
+            .select("id, name")
+            .eq("company_id", job.company_id)
+            .eq("normalized_name", normName)
+            .limit(1);
+          if (byNormName && byNormName.length > 0) {
+            clientId = byNormName[0].id;
+            clientFound = true;
+            name = byNormName[0].name;
           }
         }
 
-        if (!clientFound && description && companyClients.length > 0) {
-          const candidate = extractNameFromDescription(description);
-          if (candidate) {
-            const candidateClean = cleanStr(candidate);
-            const sortedClients = [...companyClients].sort((a, b) => b.name.length - a.name.length);
-            for (const client of sortedClients) {
-              const clientClean = cleanStr(client.name);
-              
-              const isMatch = 
-                candidateClean === clientClean ||
-                (clientClean.length >= 8 && clientClean.startsWith(candidateClean)) ||
-                (candidateClean.length >= 8 && candidateClean.startsWith(clientClean));
-
-              if (isMatch) {
-                name = client.name;
-                clientId = client.id;
-                clientFound = true;
-                break;
-              }
-            }
-            if (!name) {
-              name = candidate;
-            }
-          }
-        }
-
-        if (!clientFound && name) {
-          const normName = jsNormalizeName(name);
-          if (normName) {
-            const { data: byNormName } = await admin
-              .from("clients")
-              .select("id, name")
-              .eq("company_id", job.company_id)
-              .eq("normalized_name", normName)
-              .limit(1);
-            if (byNormName && byNormName.length > 0) {
-              clientId = byNormName[0].id;
-              clientFound = true;
-              name = byNormName[0].name;
-            }
-          }
-        }
-
-        if (!clientFound && (name || phoneRaw)) {
+        // 2) Busca fuzzy/duplicados no banco
+        if (!clientFound) {
           const { data: dup } = await admin.rpc("find_duplicate_client", {
             _company_id: job.company_id,
-            _name: name || "",
+            _name: name,
             _phone: phoneRaw || "",
             _threshold: 0.7,
           });
@@ -1501,30 +1470,6 @@ export async function runImportParse(
           if (first) {
             clientId = first.id;
             clientFound = true;
-            if (!name) {
-              name = first.name;
-            }
-          }
-        }
-
-        if (!name && description) {
-          const extracted = extractNameFromDescription(description);
-          if (extracted) {
-            name = extracted;
-            const normExtracted = jsNormalizeName(name);
-            if (normExtracted) {
-              const { data: byNormName } = await admin
-                .from("clients")
-                .select("id, name")
-                .eq("company_id", job.company_id)
-                .eq("normalized_name", normExtracted)
-                .limit(1);
-              if (byNormName && byNormName.length > 0) {
-                clientId = byNormName[0].id;
-                clientFound = true;
-                name = byNormName[0].name;
-              }
-            }
           }
         }
       }
