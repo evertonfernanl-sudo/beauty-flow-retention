@@ -817,7 +817,7 @@ function AgendaPage() {
       <NewProviderDialog
         open={providerDialogOpen}
         onOpenChange={setProviderDialogOpen}
-        companyId={companyId}
+        companyId={companyId ?? null}
       />
 
       {/* Botão de Fechar o Mês no final da página */}
