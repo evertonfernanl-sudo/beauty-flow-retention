@@ -268,8 +268,11 @@ function SiePage() {
                 </div>
                 {imp.status === "processing" && <Progress value={50} className="mt-2 h-1" />}
                 {imp.last_error && (
-                  <div className="text-xs text-destructive mt-1 flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3" /> {imp.last_error}
+                  <div className="text-xs text-destructive mt-2 p-3 bg-destructive/5 border border-destructive/10 rounded-md whitespace-pre-wrap font-mono max-h-60 overflow-y-auto">
+                    <div className="flex items-center gap-1.5 font-semibold mb-1 text-destructive">
+                      <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" /> Falha no Processamento
+                    </div>
+                    {imp.last_error}
                   </div>
                 )}
                 {imp.status === "completed" && (

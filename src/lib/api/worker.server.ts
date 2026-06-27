@@ -1079,18 +1079,20 @@ async function runImportParse(
       .eq("company_id", job.company_id);
     const companyClients = (clientsData ?? []) as Array<{ id: string; name: string }>;
 
+    const { PipelineError } = await import("./ocr-normalizer.server");
+
     const { data: imp, error: impErr } = await admin
       .from("imports")
       .select("id, source, storage_path, company_id, filename")
       .eq("id", import_id)
       .single();
-    if (impErr || !imp) throw new Error(impErr?.message ?? "import not found");
-    if (!imp.storage_path) throw new Error("import sem storage_path");
+    if (impErr || !imp) throw new PipelineError(impErr?.message ?? "import not found", "INITIALIZATION");
+    if (!imp.storage_path) throw new PipelineError("import sem storage_path", "INITIALIZATION");
 
     const { data: file, error: dlErr } = await admin.storage
       .from("imports")
       .download(imp.storage_path);
-    if (dlErr || !file) throw new Error(`download falhou: ${dlErr?.message}`);
+    if (dlErr || !file) throw new PipelineError(`download falhou: ${dlErr?.message}`, "DOWNLOAD");
 
     let rows: Record<string, unknown>[] = [];
     let headers: string[] = [];
@@ -1238,6 +1240,7 @@ async function runImportParse(
             }
           } catch (ocrErr: any) {
             console.error("Falha durante execução do OCR:", ocrErr.message);
+            throw new PipelineError(`Falha durante execução do OCR: ${ocrErr.message}`, "OCR");
           } finally {
             if (worker) {
               await worker.terminate();
@@ -1246,17 +1249,21 @@ async function runImportParse(
           
           const { normalizeOcrText, validateOcrText } = await import("./ocr-normalizer.server");
           const cleanText = normalizeOcrText(ocrTextAccumulator);
-          validateOcrText(cleanText, ocrTextAccumulator);
+          try {
+            validateOcrText(cleanText, ocrTextAccumulator);
+          } catch (valErr: any) {
+            throw new PipelineError(valErr.message, "VALIDATOR");
+          }
           fullText = cleanText;
         }
 
         if (!fullText.trim()) {
-          throw new Error("PDF sem camada de texto detectada. Iniciando extração OCR.");
+          throw new PipelineError("Não foi possível extrair nenhum texto legível do PDF (PDF sem camada nativa e OCR falhou).", "OCR");
         }
         
         const parsedPdf = parsePdfTextToRows(fullText);
         if (parsedPdf.rows.length === 0) {
-          throw new Error("Nenhuma linha de extrato identificada no PDF");
+          throw new PipelineError("Nenhuma linha de extrato identificada no PDF", "PARSER");
         }
         // Convert extracted text to CSV format preserving rows
         csvText = Papa.unparse({
@@ -1791,8 +1798,9 @@ async function runImportParse(
       .eq("id", import_id);
 
     return { total, matched, review, failed, revenue };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+  } catch (err: any) {
+    const stage = err.stage || "UNKNOWN";
+    const msg = `[ETAPA: ${stage}] ${err.message ?? String(err)}\nStack: ${err.stack || "Sem stack"}`;
     await admin
       .from("imports")
       .update({

@@ -13,6 +13,7 @@ export const registerImport = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i) => RegisterInput.parse(i))
   .handler(async ({ data, context }) => {
+    let importId: string | null = null;
     try {
       const { supabase, userId } = context;
       const { data: profile } = await supabase
@@ -36,6 +37,8 @@ export const registerImport = createServerFn({ method: "POST" })
         .select("id")
         .single();
       if (error) throw new Error(`Falha ao registrar importação no banco: ${error.message}`);
+      
+      importId = imp.id;
 
       const { error: qErr } = await supabase.rpc("enqueue_job", {
         _company_id: profile.company_id,
@@ -58,6 +61,25 @@ export const registerImport = createServerFn({ method: "POST" })
       return { success: true, importId: imp.id };
     } catch (err: any) {
       console.error("[registerImport SERVER ERROR]:", err);
+      
+      if (importId) {
+        try {
+          const { supabase } = context;
+          const stage = err.stage || "SERVER_FUNCTION";
+          const errorMsg = `[ETAPA: ${stage}] ${err.message ?? String(err)}\nStack: ${err.stack || "Sem stack"}`;
+          await supabase
+            .from("imports")
+            .update({
+              status: "failed",
+              last_error: errorMsg,
+              finished_at: new Date().toISOString()
+            })
+            .eq("id", importId);
+        } catch (dbErr) {
+          console.error("Erro ao registrar falha de auditoria no Supabase:", dbErr);
+        }
+      }
+
       return { success: false, error: err.message ?? String(err) };
     }
   });

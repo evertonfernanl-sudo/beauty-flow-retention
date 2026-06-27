@@ -4,6 +4,15 @@
  * to ensure that the core parser only consumes clean, bank-statement-like text.
  */
 
+export class PipelineError extends Error {
+  stage: string;
+  constructor(message: string, stage: string) {
+    super(message);
+    this.name = "PipelineError";
+    this.stage = stage;
+  }
+}
+
 // Mapeamento de meses para normalização de datas textuais
 const MONTHS_MAP: Record<string, string> = {
   jan: "01", fev: "02", mar: "03", abr: "04", mai: "05", jun: "06",
