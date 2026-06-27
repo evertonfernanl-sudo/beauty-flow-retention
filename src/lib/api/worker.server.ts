@@ -658,11 +658,21 @@ export function parsePdfTextToRows(text: string): { headers: string[]; rows: Rec
   };
 
   const extractAmount = (line: string): { amountStr: string; amountRaw: string; rest: string } | null => {
-    const amountReGlobal = /(-?\s*R?\$?\s*\d+(?:\.\d{3})*(?:,\d{2}|\.\d{2})(?:\s+[DdCc](?!\w))?)/g;
+    const amountReGlobal = /(-?\s*R?\$?\s*\d+(?:\.\d{3})*(?:,\d{2}|\.\d{2})\b(?:\s+[DdCc]\b)?)/g;
     const matches = line.match(amountReGlobal);
     if (!matches || matches.length === 0) return null;
     
-    const amountRaw = matches[0];
+    // Filtra matches que são seguidos por % (taxas informativas de juros/porcentagem)
+    const validMatches = matches.filter(m => {
+      const idx = line.indexOf(m);
+      if (idx === -1) return true;
+      const after = line.slice(idx + m.length).trim();
+      return !after.startsWith("%");
+    });
+
+    if (validMatches.length === 0) return null;
+    
+    const amountRaw = validMatches[0];
     let isNegative = false;
     if (amountRaw.includes("-") || /d/i.test(amountRaw)) {
       isNegative = true;
@@ -755,11 +765,17 @@ export function parsePdfTextToRows(text: string): { headers: string[]; rows: Rec
     if (hasAmountCheck) {
       // Se já temos uma transação anterior acumulando, salva no array
       if (lastTransaction) {
-        rows.push({
-          data: lastTransaction.data,
-          descricao: lastTransaction.descricao.join(" "),
-          valor: lastTransaction.valor
-        });
+        const parsedVal = parseFloat(lastTransaction.valor.replace(/\./g, "").replace(",", "."));
+        const descJoined = lastTransaction.descricao.join(" ");
+        const isNoise = isBalanceOrNoiseDescription(descJoined) || isNoiseOrBalanceLine(descJoined);
+        
+        if (parsedVal !== 0 || !isNoise) {
+          rows.push({
+            data: lastTransaction.data,
+            descricao: descJoined,
+            valor: lastTransaction.valor
+          });
+        }
       }
 
       // Inicia a nova transação
@@ -796,11 +812,17 @@ export function parsePdfTextToRows(text: string): { headers: string[]; rows: Rec
 
   // Não esquecer de empurrar a última transação pendente
   if (lastTransaction) {
-    rows.push({
-      data: lastTransaction.data,
-      descricao: lastTransaction.descricao.join(" "),
-      valor: lastTransaction.valor
-    });
+    const parsedVal = parseFloat(lastTransaction.valor.replace(/\./g, "").replace(",", "."));
+    const descJoined = lastTransaction.descricao.join(" ");
+    const isNoise = isBalanceOrNoiseDescription(descJoined) || isNoiseOrBalanceLine(descJoined);
+    
+    if (parsedVal !== 0 || !isNoise) {
+      rows.push({
+        data: lastTransaction.data,
+        descricao: descJoined,
+        valor: lastTransaction.valor
+      });
+    }
   }
 
   metrics.csvRowsExported = rows.length;
