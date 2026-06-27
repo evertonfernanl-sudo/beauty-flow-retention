@@ -1109,16 +1109,15 @@ async function runImportParse(
         let fullText = Array.isArray(text) ? text.join("\n") : String(text ?? "");
         
         if (!fullText.trim()) {
-          console.log("PDF sem camada de texto detectada. Iniciando extração OCR.");
+          console.log("PDF sem camada de texto detectada. Iniciando extração OCR via Lovable AI Gateway (Gemini).");
           
           let ocrTextAccumulator = "";
-          const { createWorker } = await import("tesseract.js");
-          let worker: any = null;
+          const apiKey = process.env.LOVABLE_API_KEY;
+          if (!apiKey) {
+            throw new PipelineError("IA indisponível para OCR: LOVABLE_API_KEY ausente no ambiente de produção.", "OCR");
+          }
           
           try {
-            const fs = await import("fs");
-            const os = await import("os");
-
             const resizeImageRGBA = (rgbaData: Uint8ClampedArray, width: number, height: number, maxDim = 950) => {
               if (width <= maxDim && height <= maxDim) {
                 return { data: rgbaData, width, height };
@@ -1181,12 +1180,6 @@ async function runImportParse(
             for (let i = 1; i <= pdf.numPages; i++) {
               const pageImages = await extractImages(pdf, i);
               if (pageImages && pageImages.length > 0) {
-                if (!worker) {
-                  worker = await createWorker("por", 1, {
-                    cachePath: process.cwd(),
-                  });
-                }
-                
                 for (let idx = 0; idx < pageImages.length; idx++) {
                   const img = pageImages[idx];
                   const convertToRGBA = (image: any) => {
@@ -1223,30 +1216,54 @@ async function runImportParse(
                   const resizedImg = resizeImageRGBA(rgbaImg.data, rgbaImg.width, rgbaImg.height, 950);
                   const bmpBuffer = convertToBMP32(resizedImg.data, resizedImg.width, resizedImg.height);
                   
-                  const tempFilename = `temp_ocr_${Date.now()}_p${i}_img${idx}.bmp`;
-                  const tempPath = path.join(os.tmpdir(), tempFilename);
-                  fs.writeFileSync(tempPath, bmpBuffer);
-                  
-                  try {
-                    const { data: { text: pageText } } = await worker.recognize(tempPath);
-                    if (pageText) {
-                      ocrTextAccumulator += pageText + "\n";
-                    }
-                  } finally {
-                    if (fs.existsSync(tempPath)) {
-                      fs.unlinkSync(tempPath);
-                    }
+                  const base64Bmp = bmpBuffer.toString("base64");
+                  const dataUrl = `data:image/bmp;base64,${base64Bmp}`;
+
+                  console.log(`Enviando página ${i} imagem ${idx} para Lovable AI Gateway...`);
+                  const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                      "content-type": "application/json",
+                      Authorization: `Bearer ${apiKey}`,
+                    },
+                    body: JSON.stringify({
+                      model: "google/gemini-2.5-flash",
+                      messages: [
+                        {
+                          role: "user",
+                          content: [
+                            {
+                              type: "text",
+                              text: "Você é um motor de OCR de altíssima precisão para extratos bancários. Transcreva integralmente todo o texto visível desta imagem do extrato. Preserve exatamente a ordem das linhas e dos dados (datas, descrições de transações e valores com cifrão). Não faça comentários nem introduza explicações adicionais, retorne apenas o texto transcrito cru."
+                            },
+                            {
+                              type: "image_url",
+                              image_url: {
+                                url: dataUrl
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    })
+                  });
+
+                  if (!aiRes.ok) {
+                    const errText = await aiRes.text();
+                    throw new Error(`Erro no AI Gateway (${aiRes.status}): ${errText.slice(0, 200)}`);
+                  }
+
+                  const aiJson = (await aiRes.json()) as { choices?: { message?: { content?: string } }[] };
+                  const pageText = aiJson.choices?.[0]?.message?.content ?? "";
+                  if (pageText) {
+                    ocrTextAccumulator += pageText + "\n";
                   }
                 }
               }
             }
           } catch (ocrErr: any) {
-            console.error("Falha durante execução do OCR:", ocrErr.message);
-            throw new PipelineError(`Falha durante execução do OCR: ${ocrErr.message}`, "OCR");
-          } finally {
-            if (worker) {
-              await worker.terminate();
-            }
+            console.error("Falha durante execução do OCR multimodal:", ocrErr.message);
+            throw new PipelineError(`Falha no OCR multimodal via AI Gateway: ${ocrErr.message}`, "OCR");
           }
           
           const { normalizeOcrText, validateOcrText } = await import("./ocr-normalizer.server");
