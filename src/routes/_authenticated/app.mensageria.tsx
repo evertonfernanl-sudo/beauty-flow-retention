@@ -242,7 +242,7 @@ function Fila({ companyId }: { companyId: string }) {
         .select("client_id")
         .eq("professional_id", myProfessional!.id);
       if (error) throw error;
-      return Array.from(new Set(data.map((d) => d.client_id).filter(Boolean)));
+      return Array.from(new Set(data.map((d) => d.client_id).filter((id): id is string => !!id)));
     },
   });
 
@@ -731,7 +731,7 @@ function Dashboard({ companyId, plan }: { companyId: string; plan: string }) {
         .select("client_id")
         .eq("professional_id", myProfessional!.id);
       if (error) throw error;
-      return Array.from(new Set(data.map((d) => d.client_id).filter(Boolean)));
+      return Array.from(new Set(data.map((d) => d.client_id).filter((id): id is string => !!id)));
     },
   });
 
