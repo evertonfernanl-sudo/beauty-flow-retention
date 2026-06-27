@@ -307,7 +307,25 @@ const isEmailHeader = (h: string): boolean => {
   );
 };
 
-const isAmountHeader = (h: string): boolean => {
+export const isCreditHeader = (h: string): boolean => {
+  const norm = h.toLowerCase().trim();
+  const creditTerms = [
+    "credito", "crédito", "entrada", "entradas", "recebido", "recebida", 
+    "valor credito", "valor crédito", "credit", "credits", "deposit", "deposits"
+  ];
+  return creditTerms.includes(norm) || creditTerms.some(term => norm.includes(term));
+};
+
+export const isDebitHeader = (h: string): boolean => {
+  const norm = h.toLowerCase().trim();
+  const debitTerms = [
+    "debito", "débito", "saida", "saída", "saidas", "saídas", "pago", "pagamento", 
+    "valor debito", "valor débito", "debit", "debits", "withdrawal", "withdrawals"
+  ];
+  return debitTerms.includes(norm) || debitTerms.some(term => norm.includes(term));
+};
+
+export const isAmountHeader = (h: string): boolean => {
   const norm = h.toLowerCase().trim();
   const exactAmounts = [
     "valor",
@@ -316,19 +334,10 @@ const isAmountHeader = (h: string): boolean => {
     "valor movimento",
     "valor movimentado",
     "valor operação",
-    "credito",
-    "crédito",
-    "credito (r$)",
-    "crédito (r$)",
-    "debito",
-    "débito",
-    "debito (r$)",
-    "débito (r$)",
-    "entrada",
-    "saida",
-    "saída",
     "amount",
     "transaction amount",
+    "valor da transacao",
+    "valor da transação"
   ];
   if (exactAmounts.includes(norm)) return true;
 
@@ -338,7 +347,6 @@ const isAmountHeader = (h: string): boolean => {
     norm.includes("preço") ||
     norm.includes("price") ||
     norm.includes("amount") ||
-    norm.includes("total") ||
     norm.includes("quantia") ||
     norm.includes("vlr")
   );
@@ -474,7 +482,7 @@ function findHeaderRowIndex(rows: unknown[][]): number {
   return bestIndex;
 }
 
-function detectColumns(headers: string[]): Record<string, number> {
+export function detectColumns(headers: string[]): Record<string, number> {
   const out: Record<string, number> = {};
   headers.forEach((h, i) => {
     const norm = (h ?? "").toString().trim().toLowerCase();
@@ -493,6 +501,12 @@ function detectColumns(headers: string[]): Record<string, number> {
     }
     if (out["email"] === undefined && isEmailHeader(norm)) {
       out["email"] = i;
+    }
+    if (out["credit"] === undefined && isCreditHeader(norm)) {
+      out["credit"] = i;
+    }
+    if (out["debit"] === undefined && isDebitHeader(norm)) {
+      out["debit"] = i;
     }
     if (out["amount"] === undefined && isAmountHeader(norm)) {
       out["amount"] = i;
@@ -821,7 +835,7 @@ function isExpenseDescription(desc: string | null | undefined): boolean {
   );
 }
 
-function extractNameFromDescription(desc: string | null | undefined): string | null {
+export function extractNameFromDescription(desc: string | null | undefined): string | null {
   if (!desc) return null;
 
   const clean = desc.replace(/\s+/g, " ").trim();
@@ -829,7 +843,7 @@ function extractNameFromDescription(desc: string | null | undefined): string | n
   // 1) Common Pix/TED/Fornecedor prefixes with explicit name boundaries
   const regexes = [
     /(?:pix\s+recebido\s+de|pix\s+de|transferência\s+recebida\s+de|recebido\s+de|pix\s+recebido|ted\s+recebida|credito\s+pix|transf\s+recebida|transferencia|ted|doc)\s*:?\s*-?\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i,
-    /(?:pix\s+enviado\s+des\s*:|pix\s+qr\s+code\s+estatic\s+rem\s*:|pix\s+qr\s+code\s+dinamico\s+des\s*:|pix\s+qr\s+code\s+estatico\s+des\s*:|pix\s+enviado\s+para|pix\s+para)\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i,
+    /(?:pix\s+enviado\s+des\s*:|pix\s+qr\s+code\s+estatic\s+rem\s*:|pix\s+qr\s+code\s+dinamico\s+des\s*:|pix\s+qr\s+code\s+estatico\s+des\s*:|pix\s+enviado\s+para|pix\s+para|pix\s+enviado)\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i,
     /(?:recebimento\s+fornecedor\s+administradora\s+de\s+consorcio\s+naci|recebimento\s+fornecedor)\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i
   ];
 
@@ -1339,7 +1353,34 @@ export async function runImportParse(
       const phoneRaw2 = idx("phone2") ? String(r[idx("phone2")!] ?? "").trim() : "";
       const phoneRaw = phoneRaw1 || phoneRaw2;
       const description = idx("description") ? String(r[idx("description")!] ?? "").trim() : null;
-      const amountRaw = parseAmount(idx("amount") ? r[idx("amount")!] : null);
+      
+      // Lógica de leitura de valor para colunas separadas (Crédito e Débito) ou coluna única (Valor)
+      let amountRaw: number | null = null;
+      const creditCol = idx("credit");
+      const debitCol = idx("debit");
+      const amountCol = idx("amount");
+
+      if (creditCol !== null || debitCol !== null) {
+        const creditVal = creditCol !== null ? parseAmount(r[creditCol]) : null;
+        const debitVal = debitCol !== null ? parseAmount(r[debitCol]) : null;
+        
+        if (creditVal !== null && creditVal !== 0 && !isNaN(creditVal)) {
+          amountRaw = Math.abs(creditVal);
+        } else if (debitVal !== null && debitVal !== 0 && !isNaN(debitVal)) {
+          amountRaw = -Math.abs(debitVal);
+        } else {
+          amountRaw = 0;
+        }
+      } else if (amountCol !== null) {
+        amountRaw = parseAmount(r[amountCol]);
+      }
+
+      // Pular linhas informativas de saldo intermediário ou com valor zero absoluto
+      const isSaldoDesc = description && /^(saldo|saldo do dia|saldo dia|saldo anterior|saldo atual|saldo final|resumo do dia|total de|subtotal)/i.test(description.trim());
+      if (amountRaw === 0 || amountRaw === null || isSaldoDesc) {
+        continue;
+      }
+
       const occurred = parseDate(idx("date") ? r[idx("date")!] : null);
       const paymentMethod =
         (idx("payment") ? String(r[idx("payment")!] ?? "").trim() : null) ||
