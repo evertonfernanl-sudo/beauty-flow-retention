@@ -1114,14 +1114,76 @@ async function runImportParse(
           let worker: any = null;
           
           try {
+            const fs = await import("fs");
+
+            const resizeImageRGBA = (rgbaData: Uint8ClampedArray, width: number, height: number, maxDim = 1500) => {
+              if (width <= maxDim && height <= maxDim) {
+                return { data: rgbaData, width, height };
+              }
+              const scale = Math.min(maxDim / width, maxDim / height);
+              const newWidth = Math.round(width * scale);
+              const newHeight = Math.round(height * scale);
+              const newData = new Uint8ClampedArray(newWidth * newHeight * 4);
+              for (let y = 0; y < newHeight; y++) {
+                const srcY = Math.min(Math.floor(y / scale), height - 1);
+                for (let x = 0; x < newWidth; x++) {
+                  const srcX = Math.min(Math.floor(x / scale), width - 1);
+                  const dstIdx = (y * newWidth + x) * 4;
+                  const srcIdx = (srcY * width + srcX) * 4;
+                  newData[dstIdx] = rgbaData[srcIdx];
+                  newData[dstIdx + 1] = rgbaData[srcIdx + 1];
+                  newData[dstIdx + 2] = rgbaData[srcIdx + 2];
+                  newData[dstIdx + 3] = rgbaData[srcIdx + 3];
+                }
+              }
+              return { data: newData, width: newWidth, height: newHeight };
+            };
+
+            const convertToBMP32 = (rgbaData: Uint8ClampedArray, width: number, height: number) => {
+              const fileHeaderSize = 14;
+              const dibHeaderSize = 40;
+              const headerSize = fileHeaderSize + dibHeaderSize;
+              const imageSize = width * height * 4;
+              const fileSize = headerSize + imageSize;
+              const buffer = Buffer.alloc(fileSize);
+              
+              buffer.write("BM", 0);
+              buffer.writeUInt32LE(fileSize, 2);
+              buffer.writeUInt32LE(0, 6);
+              buffer.writeUInt32LE(headerSize, 10);
+              
+              buffer.writeUInt32LE(dibHeaderSize, 14);
+              buffer.writeInt32LE(width, 18);
+              buffer.writeInt32LE(-height, 22);
+              buffer.writeUInt16LE(1, 26);
+              buffer.writeUInt16LE(32, 28);
+              buffer.writeUInt32LE(0, 30);
+              buffer.writeUInt32LE(imageSize, 34);
+              buffer.writeInt32LE(2835, 38);
+              buffer.writeInt32LE(2835, 42);
+              buffer.writeUInt32LE(0, 46);
+              buffer.writeUInt32LE(0, 50);
+              
+              let dstIdx = headerSize;
+              for (let srcIdx = 0; srcIdx < rgbaData.length; srcIdx += 4) {
+                buffer[dstIdx] = rgbaData[srcIdx + 2];
+                buffer[dstIdx + 1] = rgbaData[srcIdx + 1];
+                buffer[dstIdx + 2] = rgbaData[srcIdx];
+                buffer[dstIdx + 3] = rgbaData[srcIdx + 3];
+                dstIdx += 4;
+              }
+              return buffer;
+            };
+
             for (let i = 1; i <= pdf.numPages; i++) {
-              const pageImages = await extractImages(buf, i);
+              const pageImages = await extractImages(pdf, i);
               if (pageImages && pageImages.length > 0) {
                 if (!worker) {
                   worker = await createWorker("por");
                 }
                 
-                for (const img of pageImages) {
+                for (let idx = 0; idx < pageImages.length; idx++) {
+                  const img = pageImages[idx];
                   const convertToRGBA = (image: any) => {
                     const { data: imgData, width: w, height: h, channels: ch } = image;
                     if (ch === 4) {
@@ -1153,13 +1215,22 @@ async function runImportParse(
                   };
 
                   const rgbaImg = convertToRGBA(img);
-                  const { data: { text: pageText } } = await worker.recognize({
-                    data: rgbaImg.data,
-                    width: rgbaImg.width,
-                    height: rgbaImg.height
-                  });
-                  if (pageText) {
-                    ocrTextAccumulator += pageText + "\n";
+                  const resizedImg = resizeImageRGBA(rgbaImg.data, rgbaImg.width, rgbaImg.height, 1500);
+                  const bmpBuffer = convertToBMP32(resizedImg.data, resizedImg.width, resizedImg.height);
+                  
+                  const tempFilename = `temp_ocr_${Date.now()}_p${i}_img${idx}.bmp`;
+                  const tempPath = path.join(process.cwd(), tempFilename);
+                  fs.writeFileSync(tempPath, bmpBuffer);
+                  
+                  try {
+                    const { data: { text: pageText } } = await worker.recognize(tempPath);
+                    if (pageText) {
+                      ocrTextAccumulator += pageText + "\n";
+                    }
+                  } finally {
+                    if (fs.existsSync(tempPath)) {
+                      fs.unlinkSync(tempPath);
+                    }
                   }
                 }
               }
