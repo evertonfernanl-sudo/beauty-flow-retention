@@ -44,10 +44,10 @@ export const registerImport = createServerFn({ method: "POST" })
     });
     if (qErr) throw new Error(qErr.message);
 
-    // Trigger worker and run in background (prevents HTTP timeouts on slow operations like OCR)
+    // Trigger worker and await execution (ensures Serverless containers do not freeze the pending execution)
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { runWorker } = await import("@/lib/api/worker.server");
-    runWorker(supabaseAdmin).catch((err) => {
+    await runWorker(supabaseAdmin).catch((err) => {
       console.error("[Worker] Run error:", err);
     });
 
