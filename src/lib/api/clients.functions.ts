@@ -82,12 +82,20 @@ export const mergeClientsServer = createServerFn({ method: "POST" })
       .eq("resolved_client_id", data.sourceId);
     if (impRowsErr) throw new Error("Erro ao atualizar linhas de importação: " + impRowsErr.message);
 
-    // Update providers
+    // Update providers (only if table exists in the database)
     const { error: provErr } = await supabaseAdmin
       .from("providers")
       .update({ client_id: data.targetId })
       .eq("client_id", data.sourceId);
-    if (provErr) throw new Error("Erro ao atualizar prestadores: " + provErr.message);
+    if (provErr) {
+      const isMissingTable =
+        provErr.message?.includes("Could not find the table") ||
+        provErr.code === "PGRST104" ||
+        provErr.code === "42P01";
+      if (!isMissingTable) {
+        throw new Error("Erro ao atualizar prestadores: " + provErr.message);
+      }
+    }
 
     // Delete the duplicate source client
     const { error: delErr } = await supabaseAdmin
