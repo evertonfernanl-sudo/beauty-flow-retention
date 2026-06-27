@@ -1048,7 +1048,7 @@ function inferBankName(filename: string | null | undefined, description: string 
   return "Banco Importado";
 }
 
-async function runImportParse(
+export async function runImportParse(
   admin: Admin,
   job: { payload: Record<string, unknown> | null; company_id: string | null },
 ) {

@@ -40,21 +40,45 @@ export const registerImport = createServerFn({ method: "POST" })
       
       importId = imp.id;
 
-      const { error: qErr } = await supabase.rpc("enqueue_job", {
-        _company_id: profile.company_id,
-        _type: "import.parse",
-        _payload: { import_id: imp.id } as never,
-        _priority: 3,
-      });
-      if (qErr) throw new Error(`Falha ao enfileirar job: ${qErr.message}`);
-
-      // Trigger worker synchronously (with Gemini API OCR, it completes within 3-5s without triggering server timeouts)
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      const { runWorker } = await import("@/lib/api/worker.server");
-      
-      await runWorker(supabaseAdmin).catch((err) => {
-        console.error("[registerImport Worker Error]:", err);
-      });
+      const { runImportParse } = await import("@/lib/api/worker.server");
+
+      // Insere o job diretamente como RUNNING para evitar interferência de filas e jobs travados concorrentes
+      const { data: job, error: qErr } = await supabaseAdmin
+        .from("jobs")
+        .insert({
+          company_id: profile.company_id,
+          type: "import.parse",
+          payload: { import_id: imp.id },
+          priority: 10,
+          status: "RUNNING",
+          started_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+      if (qErr) throw new Error(`Falha ao registrar job de processamento: ${qErr.message}`);
+
+      try {
+        const result = await runImportParse(supabaseAdmin, {
+          payload: { import_id: imp.id },
+          company_id: profile.company_id
+        });
+        
+        // Atualiza o job para DONE no banco
+        await supabaseAdmin.rpc("finish_job", {
+          _id: job.id,
+          _ok: true,
+          _result: result
+        });
+      } catch (err: any) {
+        // Atualiza o job para FAILED no banco
+        await supabaseAdmin.rpc("finish_job", {
+          _id: job.id,
+          _ok: false,
+          _error: err.message || String(err)
+        });
+        throw err;
+      }
 
       return { success: true, importId: imp.id };
     } catch (err: any) {
