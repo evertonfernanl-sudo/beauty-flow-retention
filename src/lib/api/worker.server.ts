@@ -1074,12 +1074,85 @@ async function runImportParse(
       if (imp.source === "csv") {
         csvText = await file.text();
       } else {
-        const { extractText, getDocumentProxy } = await import("unpdf");
+        const { extractText, getDocumentProxy, extractImages } = await import("unpdf");
         const buf = new Uint8Array(await file.arrayBuffer());
         const pdf = await getDocumentProxy(buf);
         const { text } = await extractText(pdf, { mergePages: true });
-        const fullText = Array.isArray(text) ? text.join("\n") : String(text ?? "");
-        if (!fullText.trim()) throw new Error("PDF sem texto extraível (pode ser escaneado).");
+        let fullText = Array.isArray(text) ? text.join("\n") : String(text ?? "");
+        
+        if (!fullText.trim()) {
+          console.log("PDF sem camada de texto detectada. Iniciando extração OCR.");
+          
+          let ocrTextAccumulator = "";
+          const { createWorker } = await import("tesseract.js");
+          let worker: any = null;
+          
+          try {
+            for (let i = 1; i <= pdf.numPages; i++) {
+              const pageImages = await extractImages(buf, i);
+              if (pageImages && pageImages.length > 0) {
+                if (!worker) {
+                  worker = await createWorker("por");
+                }
+                
+                for (const img of pageImages) {
+                  const convertToRGBA = (image: any) => {
+                    const { data: imgData, width: w, height: h, channels: ch } = image;
+                    if (ch === 4) {
+                      return { data: new Uint8ClampedArray(imgData), width: w, height: h };
+                    }
+                    
+                    const rgbaData = new Uint8ClampedArray(w * h * 4);
+                    let srcIdx = 0;
+                    let dstIdx = 0;
+                    
+                    for (let p = 0; p < w * h; p++) {
+                      if (ch === 3) {
+                        rgbaData[dstIdx] = imgData[srcIdx];
+                        rgbaData[dstIdx + 1] = imgData[srcIdx + 1];
+                        rgbaData[dstIdx + 2] = imgData[srcIdx + 2];
+                        rgbaData[dstIdx + 3] = 255;
+                        srcIdx += 3;
+                      } else if (ch === 1) {
+                        const val = imgData[srcIdx];
+                        rgbaData[dstIdx] = val;
+                        rgbaData[dstIdx + 1] = val;
+                        rgbaData[dstIdx + 2] = val;
+                        rgbaData[dstIdx + 3] = 255;
+                        srcIdx += 1;
+                      }
+                      dstIdx += 4;
+                    }
+                    return { data: rgbaData, width: w, height: h };
+                  };
+
+                  const rgbaImg = convertToRGBA(img);
+                  const { data: { text: pageText } } = await worker.recognize({
+                    data: rgbaImg.data,
+                    width: rgbaImg.width,
+                    height: rgbaImg.height
+                  });
+                  if (pageText) {
+                    ocrTextAccumulator += pageText + "\n";
+                  }
+                }
+              }
+            }
+          } catch (ocrErr: any) {
+            console.error("Falha durante execução do OCR:", ocrErr.message);
+          } finally {
+            if (worker) {
+              await worker.terminate();
+            }
+          }
+          
+          fullText = ocrTextAccumulator;
+        }
+
+        if (!fullText.trim()) {
+          throw new Error("PDF sem camada de texto detectada. Iniciando extração OCR.");
+        }
+        
         const parsedPdf = parsePdfTextToRows(fullText);
         if (parsedPdf.rows.length === 0) {
           throw new Error("Nenhuma linha de extrato identificada no PDF");
