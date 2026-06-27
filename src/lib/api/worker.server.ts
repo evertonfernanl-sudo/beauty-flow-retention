@@ -812,9 +812,11 @@ function extractNameFromDescription(desc: string | null | undefined): string | n
 
   const clean = desc.replace(/\s+/g, " ").trim();
 
-  // 1) Common Pix/TED prefixes with explicit name boundaries
+  // 1) Common Pix/TED/Fornecedor prefixes with explicit name boundaries
   const regexes = [
     /(?:pix\s+recebido\s+de|pix\s+de|transferência\s+recebida\s+de|recebido\s+de|pix\s+recebido|ted\s+recebida|credito\s+pix|transf\s+recebida|transferencia|ted|doc)\s*:?\s*-?\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i,
+    /(?:pix\s+enviado\s+des\s*:|pix\s+qr\s+code\s+estatic\s+rem\s*:|pix\s+qr\s+code\s+dinamico\s+des\s*:|pix\s+qr\s+code\s+estatico\s+des\s*:|pix\s+enviado\s+para|pix\s+para)\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i,
+    /(?:recebimento\s+fornecedor\s+administradora\s+de\s+consorcio\s+naci|recebimento\s+fornecedor)\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i
   ];
 
   for (const re of regexes) {
@@ -1267,16 +1269,50 @@ async function runImportParse(
 
       if (!specialCat) {
         // Search description content to find the client name from the database (Brazilian bank statement match style)
+        const cleanStr = (s: string) => {
+          return s
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .trim();
+        };
+
         if (!name && description && companyClients.length > 0) {
-          const descLower = description.toLowerCase();
+          const descClean = cleanStr(description);
           const sortedClients = [...companyClients].sort((a, b) => b.name.length - a.name.length);
           for (const client of sortedClients) {
-            const clientNameLower = client.name.toLowerCase().trim();
-            if (clientNameLower.length >= 4 && descLower.includes(clientNameLower)) {
+            const clientClean = cleanStr(client.name);
+            if (clientClean.length >= 4 && descClean.includes(clientClean)) {
               name = client.name;
               clientId = client.id;
               clientFound = true;
               break;
+            }
+          }
+        }
+
+        if (!clientFound && description && companyClients.length > 0) {
+          const candidate = extractNameFromDescription(description);
+          if (candidate) {
+            const candidateClean = cleanStr(candidate);
+            const sortedClients = [...companyClients].sort((a, b) => b.name.length - a.name.length);
+            for (const client of sortedClients) {
+              const clientClean = cleanStr(client.name);
+              
+              const isMatch = 
+                candidateClean === clientClean ||
+                (clientClean.length >= 8 && clientClean.startsWith(candidateClean)) ||
+                (candidateClean.length >= 8 && candidateClean.startsWith(clientClean));
+
+              if (isMatch) {
+                name = client.name;
+                clientId = client.id;
+                clientFound = true;
+                break;
+              }
+            }
+            if (!name) {
+              name = candidate;
             }
           }
         }
