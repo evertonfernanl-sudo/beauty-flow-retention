@@ -48,14 +48,17 @@ export const registerImport = createServerFn({ method: "POST" })
       });
       if (qErr) throw new Error(`Falha ao enfileirar job: ${qErr.message}`);
 
-      // Trigger worker and await execution (ensures Serverless containers do not freeze the pending execution)
+      // Trigger worker in background (ensures Serverless containers do not freeze using waitUntil if supported)
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       const { runWorker } = await import("@/lib/api/worker.server");
       
-      const processedJobs = await runWorker(supabaseAdmin);
-      const failedJob = processedJobs.find(j => j.id === imp.id || (j.type === "import.parse" && !j.ok));
-      if (failedJob && !failedJob.ok) {
-        throw new Error(`Erro no processamento do OCR/PDF: ${failedJob.error || "Erro desconhecido no worker"}`);
+      const promise = runWorker(supabaseAdmin).catch((err) => {
+        console.error("[registerImport Worker Error]:", err);
+      });
+
+      const anyContext = context as any;
+      if (anyContext.event && typeof anyContext.event.waitUntil === "function") {
+        anyContext.event.waitUntil(promise);
       }
 
       return { success: true, importId: imp.id };

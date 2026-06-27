@@ -1119,7 +1119,7 @@ async function runImportParse(
             const fs = await import("fs");
             const os = await import("os");
 
-            const resizeImageRGBA = (rgbaData: Uint8ClampedArray, width: number, height: number, maxDim = 1500) => {
+            const resizeImageRGBA = (rgbaData: Uint8ClampedArray, width: number, height: number, maxDim = 950) => {
               if (width <= maxDim && height <= maxDim) {
                 return { data: rgbaData, width, height };
               }
@@ -1220,7 +1220,7 @@ async function runImportParse(
                   };
 
                   const rgbaImg = convertToRGBA(img);
-                  const resizedImg = resizeImageRGBA(rgbaImg.data, rgbaImg.width, rgbaImg.height, 1500);
+                  const resizedImg = resizeImageRGBA(rgbaImg.data, rgbaImg.width, rgbaImg.height, 950);
                   const bmpBuffer = convertToBMP32(resizedImg.data, resizedImg.width, resizedImg.height);
                   
                   const tempFilename = `temp_ocr_${Date.now()}_p${i}_img${idx}.bmp`;
