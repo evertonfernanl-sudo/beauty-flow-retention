@@ -559,7 +559,7 @@ const s = desc.toLowerCase();
   return null;
 }
 
-function parsePdfTextToRows(text: string): { headers: string[]; rows: Record<string, unknown>[] } {
+export function parsePdfTextToRows(text: string): { headers: string[]; rows: Record<string, unknown>[] } {
   // Definição das Expressões Regulares de Data
   const fullDateRe = /\b(0?[1-9]|[12]\d|3[01])[\/\-](0?[1-9]|1[0-2])[\/\-](\d{2,4})\b/g;
   const isoDateRe = /\b(\d{4})-(0?[1-9]|1[0-2])-(0?[1-9]|[12]\d|3[01])\b/g;
@@ -1115,6 +1115,7 @@ async function runImportParse(
           
           try {
             const fs = await import("fs");
+            const os = await import("os");
 
             const resizeImageRGBA = (rgbaData: Uint8ClampedArray, width: number, height: number, maxDim = 1500) => {
               if (width <= maxDim && height <= maxDim) {
@@ -1219,7 +1220,7 @@ async function runImportParse(
                   const bmpBuffer = convertToBMP32(resizedImg.data, resizedImg.width, resizedImg.height);
                   
                   const tempFilename = `temp_ocr_${Date.now()}_p${i}_img${idx}.bmp`;
-                  const tempPath = path.join(process.cwd(), tempFilename);
+                  const tempPath = path.join(os.tmpdir(), tempFilename);
                   fs.writeFileSync(tempPath, bmpBuffer);
                   
                   try {
@@ -1243,7 +1244,10 @@ async function runImportParse(
             }
           }
           
-          fullText = ocrTextAccumulator;
+          const { normalizeOcrText, validateOcrText } = await import("./ocr-normalizer.server");
+          const cleanText = normalizeOcrText(ocrTextAccumulator);
+          validateOcrText(cleanText, ocrTextAccumulator);
+          fullText = cleanText;
         }
 
         if (!fullText.trim()) {
