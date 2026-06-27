@@ -44,10 +44,10 @@ export const registerImport = createServerFn({ method: "POST" })
     });
     if (qErr) throw new Error(qErr.message);
 
-    // Trigger worker and await execution
+    // Trigger worker and run in background (prevents HTTP timeouts on slow operations like OCR)
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { runWorker } = await import("@/lib/api/worker.server");
-    await runWorker(supabaseAdmin).catch((err) => {
+    runWorker(supabaseAdmin).catch((err) => {
       console.error("[Worker] Run error:", err);
     });
 
@@ -80,10 +80,10 @@ export const applyImportRow = createServerFn({ method: "POST" })
     });
     if (qErr) throw new Error(qErr.message);
 
-    // Trigger worker and await execution
+    // Trigger worker and run in background (prevents HTTP timeouts on slow operations like OCR)
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { runWorker } = await import("@/lib/api/worker.server");
-    await runWorker(supabaseAdmin).catch((err) => {
+    runWorker(supabaseAdmin).catch((err) => {
       console.error("[Worker] Run error:", err);
     });
 
@@ -138,10 +138,10 @@ export const applyImportBatch = createServerFn({ method: "POST" })
     }
 
     if (queued > 0) {
-      // Trigger worker and await execution
+      // Trigger worker and run in background (prevents HTTP timeouts on slow operations like OCR)
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       const { runWorker } = await import("@/lib/api/worker.server");
-      await runWorker(supabaseAdmin).catch((err) => {
+      runWorker(supabaseAdmin).catch((err) => {
         console.error("[Worker] Run error:", err);
       });
     }

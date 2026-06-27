@@ -137,10 +137,10 @@ export const enqueueImportClients = createServerFn({ method: "POST" })
     });
     if (error) throw new Error(error.message);
 
-    // Trigger worker and await execution
+    // Trigger worker and run in background (prevents HTTP timeouts on slow operations like OCR)
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { runWorker } = await import("@/lib/api/worker.server");
-    await runWorker(supabaseAdmin).catch((err) => {
+    runWorker(supabaseAdmin).catch((err) => {
       console.error("[Worker] Run error:", err);
     });
 
