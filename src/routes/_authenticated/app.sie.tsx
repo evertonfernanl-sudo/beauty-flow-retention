@@ -113,6 +113,9 @@ function SiePage() {
       const res = await register({
         data: { filename: file.name, storagePath: path, size: file.size, source },
       });
+      if (res && "success" in res && !res.success) {
+        throw new Error(res.error || "Falha no processamento de importação");
+      }
       toast.success(
         source === "pdf"
           ? "PDF enviado — extraindo texto e detectando estrutura…"

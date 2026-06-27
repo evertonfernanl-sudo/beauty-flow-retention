@@ -13,45 +13,53 @@ export const registerImport = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i) => RegisterInput.parse(i))
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("company_id")
-      .eq("id", userId)
-      .maybeSingle();
-    if (!profile?.company_id) throw new Error("Empresa não encontrada");
+    try {
+      const { supabase, userId } = context;
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("id", userId)
+        .maybeSingle();
+      if (!profile?.company_id) throw new Error("Empresa não encontrada");
 
-    const { data: imp, error } = await supabase
-      .from("imports")
-      .insert({
-        company_id: profile.company_id,
-        source: data.source,
-        filename: data.filename,
-        storage_path: data.storagePath,
-        size_bytes: data.size,
-        status: "uploaded",
-        created_by: userId,
-      })
-      .select("id")
-      .single();
-    if (error) throw new Error(error.message);
+      const { data: imp, error } = await supabase
+        .from("imports")
+        .insert({
+          company_id: profile.company_id,
+          source: data.source,
+          filename: data.filename,
+          storage_path: data.storagePath,
+          size_bytes: data.size,
+          status: "uploaded",
+          created_by: userId,
+        })
+        .select("id")
+        .single();
+      if (error) throw new Error(`Falha ao registrar importação no banco: ${error.message}`);
 
-    const { error: qErr } = await supabase.rpc("enqueue_job", {
-      _company_id: profile.company_id,
-      _type: "import.parse",
-      _payload: { import_id: imp.id } as never,
-      _priority: 3,
-    });
-    if (qErr) throw new Error(qErr.message);
+      const { error: qErr } = await supabase.rpc("enqueue_job", {
+        _company_id: profile.company_id,
+        _type: "import.parse",
+        _payload: { import_id: imp.id } as never,
+        _priority: 3,
+      });
+      if (qErr) throw new Error(`Falha ao enfileirar job: ${qErr.message}`);
 
-    // Trigger worker and await execution (ensures Serverless containers do not freeze the pending execution)
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { runWorker } = await import("@/lib/api/worker.server");
-    await runWorker(supabaseAdmin).catch((err) => {
-      console.error("[Worker] Run error:", err);
-    });
+      // Trigger worker and await execution (ensures Serverless containers do not freeze the pending execution)
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { runWorker } = await import("@/lib/api/worker.server");
+      
+      const processedJobs = await runWorker(supabaseAdmin);
+      const failedJob = processedJobs.find(j => j.id === imp.id || (j.type === "import.parse" && !j.ok));
+      if (failedJob && !failedJob.ok) {
+        throw new Error(`Erro no processamento do OCR/PDF: ${failedJob.error || "Erro desconhecido no worker"}`);
+      }
 
-    return { importId: imp.id };
+      return { success: true, importId: imp.id };
+    } catch (err: any) {
+      console.error("[registerImport SERVER ERROR]:", err);
+      return { success: false, error: err.message ?? String(err) };
+    }
   });
 
 export const applyImportRow = createServerFn({ method: "POST" })
