@@ -44,7 +44,7 @@ export type Database = {
       appointments: {
         Row: {
           cancellation_reason: string | null
-          client_id: string
+          client_id: string | null
           company_id: string
           completed_at: string | null
           created_at: string
@@ -53,7 +53,7 @@ export type Database = {
           notes: string | null
           price: number
           professional_id: string | null
-          service_id: string
+          service_id: string | null
           source: Database["public"]["Enums"]["appointment_source"]
           start_datetime: string
           status: Database["public"]["Enums"]["appointment_status"]
@@ -61,7 +61,7 @@ export type Database = {
         }
         Insert: {
           cancellation_reason?: string | null
-          client_id: string
+          client_id?: string | null
           company_id: string
           completed_at?: string | null
           created_at?: string
@@ -70,7 +70,7 @@ export type Database = {
           notes?: string | null
           price?: number
           professional_id?: string | null
-          service_id: string
+          service_id?: string | null
           source?: Database["public"]["Enums"]["appointment_source"]
           start_datetime: string
           status?: Database["public"]["Enums"]["appointment_status"]
@@ -78,7 +78,7 @@ export type Database = {
         }
         Update: {
           cancellation_reason?: string | null
-          client_id?: string
+          client_id?: string | null
           company_id?: string
           completed_at?: string | null
           created_at?: string
@@ -87,7 +87,7 @@ export type Database = {
           notes?: string | null
           price?: number
           professional_id?: string | null
-          service_id?: string
+          service_id?: string | null
           source?: Database["public"]["Enums"]["appointment_source"]
           start_datetime?: string
           status?: Database["public"]["Enums"]["appointment_status"]
@@ -690,6 +690,7 @@ export type Database = {
       }
       financial_transactions: {
         Row: {
+          account_source: string | null
           amount: number
           appointment_id: string | null
           category: string
@@ -698,12 +699,17 @@ export type Database = {
           created_by: string | null
           description: string | null
           id: string
+          is_personal: boolean
           payment_method: string | null
+          provider_id: string | null
+          revenue_type: string | null
+          status: string
           transaction_date: string
           type: Database["public"]["Enums"]["transaction_type"]
           updated_at: string
         }
         Insert: {
+          account_source?: string | null
           amount: number
           appointment_id?: string | null
           category: string
@@ -712,12 +718,17 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           id?: string
+          is_personal?: boolean
           payment_method?: string | null
+          provider_id?: string | null
+          revenue_type?: string | null
+          status?: string
           transaction_date?: string
           type: Database["public"]["Enums"]["transaction_type"]
           updated_at?: string
         }
         Update: {
+          account_source?: string | null
           amount?: number
           appointment_id?: string | null
           category?: string
@@ -726,7 +737,11 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           id?: string
+          is_personal?: boolean
           payment_method?: string | null
+          provider_id?: string | null
+          revenue_type?: string | null
+          status?: string
           transaction_date?: string
           type?: Database["public"]["Enums"]["transaction_type"]
           updated_at?: string
@@ -759,6 +774,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "retention_report"
             referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "financial_transactions_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "providers"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -2127,6 +2149,92 @@ export type Database = {
           },
         ]
       }
+      providers: {
+        Row: {
+          address: string | null
+          client_id: string | null
+          company_id: string
+          created_at: string
+          document: string | null
+          id: string
+          name: string
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          client_id?: string | null
+          company_id: string
+          created_at?: string
+          document?: string | null
+          id?: string
+          name: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          client_id?: string | null
+          company_id?: string
+          created_at?: string
+          document?: string | null
+          id?: string
+          name?: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "providers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "birthday_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "providers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "providers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "top_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "providers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "vip_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "providers_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "providers_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "providers_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+        ]
+      }
       recovery_opportunities: {
         Row: {
           appointment_id: string | null
@@ -3137,6 +3245,7 @@ export type Database = {
         | "COMPLETED"
         | "CANCELLED"
         | "NO_SHOW"
+        | "BLOCKED"
       business_vertical: "BEAUTY" | "SALES" | "GYM"
       client_status: "ACTIVE" | "INACTIVE" | "LOST"
       company_plan: "starter" | "professional" | "premium"
@@ -3339,6 +3448,7 @@ export const Constants = {
         "COMPLETED",
         "CANCELLED",
         "NO_SHOW",
+        "BLOCKED",
       ],
       business_vertical: ["BEAUTY", "SALES", "GYM"],
       client_status: ["ACTIVE", "INACTIVE", "LOST"],
