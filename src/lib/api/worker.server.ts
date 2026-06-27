@@ -2,9 +2,23 @@ import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
+import * as path from "path";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+let __filename = "";
+let __dirname = "";
+
+try {
+  if (typeof import.meta !== "undefined" && import.meta.url) {
+    __filename = fileURLToPath(import.meta.url);
+    __dirname = dirname(__filename);
+  } else {
+    __dirname = process.cwd();
+    __filename = path.join(__dirname, "worker.js");
+  }
+} catch (e) {
+  __dirname = process.cwd();
+  __filename = path.join(__dirname, "worker.js");
+}
 
 // @ts-ignore
 globalThis.__dirname = __dirname;
