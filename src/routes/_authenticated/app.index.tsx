@@ -73,6 +73,8 @@ function VisaoGeral() {
   const companyId = profile?.company?.id;
   const firstName = profile?.profile?.name?.split(" ")[0];
   
+  const [retiradaDialogOpen, setRetiradaDialogOpen] = useState(false);
+
   const [period, setPeriodState] = useState<string>(() => {
     const currentYM = new Date().toISOString().slice(0, 7);
     if (typeof window !== "undefined") {
@@ -189,15 +191,12 @@ function VisaoGeral() {
     queryFn: async () => {
       const now = new Date();
       const start6mo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-      const minDate = range.prevStart < start6mo ? range.prevStart : start6mo;
-      const minDateKey = minDate.toISOString().slice(0, 10);
 
       const [tx, appts, clientsAll, returnsLate, services] = await Promise.all([
         supabase
           .from("financial_transactions")
-          .select("type, amount, transaction_date")
-          .eq("company_id", companyId!)
-          .gte("transaction_date", minDateKey),
+          .select("type, amount, transaction_date, is_personal, status")
+          .eq("company_id", companyId!),
         supabase
           .from("appointments")
           .select("id, price, status, start_datetime, service_id")
@@ -218,18 +217,21 @@ function VisaoGeral() {
           .limit(5),
       ]);
 
-      // Financial — period vs prev
+      const txList = tx.data ?? [];
       const startKey = range.start.toISOString().slice(0, 10);
       const endKey = range.end.toISOString().slice(0, 10);
       const prevStartKey = range.prevStart.toISOString().slice(0, 10);
       const prevEndKey = range.prevEnd.toISOString().slice(0, 10);
 
+      // Financial — period vs prev
       let revenue = 0,
         expense = 0,
         revenuePrev = 0,
         expensePrev = 0;
-      for (const r of tx.data ?? []) {
+
+      for (const r of txList) {
         const d = r.transaction_date;
+        if (!d) continue;
         const amt = Number(r.amount);
         if (d >= startKey && d <= endKey) {
           if (r.type === "INCOME") revenue += amt;
@@ -241,6 +243,164 @@ function VisaoGeral() {
       }
       const profit = revenue - expense;
       const profitPrev = revenuePrev - expensePrev;
+
+      // --- CÁLCULO CUMULATIVO PARA SALÁRIO E RETIRADAS ---
+      let startYM = new Date().toISOString().slice(0, 7);
+      for (const t of txList) {
+        if (t.transaction_date && t.transaction_date.slice(0, 7) < startYM) {
+          startYM = t.transaction_date.slice(0, 7);
+        }
+      }
+
+      const selectedYM = period.includes("-") ? period : new Date().toISOString().slice(0, 7);
+      const [selYear, selMonth] = selectedYM.split("-").map(Number);
+      const dateLimit = new Date(selYear, selMonth - 4, 1);
+      const limitYM = dateLimit.toISOString().slice(0, 7);
+      if (limitYM < startYM) {
+        startYM = limitYM;
+      }
+
+      const ymList: string[] = [];
+      let currentYear = Number(startYM.split("-")[0]);
+      let currentMonth = Number(startYM.split("-")[1]);
+
+      while (currentYear < selYear || (currentYear === selYear && currentMonth <= selMonth)) {
+        ymList.push(`${currentYear}-${String(currentMonth).padStart(2, "0")}`);
+        currentMonth++;
+        if (currentMonth > 12) {
+          currentMonth = 1;
+          currentYear++;
+        }
+      }
+
+      interface MonthlyStats {
+        revenueRealized: number;
+        expenseRealized: number;
+        expensePersonal: number;
+        expensePending: number;
+        lucroEmpresa: number;
+      }
+
+      const monthlyData: Record<string, MonthlyStats> = {};
+      for (const ym of ymList) {
+        monthlyData[ym] = {
+          revenueRealized: 0,
+          expenseRealized: 0,
+          expensePersonal: 0,
+          expensePending: 0,
+          lucroEmpresa: 0
+        };
+      }
+
+      for (const t of txList) {
+        if (!t.transaction_date) continue;
+        const ym = t.transaction_date.slice(0, 7);
+        if (!monthlyData[ym]) continue;
+
+        const amt = Number(t.amount);
+        if (t.type === "INCOME") {
+          if (t.status === "PAID") {
+            monthlyData[ym].revenueRealized += amt;
+          }
+        } else if (t.type === "EXPENSE") {
+          if (t.is_personal) {
+            if (t.status === "PAID") {
+              monthlyData[ym].expensePersonal += amt;
+            }
+          } else {
+            if (t.status === "PAID") {
+              monthlyData[ym].expenseRealized += amt;
+            } else {
+              monthlyData[ym].expensePending += amt;
+            }
+          }
+        }
+      }
+
+      for (const ym of ymList) {
+        monthlyData[ym].lucroEmpresa = monthlyData[ym].revenueRealized - monthlyData[ym].expenseRealized;
+      }
+
+      interface FinancialFlow {
+        salarioCalculado: number;
+        lucroEmpresa: number;
+        retiradasEfetuadas: number;
+        salarioNaoRecebido: number;
+        retiradaLucroNaoRealizada: number;
+        retiradaPermitida: number;
+      }
+
+      const flowData: Record<string, FinancialFlow> = {};
+      let prevSalarioNaoRecebido = 0;
+      let prevRetiradaLucroNaoRealizada = 0;
+      let prevLucro = 0;
+
+      for (let idx = 0; idx < ymList.length; idx++) {
+        const ym = ymList[idx];
+        const mData = monthlyData[ym];
+
+        let sumPersonal = mData.expensePersonal;
+        let countPersonal = 1;
+        if (idx >= 1) {
+          sumPersonal += monthlyData[ymList[idx - 1]].expensePersonal;
+          countPersonal++;
+        }
+        if (idx >= 2) {
+          sumPersonal += monthlyData[ymList[idx - 2]].expensePersonal;
+          countPersonal++;
+        }
+        const salarioCalculado = sumPersonal / countPersonal;
+
+        const lucro30Prev = 0.30 * prevLucro;
+        const retiradaPermitida = prevSalarioNaoRecebido + lucro30Prev + prevRetiradaLucroNaoRealizada;
+
+        const retiradasEfetuadas = mData.expensePersonal;
+        const direitoTotal = retiradaPermitida + salarioCalculado;
+
+        let salarioNaoRecebido = 0;
+        let retiradaLucroNaoRealizada = 0;
+
+        if (retiradasEfetuadas < salarioCalculado) {
+          salarioNaoRecebido = salarioCalculado - retiradasEfetuadas;
+          retiradaLucroNaoRealizada = retiradaPermitida;
+        } else {
+          salarioNaoRecebido = 0;
+          retiradaLucroNaoRealizada = Math.max(0, direitoTotal - retiradasEfetuadas);
+        }
+
+        flowData[ym] = {
+          salarioCalculado,
+          lucroEmpresa: mData.lucroEmpresa,
+          retiradasEfetuadas,
+          salarioNaoRecebido,
+          retiradaLucroNaoRealizada,
+          retiradaPermitida
+        };
+
+        prevSalarioNaoRecebido = salarioNaoRecebido;
+        prevRetiradaLucroNaoRealizada = retiradaLucroNaoRealizada;
+        prevLucro = mData.lucroEmpresa;
+      }
+
+      const currentFlow = flowData[selectedYM] || {
+        salarioCalculado: 0,
+        lucroEmpresa: 0,
+        retiradasEfetuadas: 0,
+        salarioNaoRecebido: 0,
+        retiradaLucroNaoRealizada: 0,
+        retiradaPermitida: 0
+      };
+
+      const selIdx = ymList.indexOf(selectedYM);
+      const prevYM = selIdx > 0 ? ymList[selIdx - 1] : null;
+      const prevFlow = prevYM ? flowData[prevYM] : null;
+
+      const prevSalarioNaoRecebidoVal = prevFlow ? prevFlow.salarioNaoRecebido : 0;
+      const prevLucro30Val = prevFlow ? 0.30 * prevFlow.lucroEmpresa : 0;
+      const prevLucroTotalVal = prevFlow ? prevFlow.lucroEmpresa : 0;
+      const prevRetiradaLucroNaoRealizadaVal = prevFlow ? prevFlow.retiradaLucroNaoRealizada : 0;
+      const prevSalarioCalculadoVal = prevFlow ? prevFlow.salarioCalculado : 0;
+      const prevRetiradasEfetuadasVal = prevFlow ? prevFlow.retiradasEfetuadas : 0;
 
       // Appointments — period vs prev
       const apptsAll = appts.data ?? [];
@@ -261,6 +421,14 @@ function VisaoGeral() {
         ? completedPrev.reduce((s, a) => s + Number(a.price ?? 0), 0) / completedPrev.length
         : 0;
 
+      // Receita e Despesa Estimada (Card Estimativas)
+      const apptsScheduled = inPeriod.filter((a) => a.status === "SCHEDULED" || a.status === "CONFIRMED");
+      const revenueAgendada = apptsScheduled.reduce((s, a) => s + Number(a.price ?? 0), 0);
+      const receitaEstimada = revenue + revenueAgendada;
+
+      const despesasPendentes = monthlyData[selectedYM]?.expensePending || 0;
+      const despesaEstimada = expense + despesasPendentes;
+
       // Active clients
       const activeClients = (clientsAll.data ?? []).filter((c) => c.status === "ACTIVE").length;
 
@@ -273,21 +441,21 @@ function VisaoGeral() {
           receita: 0,
         });
       }
-      for (const r of tx.data ?? []) {
+      for (const r of txList) {
         if (r.type !== "INCOME") continue;
+        if (!r.transaction_date) continue;
         const d = new Date(r.transaction_date + "T00:00:00");
         const diff = (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth());
         const idx = 5 - diff;
         if (idx >= 0 && idx <= 5) months[idx].receita += Number(r.amount);
       }
 
-      // Appointments per day (within current period, capped to 60 points)
+      // Appointments per day
       const days: { label: string; count: number }[] = [];
       const dayMap = new Map<string, number>();
-      
       let totalDays = 30;
       let startDay = new Date(range.start);
-      
+
       if (period.includes("-")) {
         const [year, month] = period.split("-").map(Number);
         totalDays = new Date(year, month, 0).getDate();
@@ -301,7 +469,6 @@ function VisaoGeral() {
         totalDays = 60;
         startDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 59);
       } else {
-        // "month"
         const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
         totalDays = daysInMonth;
         startDay = new Date(range.start);
@@ -331,7 +498,7 @@ function VisaoGeral() {
         i++;
       }
 
-      // Top services (donut)
+      // Top services
       const topServices = (services.data ?? [])
         .filter((s) => Number(s.total_revenue ?? 0) > 0)
         .map((s) => ({ name: s.name ?? "—", value: Number(s.total_revenue ?? 0) }));
@@ -352,6 +519,21 @@ function VisaoGeral() {
         months,
         days,
         topServices,
+
+        // Novos indicadores
+        receitaEstimada,
+        despesaEstimada,
+        salarioCalculado: currentFlow.salarioCalculado,
+        retiradaPermitida: currentFlow.retiradaPermitida,
+
+        // Memória de cálculo
+        prevSalarioNaoRecebidoVal,
+        prevLucro30Val,
+        prevLucroTotalVal,
+        prevRetiradaLucroNaoRealizadaVal,
+        prevSalarioCalculadoVal,
+        prevRetiradasEfetuadasVal,
+        prevYMName: prevYM ? new Date(Number(prevYM.split("-")[0]), Number(prevYM.split("-")[1]) - 1, 1).toLocaleDateString("pt-BR", { month: "long", year: "numeric" }) : "mês anterior"
       };
     },
   });
@@ -464,6 +646,88 @@ function VisaoGeral() {
           to="/app/clients"
           search={{ tab: "cadastro", filter: "RETURN" }}
         />
+      </section>
+
+      {/* Métricas de Planejamento Financeiro */}
+      <section className="grid gap-4 md:grid-cols-3">
+        {/* Card Estimativas */}
+        <Card className="p-5 shadow-soft border border-primary/10 bg-gradient-to-br from-card to-accent/10">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Estimativas ({periodText})
+            </h3>
+            <div className="bg-primary/10 text-primary p-1.5 rounded-lg">
+              <TrendingUp className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="bg-success/15 text-success p-1 rounded-full">
+                  <ArrowUpRight className="h-4 w-4" />
+                </div>
+                <span className="text-xs text-muted-foreground font-medium">Receita Estimada:</span>
+              </div>
+              <span className="text-sm font-bold tabular-nums text-success">
+                {loading ? <Skeleton className="h-4 w-16 inline-block" /> : formatBRL(data?.receitaEstimada ?? 0)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="bg-warning/15 text-warning p-1 rounded-full">
+                  <ArrowDownRight className="h-4 w-4" />
+                </div>
+                <span className="text-xs text-muted-foreground font-medium">Despesa Estimada:</span>
+              </div>
+              <span className="text-sm font-bold tabular-nums text-warning">
+                {loading ? <Skeleton className="h-4 w-16 inline-block" /> : formatBRL(data?.despesaEstimada ?? 0)}
+              </span>
+            </div>
+          </div>
+        </Card>
+
+        {/* Card Seu Salário */}
+        <Card className="p-5 shadow-soft border border-primary/10 bg-gradient-to-br from-card to-accent/10">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Seu Salário
+            </h3>
+            <div className="bg-primary/10 text-primary p-1.5 rounded-lg">
+              <DollarSign className="h-4 w-4" />
+            </div>
+          </div>
+          <div>
+            <p className="text-2xl font-extrabold tracking-tight tabular-nums">
+              {loading ? <Skeleton className="h-8 w-32" /> : formatBRL(data?.salarioCalculado ?? 0)}
+            </p>
+            <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">
+              Média das despesas pessoais dos últimos 3 meses ({periodText} e 2 anteriores).
+            </p>
+          </div>
+        </Card>
+
+        {/* Card Retirada */}
+        <Card 
+          className="p-5 shadow-soft border border-primary/15 bg-gradient-to-br from-card to-primary/5 cursor-pointer hover:border-primary/40 transition-all duration-200"
+          onClick={() => setRetiradaDialogOpen(true)}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-primary">
+              Retirada Disponível ({periodText})
+            </h3>
+            <div className="bg-primary/15 text-primary p-1.5 rounded-lg">
+              <ArrowUpRight className="h-4 w-4" />
+            </div>
+          </div>
+          <div>
+            <p className="text-2xl font-extrabold tracking-tight text-primary tabular-nums">
+              {loading ? <Skeleton className="h-8 w-32" /> : formatBRL(data?.retiradaPermitida ?? 0)}
+            </p>
+            <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">
+              Composto por sobras do salário e lucro anterior. **Clique para ver o detalhamento.**
+            </p>
+          </div>
+        </Card>
       </section>
 
       {/* Charts */}
@@ -647,6 +911,72 @@ function VisaoGeral() {
           </div>
         </Card>
       </section>
+
+      {/* Dialog Detalhamento da Retirada */}
+      <Dialog open={retiradaDialogOpen} onOpenChange={setRetiradaDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Detalhamento da Retirada — {periodText}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2 text-sm leading-relaxed">
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              A retirada disponível para o mês de **{periodText}** é calculada a partir do desempenho e saldos do mês anterior (**{data?.prevYMName}**):
+            </p>
+
+            <div className="divide-y divide-border border rounded-lg bg-card overflow-hidden">
+              <div className="p-3 flex justify-between items-center gap-2">
+                <div>
+                  <p className="font-medium text-foreground text-xs">1. Salário não recebido (mês anterior)</p>
+                  <p className="text-[10px] text-muted-foreground leading-normal mt-0.5">
+                    Salário devido no mês anterior (R$ {data?.prevSalarioCalculadoVal.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) menos as despesas pessoais pagas no mesmo mês (R$ {data?.prevRetiradasEfetuadasVal.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}).
+                  </p>
+                </div>
+                <span className="font-semibold text-foreground text-xs tabular-nums whitespace-nowrap shrink-0">
+                  {formatBRL(data?.prevSalarioNaoRecebidoVal ?? 0)}
+                </span>
+              </div>
+
+              <div className="p-3 flex justify-between items-center gap-2">
+                <div>
+                  <p className="font-medium text-foreground text-xs">2. 30% do lucro da empresa (mês anterior)</p>
+                  <p className="text-[10px] text-muted-foreground leading-normal mt-0.5">
+                    Com base no lucro operacional comercial do mês anterior (R$ {data?.prevLucroTotalVal.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}).
+                  </p>
+                </div>
+                <span className="font-semibold text-foreground text-xs tabular-nums whitespace-nowrap shrink-0">
+                  {formatBRL(data?.prevLucro30Val ?? 0)}
+                </span>
+              </div>
+
+              <div className="p-3 flex justify-between items-center gap-2">
+                <div>
+                  <p className="font-medium text-foreground text-xs">3. Saldos de retiradas acumuladas</p>
+                  <p className="text-[10px] text-muted-foreground leading-normal mt-0.5">
+                    Direito de lucro acumulado de períodos anteriores a {data?.prevYMName} e ainda não retirado.
+                  </p>
+                </div>
+                <span className="font-semibold text-foreground text-xs tabular-nums whitespace-nowrap shrink-0">
+                  {formatBRL(data?.prevRetiradaLucroNaoRealizadaVal ?? 0)}
+                </span>
+              </div>
+
+              <div className="p-3 bg-primary/5 flex justify-between items-center gap-2 border-t font-bold">
+                <span className="text-primary text-xs">Total Disponível para Retirada</span>
+                <span className="text-primary text-sm tabular-nums whitespace-nowrap shrink-0">
+                  {formatBRL(data?.retiradaPermitida ?? 0)}
+                </span>
+              </div>
+            </div>
+            
+            <p className="text-[10px] text-muted-foreground italic leading-normal">
+              * Nota: Valores retirados para despesas pessoais no mês atual serão deduzidos do saldo disponível que acumulará para o próximo mês.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setRetiradaDialogOpen(false)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
