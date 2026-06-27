@@ -1474,7 +1474,28 @@ export async function runImportParse(
         }
       }
 
-      const isExpense = (specialCat === "TARIFA" || specialCat === "APLICACAO") ? true : (specialCat === "JUROS" || specialCat === "RESGATE") ? false : (isExpenseDescription(description) || (amountRaw != null && amountRaw < 0));
+      let isExpense = false;
+      if (specialCat === "TARIFA" || specialCat === "APLICACAO") {
+        isExpense = true;
+      } else if (specialCat === "JUROS" || specialCat === "RESGATE") {
+        isExpense = false;
+      } else {
+        if (creditCol !== null || debitCol !== null) {
+          const creditVal = creditCol !== null ? parseAmount(r[creditCol]) : null;
+          const debitVal = debitCol !== null ? parseAmount(r[debitCol]) : null;
+          
+          if (creditVal !== null && creditVal !== 0 && !isNaN(creditVal)) {
+            isExpense = false; // Receita
+          } else if (debitVal !== null && debitVal !== 0 && !isNaN(debitVal)) {
+            isExpense = true; // Despesa
+          } else {
+            isExpense = amountRaw != null && amountRaw < 0;
+          }
+        } else {
+          isExpense = isExpenseDescription(description) || (amountRaw != null && amountRaw < 0);
+        }
+      }
+
       const amount = amountRaw != null ? Math.abs(amountRaw) : null;
 
       if (!name && !phoneRaw && amount == null) continue;
