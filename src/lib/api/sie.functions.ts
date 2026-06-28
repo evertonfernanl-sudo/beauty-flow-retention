@@ -200,3 +200,25 @@ export const applyImportBatch = createServerFn({ method: "POST" })
 
     return { queued };
   });
+
+export const convertPdfToCsv = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i) =>
+    z
+      .object({
+        base64: z.string(),
+        filename: z.string(),
+      })
+      .parse(i),
+  )
+  .handler(async ({ data }) => {
+    const { convertPdfBufferToCsv } = await import("@/lib/api/worker.server");
+    const buf = Buffer.from(data.base64, "base64");
+    try {
+      const csvText = await convertPdfBufferToCsv(new Uint8Array(buf), data.filename);
+      return { success: true, csvText };
+    } catch (err: any) {
+      console.error("[convertPdfToCsv ERROR]:", err);
+      return { success: false, error: err.message || String(err) };
+    }
+  });

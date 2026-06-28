@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { registerImport, applyImportRow, applyImportBatch } from "@/lib/api/sie.functions";
+import { registerImport, applyImportRow, applyImportBatch, convertPdfToCsv } from "@/lib/api/sie.functions";
 import { useCurrentProfile } from "@/lib/hooks/use-current-profile";
 import { useFeature } from "@/lib/hooks/use-feature";
 import { formatPhoneBR } from "@/lib/phone";
@@ -74,6 +74,11 @@ function SiePage() {
   const [uploading, setUploading] = useState(false);
   const qc = useQueryClient();
   const [selected, setSelected] = useState<string | null>(null);
+
+  // PDF to CSV Converter states
+  const convertFn = useServerFn(convertPdfToCsv);
+  const [converting, setConverting] = useState(false);
+  const convertFileRef = useRef<HTMLInputElement>(null);
 
   const imports = useQuery({
     enabled: !!companyId,
@@ -169,6 +174,61 @@ function SiePage() {
     }
   }
 
+  async function onConvertPdf(file: File) {
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (ext !== "pdf") {
+      toast.error("Por favor, selecione apenas arquivos PDF.");
+      return;
+    }
+    setConverting(true);
+    const toastId = toast.loading("Convertendo PDF para CSV... Isso pode levar alguns segundos se o arquivo necessitar de OCR.");
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => {
+          const res = reader.result as string;
+          const base64Str = res.split(",")[1];
+          resolve(base64Str);
+        };
+        reader.onerror = (error) => reject(error);
+      });
+
+      const res = await convertFn({
+        data: {
+          base64,
+          filename: file.name,
+        }
+      });
+
+      if (res && "success" in res && !res.success) {
+        throw new Error(res.error || "Falha na conversão do PDF.");
+      }
+
+      const csvText = (res as any).csvText;
+      if (!csvText) {
+        throw new Error("O arquivo CSV gerado está vazio.");
+      }
+
+      const blob = new Blob([csvText], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", file.name.replace(/\.pdf$/i, ".csv"));
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast.success("PDF convertido com sucesso! O download iniciou automaticamente.", { id: toastId });
+    } catch (err: any) {
+      console.error("[onConvertPdf Error]:", err);
+      toast.error(`Falha ao converter PDF: ${err.message || String(err)}`, { id: toastId });
+    } finally {
+      setConverting(false);
+      if (convertFileRef.current) convertFileRef.current.value = "";
+    }
+  }
+
   if (!feature.loading && !feature.enabled) {
     return (
       <div className="max-w-2xl">
@@ -235,6 +295,60 @@ function SiePage() {
             ) : (
               <>
                 <Upload className="h-4 w-4 mr-2" /> Escolher arquivo
+              </>
+            )}
+          </Button>
+        </div>
+      </Card>
+
+      {/* PDF to CSV Direct Converter Tool */}
+      <Card className="p-5 border border-primary/20 bg-primary/5">
+        <input
+          ref={convertFileRef}
+          type="file"
+          accept=".pdf"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) onConvertPdf(f);
+          }}
+        />
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            const f = e.dataTransfer.files?.[0];
+            if (f) onConvertPdf(f);
+          }}
+          className="border-2 border-dashed border-primary/30 rounded-lg p-6 flex items-center justify-between gap-3 flex-wrap hover:border-primary/60 transition"
+        >
+          <div className="flex items-center gap-3">
+            <Sparkles className="h-8 w-8 text-primary animate-pulse" />
+            <div>
+              <div className="font-semibold text-primary">
+                Ferramenta: Converter PDF diretamente para Planilha (CSV)
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                Arraste um PDF (nativo ou escaneado) para baixar sua tabela limpa de dados em CSV. 
+                Nenhuma regra de negócio (clientes, transações ou deduplicação) será aplicada.
+              </div>
+            </div>
+          </div>
+          <Button 
+            variant="outline"
+            className="border-primary/40 hover:bg-primary/10 text-primary"
+            onClick={() => convertFileRef.current?.click()} 
+            disabled={converting}
+          >
+            {converting ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Convertendo…
+              </>
+            ) : (
+              <>
+                <FileSpreadsheet className="h-4 w-4 mr-2" /> Converter PDF
               </>
             )}
           </Button>
