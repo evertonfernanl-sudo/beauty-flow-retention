@@ -1096,7 +1096,7 @@ function inferBankName(filename: string | null | undefined, description: string 
   return "Banco Importado";
 }
 
-export async function convertPdfBufferToCsv(buf: Uint8Array, filename: string): Promise<string> {
+export async function extractFullTextFromPdfBuffer(buf: Uint8Array, filename: string): Promise<string> {
   const { extractText, getDocumentProxy, extractImages } = await import("unpdf");
   const { PipelineError } = await import("./ocr-normalizer.server");
   const pdf = await getDocumentProxy(buf);
@@ -1274,7 +1274,12 @@ export async function convertPdfBufferToCsv(buf: Uint8Array, filename: string): 
   if (!fullText.trim()) {
     throw new PipelineError("Não foi possível extrair nenhum texto legível do PDF (PDF sem camada nativa e OCR falhou).", "OCR");
   }
-  
+  return fullText;
+}
+
+export async function convertPdfBufferToCsvForImport(buf: Uint8Array, filename: string): Promise<string> {
+  const { PipelineError } = await import("./ocr-normalizer.server");
+  const fullText = await extractFullTextFromPdfBuffer(buf, filename);
   const parsedPdf = parsePdfTextToRows(fullText);
   if (parsedPdf.rows.length === 0) {
     throw new PipelineError("Nenhuma linha de extrato identificada no PDF", "PARSER");
@@ -1283,6 +1288,26 @@ export async function convertPdfBufferToCsv(buf: Uint8Array, filename: string): 
     fields: parsedPdf.headers,
     data: parsedPdf.rows.map((r) => parsedPdf.headers.map((h) => r[h] ?? "")),
   });
+}
+
+export async function convertPdfBufferToCsvRaw(buf: Uint8Array, filename: string): Promise<string> {
+  const fullText = await extractFullTextFromPdfBuffer(buf, filename);
+  
+  // Split into lines
+  const lines = fullText.split(/\r?\n/);
+  const csvRows: string[][] = [];
+  
+  for (const line of lines) {
+    if (!line.trim()) {
+      csvRows.push([]);
+      continue;
+    }
+    // Split columns by tab or multiple spaces (2 or more spaces)
+    const cells = line.split(/\t|\s{2,}/).map(c => c.trim());
+    csvRows.push(cells);
+  }
+  
+  return Papa.unparse(csvRows);
 }
 
 export async function runImportParse(
@@ -1340,7 +1365,7 @@ export async function runImportParse(
         csvText = await file.text();
       } else {
         const buf = new Uint8Array(await file.arrayBuffer());
-        csvText = await convertPdfBufferToCsv(buf, imp.filename || "extrato.pdf");
+        csvText = await convertPdfBufferToCsvForImport(buf, imp.filename || "extrato.pdf");
       }
 
       const parsed = Papa.parse<string[]>(csvText, { skipEmptyLines: true, delimiter: "" });

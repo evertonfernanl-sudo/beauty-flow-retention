@@ -212,10 +212,10 @@ export const convertPdfToCsv = createServerFn({ method: "POST" })
       .parse(i),
   )
   .handler(async ({ data }) => {
-    const { convertPdfBufferToCsv } = await import("@/lib/api/worker.server");
+    const { convertPdfBufferToCsvRaw } = await import("@/lib/api/worker.server");
     const buf = Buffer.from(data.base64, "base64");
     try {
-      const csvText = await convertPdfBufferToCsv(new Uint8Array(buf), data.filename);
+      const csvText = await convertPdfBufferToCsvRaw(new Uint8Array(buf), data.filename);
       return { success: true, csvText };
     } catch (err: any) {
       console.error("[convertPdfToCsv ERROR]:", err);
