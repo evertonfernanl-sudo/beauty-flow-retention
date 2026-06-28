@@ -1291,23 +1291,256 @@ export async function convertPdfBufferToCsvForImport(buf: Uint8Array, filename: 
 }
 
 export async function convertPdfBufferToCsvRaw(buf: Uint8Array, filename: string): Promise<string> {
-  const fullText = await extractFullTextFromPdfBuffer(buf, filename);
+  const { getDocumentProxy, extractImages } = await import("unpdf");
+  const { PipelineError } = await import("./ocr-normalizer.server");
+  const pdf = await getDocumentProxy(buf);
   
-  // Split into lines
-  const lines = fullText.split(/\r?\n/);
-  const csvRows: string[][] = [];
+  // 1. Tentar extração nativa por coordenadas físicas (para PDFs nativos)
+  let nativeCsvRows: string[][] = [];
+  let isNative = false;
   
-  for (const line of lines) {
-    if (!line.trim()) {
-      csvRows.push([]);
-      continue;
+  try {
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const items = textContent.items as any[];
+      
+      if (items && items.length > 0) {
+        isNative = true;
+        const yThreshold = 5; // Limiar de alinhamento vertical (linha) em pontos
+        const rowsMap: { y: number; items: typeof items }[] = [];
+        
+        for (const item of items) {
+          if (!item.str || !item.transform) continue;
+          const y = item.transform[5];
+          let foundRow = rowsMap.find(r => Math.abs(r.y - y) <= yThreshold);
+          if (foundRow) {
+            foundRow.items.push(item);
+          } else {
+            rowsMap.push({ y, items: [item] });
+          }
+        }
+        
+        // Ordenar linhas do topo para o rodapé (Y decrescente)
+        rowsMap.sort((a, b) => b.y - a.y);
+        
+        for (const row of rowsMap) {
+          // Ordenar itens da esquerda para a direita (X crescente)
+          row.items.sort((a, b) => a.transform[4] - b.transform[4]);
+          
+          const cells: string[] = [];
+          let currentCell = "";
+          let lastXEnd = -1;
+          
+          for (const item of row.items) {
+            const x = item.transform[4];
+            // Estimar largura física do item com base na altura ou no número de caracteres
+            const height = item.height || 10;
+            const itemWidth = item.width || (item.str.length * (height * 0.6));
+            
+            if (lastXEnd === -1) {
+              currentCell = item.str;
+              lastXEnd = x + itemWidth;
+            } else {
+              const distance = x - lastXEnd;
+              // Se o espaço físico horizontal for maior que o limiar (10 pontos), inicia nova coluna
+              if (distance > 10) {
+                cells.push(currentCell.trim());
+                currentCell = item.str;
+              } else {
+                currentCell += (distance > 2 ? " " : "") + item.str;
+              }
+              lastXEnd = x + itemWidth;
+            }
+          }
+          if (currentCell) {
+            cells.push(currentCell.trim());
+          }
+          nativeCsvRows.push(cells);
+        }
+        if (i < pdf.numPages) {
+          nativeCsvRows.push([]); // Linha em branco entre páginas
+        }
+      }
     }
-    // Split columns by tab or multiple spaces (2 or more spaces)
-    const cells = line.split(/\t|\s{2,}/).map(c => c.trim());
-    csvRows.push(cells);
+  } catch (err) {
+    console.error("Erro na extração nativa por coordenadas:", err);
   }
   
-  return Papa.unparse(csvRows);
+  if (isNative && nativeCsvRows.length > 0) {
+    console.log("PDF Nativo detectado. Tabela de coordenadas reconstruída com sucesso.");
+    return Papa.unparse(nativeCsvRows);
+  }
+  
+  // 2. Fallback para Gemini OCR estruturado em CSV para PDFs escaneados (imagens)
+  console.log("PDF sem camada nativa ou extração falhou. Iniciando OCR Gemini estruturado para CSV...");
+  
+  let ocrCsvAccumulator = "";
+  const apiKey = process.env.LOVABLE_API_KEY;
+  if (!apiKey) {
+    throw new PipelineError("IA indisponível para OCR: LOVABLE_API_KEY ausente no ambiente de produção.", "OCR");
+  }
+  
+  try {
+    const resizeImageRGBA = (rgbaData: Uint8ClampedArray, width: number, height: number, maxDim = 950) => {
+      if (width <= maxDim && height <= maxDim) {
+        return { data: rgbaData, width, height };
+      }
+      const scale = Math.min(maxDim / width, maxDim / height);
+      const newWidth = Math.round(width * scale);
+      const newHeight = Math.round(height * scale);
+      const newData = new Uint8ClampedArray(newWidth * newHeight * 4);
+      for (let y = 0; y < newHeight; y++) {
+        const srcY = Math.min(Math.floor(y / scale), height - 1);
+        for (let x = 0; x < newWidth; x++) {
+          const srcX = Math.min(Math.floor(x / scale), width - 1);
+          const dstIdx = (y * newWidth + x) * 4;
+          const srcIdx = (srcY * width + srcX) * 4;
+          newData[dstIdx] = rgbaData[srcIdx];
+          newData[dstIdx + 1] = rgbaData[srcIdx + 1];
+          newData[dstIdx + 2] = rgbaData[srcIdx + 2];
+          newData[dstIdx + 3] = rgbaData[srcIdx + 3];
+        }
+      }
+      return { data: newData, width: newWidth, height: newHeight };
+    };
+
+    const convertToBMP32 = (rgbaData: Uint8ClampedArray, width: number, height: number) => {
+      const fileHeaderSize = 14;
+      const dibHeaderSize = 40;
+      const headerSize = fileHeaderSize + dibHeaderSize;
+      const imageSize = width * height * 4;
+      const fileSize = headerSize + imageSize;
+      const buffer = Buffer.alloc(fileSize);
+      
+      buffer.write("BM", 0);
+      buffer.writeUInt32LE(fileSize, 2);
+      buffer.writeUInt32LE(0, 6);
+      buffer.writeUInt32LE(headerSize, 10);
+      
+      buffer.writeUInt32LE(dibHeaderSize, 14);
+      buffer.writeInt32LE(width, 18);
+      buffer.writeInt32LE(-height, 22);
+      buffer.writeUInt16LE(1, 26);
+      buffer.writeUInt16LE(32, 28);
+      buffer.writeUInt32LE(0, 30);
+      buffer.writeUInt32LE(imageSize, 34);
+      buffer.writeInt32LE(2835, 38);
+      buffer.writeInt32LE(2835, 42);
+      buffer.writeUInt32LE(0, 46);
+      buffer.writeUInt32LE(0, 50);
+      
+      let dstIdx = headerSize;
+      for (let srcIdx = 0; srcIdx < rgbaData.length; srcIdx += 4) {
+        buffer[dstIdx] = rgbaData[srcIdx + 2];
+        buffer[dstIdx + 1] = rgbaData[srcIdx + 1];
+        buffer[dstIdx + 2] = rgbaData[srcIdx];
+        buffer[dstIdx + 3] = rgbaData[srcIdx + 3];
+        dstIdx += 4;
+      }
+      return buffer;
+    };
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const pageImages = await extractImages(pdf, i);
+      if (pageImages && pageImages.length > 0) {
+        for (let idx = 0; idx < pageImages.length; idx++) {
+          const img = pageImages[idx];
+          const convertToRGBA = (image: any) => {
+            const { data: imgData, width: w, height: h, channels: ch } = image;
+            if (ch === 4) {
+              return { data: new Uint8ClampedArray(imgData), width: w, height: h };
+            }
+            
+            const rgbaData = new Uint8ClampedArray(w * h * 4);
+            let srcIdx = 0;
+            let dstIdx = 0;
+            
+            for (let p = 0; p < w * h; p++) {
+              if (ch === 3) {
+                rgbaData[dstIdx] = imgData[srcIdx];
+                rgbaData[dstIdx + 1] = imgData[srcIdx + 1];
+                rgbaData[dstIdx + 2] = imgData[srcIdx + 2];
+                rgbaData[dstIdx + 3] = 255;
+                srcIdx += 3;
+              } else if (ch === 1) {
+                const val = imgData[srcIdx];
+                rgbaData[dstIdx] = val;
+                rgbaData[dstIdx + 1] = val;
+                rgbaData[dstIdx + 2] = val;
+                rgbaData[dstIdx + 3] = 255;
+                srcIdx += 1;
+              }
+              dstIdx += 4;
+            }
+            return { data: rgbaData, width: w, height: h };
+          };
+
+          const rgbaImg = convertToRGBA(img);
+          const resizedImg = resizeImageRGBA(rgbaImg.data, rgbaImg.width, rgbaImg.height, 950);
+          const bmpBuffer = convertToBMP32(resizedImg.data, resizedImg.width, resizedImg.height);
+          
+          const base64Bmp = bmpBuffer.toString("base64");
+          const dataUrl = `data:image/bmp;base64,${base64Bmp}`;
+
+          console.log(`Enviando página ${i} imagem ${idx} para Lovable AI Gateway para conversão CSV...`);
+          const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              model: "google/gemini-2.5-flash",
+              messages: [
+                {
+                  role: "user",
+                  content: [
+                    {
+                      type: "text",
+                      text: "Você é um analisador de documentos especialista em reconstruir tabelas. Sua tarefa é transcrever todo o conteúdo visível nesta imagem de extrato bancário diretamente no formato CSV. Não faça qualquer tipo de interpretação de dados, não resuma, não limpe e não aplique regras de negócio. Apenas identifique a estrutura física (tabelas, linhas e colunas) existente na imagem e monte um CSV correspondente. Se a imagem contiver textos fora de tabelas, represente-os como linhas de uma única célula no CSV. Retorne APENAS o código do CSV válido, sem blocos de código markdown (como ```csv), sem explicações e sem comentários."
+                    },
+                    {
+                      type: "image_url",
+                      image_url: {
+                        url: dataUrl
+                      }
+                    }
+                  ]
+                }
+              ]
+            })
+          });
+
+          if (!aiRes.ok) {
+            const errText = await aiRes.text();
+            throw new Error(`Erro no AI Gateway (${aiRes.status}): ${errText.slice(0, 200)}`);
+          }
+
+          const aiJson = (await aiRes.json()) as { choices?: { message?: { content?: string } }[] };
+          let pageText = aiJson.choices?.[0]?.message?.content ?? "";
+          
+          pageText = pageText.trim();
+          if (pageText.startsWith("```")) {
+            pageText = pageText.replace(/^```[a-zA-Z]*\n/, "").replace(/\n```$/, "");
+          }
+          
+          if (pageText) {
+            ocrCsvAccumulator += pageText + "\n";
+          }
+        }
+      }
+    }
+  } catch (ocrErr: any) {
+    console.error("Falha durante execução do OCR multimodal para CSV:", ocrErr.message);
+    throw new PipelineError(`Falha no OCR multimodal via AI Gateway: ${ocrErr.message}`, "OCR");
+  }
+  
+  if (!ocrCsvAccumulator.trim()) {
+    throw new PipelineError("Não foi possível extrair nenhuma tabela estruturada do PDF.", "OCR");
+  }
+  
+  return ocrCsvAccumulator;
 }
 
 export async function runImportParse(
