@@ -25,6 +25,7 @@ import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticated/app.index'
+import { Route as AuthenticatedAppSiev2RouteImport } from './routes/_authenticated/app.siev2'
 import { Route as AuthenticatedAppSieRouteImport } from './routes/_authenticated/app.sie'
 import { Route as AuthenticatedAppSettingsRouteImport } from './routes/_authenticated/app.settings'
 import { Route as AuthenticatedAppServicesRouteImport } from './routes/_authenticated/app.services'
@@ -116,6 +117,11 @@ const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
 const AuthenticatedAppIndexRoute = AuthenticatedAppIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AuthenticatedAppRoute,
+} as any)
+const AuthenticatedAppSiev2Route = AuthenticatedAppSiev2RouteImport.update({
+  id: '/siev2',
+  path: '/siev2',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
 const AuthenticatedAppSieRoute = AuthenticatedAppSieRouteImport.update({
@@ -216,6 +222,7 @@ export interface FileRoutesByFullPath {
   '/app/services': typeof AuthenticatedAppServicesRoute
   '/app/settings': typeof AuthenticatedAppSettingsRoute
   '/app/sie': typeof AuthenticatedAppSieRoute
+  '/app/siev2': typeof AuthenticatedAppSiev2Route
   '/app/': typeof AuthenticatedAppIndexRoute
   '/app/clients/$clientId': typeof AuthenticatedAppClientsClientIdRoute
   '/api/public/hooks/jobs-tick': typeof ApiPublicHooksJobsTickRoute
@@ -245,6 +252,7 @@ export interface FileRoutesByTo {
   '/app/services': typeof AuthenticatedAppServicesRoute
   '/app/settings': typeof AuthenticatedAppSettingsRoute
   '/app/sie': typeof AuthenticatedAppSieRoute
+  '/app/siev2': typeof AuthenticatedAppSiev2Route
   '/app': typeof AuthenticatedAppIndexRoute
   '/app/clients/$clientId': typeof AuthenticatedAppClientsClientIdRoute
   '/api/public/hooks/jobs-tick': typeof ApiPublicHooksJobsTickRoute
@@ -277,6 +285,7 @@ export interface FileRoutesById {
   '/_authenticated/app/services': typeof AuthenticatedAppServicesRoute
   '/_authenticated/app/settings': typeof AuthenticatedAppSettingsRoute
   '/_authenticated/app/sie': typeof AuthenticatedAppSieRoute
+  '/_authenticated/app/siev2': typeof AuthenticatedAppSiev2Route
   '/_authenticated/app/': typeof AuthenticatedAppIndexRoute
   '/_authenticated/app/clients/$clientId': typeof AuthenticatedAppClientsClientIdRoute
   '/api/public/hooks/jobs-tick': typeof ApiPublicHooksJobsTickRoute
@@ -309,6 +318,7 @@ export interface FileRouteTypes {
     | '/app/services'
     | '/app/settings'
     | '/app/sie'
+    | '/app/siev2'
     | '/app/'
     | '/app/clients/$clientId'
     | '/api/public/hooks/jobs-tick'
@@ -338,6 +348,7 @@ export interface FileRouteTypes {
     | '/app/services'
     | '/app/settings'
     | '/app/sie'
+    | '/app/siev2'
     | '/app'
     | '/app/clients/$clientId'
     | '/api/public/hooks/jobs-tick'
@@ -369,6 +380,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/services'
     | '/_authenticated/app/settings'
     | '/_authenticated/app/sie'
+    | '/_authenticated/app/siev2'
     | '/_authenticated/app/'
     | '/_authenticated/app/clients/$clientId'
     | '/api/public/hooks/jobs-tick'
@@ -504,6 +516,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppIndexRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/app/siev2': {
+      id: '/_authenticated/app/siev2'
+      path: '/siev2'
+      fullPath: '/app/siev2'
+      preLoaderRoute: typeof AuthenticatedAppSiev2RouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
     '/_authenticated/app/sie': {
       id: '/_authenticated/app/sie'
       path: '/sie'
@@ -624,6 +643,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppServicesRoute: typeof AuthenticatedAppServicesRoute
   AuthenticatedAppSettingsRoute: typeof AuthenticatedAppSettingsRoute
   AuthenticatedAppSieRoute: typeof AuthenticatedAppSieRoute
+  AuthenticatedAppSiev2Route: typeof AuthenticatedAppSiev2Route
   AuthenticatedAppIndexRoute: typeof AuthenticatedAppIndexRoute
 }
 
@@ -639,6 +659,7 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppServicesRoute: AuthenticatedAppServicesRoute,
   AuthenticatedAppSettingsRoute: AuthenticatedAppSettingsRoute,
   AuthenticatedAppSieRoute: AuthenticatedAppSieRoute,
+  AuthenticatedAppSiev2Route: AuthenticatedAppSiev2Route,
   AuthenticatedAppIndexRoute: AuthenticatedAppIndexRoute,
 }
 
