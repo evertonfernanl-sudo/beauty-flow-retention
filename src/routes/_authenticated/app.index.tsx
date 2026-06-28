@@ -234,8 +234,12 @@ function VisaoGeral() {
       // Financial — period vs prev
       let revenue = 0,
         expense = 0,
+        expenseCompany = 0,
+        expensePersonalPeriod = 0,
         revenuePrev = 0,
-        expensePrev = 0;
+        expensePrev = 0,
+        expenseCompanyPrev = 0,
+        expensePersonalPeriodPrev = 0;
 
       for (const r of txList) {
         const d = r.transaction_date;
@@ -243,10 +247,24 @@ function VisaoGeral() {
         const amt = Number(r.amount);
         if (d >= startKey && d <= endKey) {
           if (r.type === "INCOME") revenue += amt;
-          else expense += amt;
+          else {
+            expense += amt;
+            if (r.is_personal) {
+              expensePersonalPeriod += amt;
+            } else {
+              expenseCompany += amt;
+            }
+          }
         } else if (d >= prevStartKey && d <= prevEndKey) {
           if (r.type === "INCOME") revenuePrev += amt;
-          else expensePrev += amt;
+          else {
+            expensePrev += amt;
+            if (r.is_personal) {
+              expensePersonalPeriodPrev += amt;
+            } else {
+              expenseCompanyPrev += amt;
+            }
+          }
         }
       }
       const profit = revenue - expense;
@@ -435,7 +453,7 @@ function VisaoGeral() {
       const receitaEstimada = revenue + revenueAgendada;
 
       const despesasPendentes = monthlyData[selectedYM]?.expensePending || 0;
-      const despesaEstimada = expense + despesasPendentes;
+      const despesaEstimada = expenseCompany + despesasPendentes;
 
       // Active clients
       const activeClients = (clientsAll.data ?? []).filter((c) => c.status === "ACTIVE").length;
@@ -531,6 +549,7 @@ function VisaoGeral() {
         // Novos indicadores
         receitaEstimada,
         despesaEstimada,
+        expensePersonalPeriod,
         salarioCalculado: currentFlow.salarioCalculado,
         retiradaPermitida: currentFlow.retiradaPermitida,
 
@@ -704,11 +723,22 @@ function VisaoGeral() {
               <DollarSign className="h-4 w-4" />
             </div>
           </div>
-          <div>
-            <p className="text-2xl font-extrabold tracking-tight tabular-nums">
-              {loading ? <Skeleton className="h-8 w-32" /> : formatBRL(data?.salarioCalculado ?? 0)}
-            </p>
-            <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">
+          <div className="space-y-3">
+            <div>
+              <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Média Calculada</span>
+              <p className="text-2xl font-extrabold tracking-tight tabular-nums mt-0.5">
+                {loading ? <Skeleton className="h-8 w-32" /> : formatBRL(data?.salarioCalculado ?? 0)}
+              </p>
+            </div>
+            
+            <div className="border-t pt-2 flex items-center justify-between">
+              <span className="text-xs text-muted-foreground font-medium">Suas despesas no período:</span>
+              <span className="text-xs font-bold tabular-nums text-foreground">
+                {loading ? <Skeleton className="h-4 w-16 inline-block" /> : formatBRL(data?.expensePersonalPeriod ?? 0)}
+              </span>
+            </div>
+
+            <p className="text-[11px] text-muted-foreground leading-relaxed pt-1">
               Média das despesas pessoais dos últimos 3 meses ({periodText} e 2 anteriores).
             </p>
           </div>
