@@ -132,7 +132,16 @@ function SettingsPage() {
 
   const { tab } = Route.useSearch();
   const navigate = Route.useNavigate();
-  const activeTab = tab || "company";
+
+  useEffect(() => {
+    if (tab === "billing") {
+      navigate({ search: { tab: "plan" }, replace: true });
+    } else if (tab === "preferences") {
+      navigate({ search: { tab: "company" }, replace: true });
+    }
+  }, [tab, navigate]);
+
+  const activeTab = tab === "billing" ? "plan" : tab === "preferences" ? "company" : (tab || "company");
 
   const handleTabChange = (val: string) => {
     navigate({ search: { tab: val } });
@@ -159,22 +168,17 @@ function SettingsPage() {
           <TabsTrigger value="plan">
             <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Plano
           </TabsTrigger>
-          <TabsTrigger value="billing">
-            <Receipt className="h-3.5 w-3.5 mr-1.5" /> Assinatura
-          </TabsTrigger>
           <TabsTrigger value="integrations">
             <Plug className="h-3.5 w-3.5 mr-1.5" /> Integrações
-          </TabsTrigger>
-          <TabsTrigger value="preferences">
-            <Settings className="h-3.5 w-3.5 mr-1.5" /> Preferências
           </TabsTrigger>
           <TabsTrigger value="security">
             <ShieldCheck className="h-3.5 w-3.5 mr-1.5" /> Segurança
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="company">
+        <TabsContent value="company" className="space-y-6">
           <CompanyTab companyId={companyId} canEdit={isAdmin} qc={qc} />
+          <PreferencesTab companyId={companyId} qc={qc} />
         </TabsContent>
         <TabsContent value="services">
           <ServicesTab companyId={companyId} qc={qc} />
@@ -182,17 +186,12 @@ function SettingsPage() {
         <TabsContent value="users">
           <UsersTab companyId={companyId} canManage={isAdmin} qc={qc} />
         </TabsContent>
-        <TabsContent value="plan">
+        <TabsContent value="plan" className="space-y-6">
           <PlanTab companyId={companyId} isOwner={isOwner} qc={qc} />
-        </TabsContent>
-        <TabsContent value="billing">
           <BillingTab companyId={companyId} />
         </TabsContent>
         <TabsContent value="integrations">
           <IntegrationsTab companyId={companyId} canManage={isAdmin} qc={qc} />
-        </TabsContent>
-        <TabsContent value="preferences">
-          <PreferencesTab companyId={companyId} qc={qc} />
         </TabsContent>
         <TabsContent value="security">
           <SecurityTab isAdmin={isAdmin} email={profile?.email} />
