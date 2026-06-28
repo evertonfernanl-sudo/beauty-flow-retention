@@ -72,6 +72,7 @@ import {
 const clientsSearchSchema = z.object({
   tab: z.enum(["cadastro", "retorno", "comunicacao", "mensageria"]).optional(),
   filter: z.string().optional(),
+  new: z.boolean().optional(),
 });
 
 export const Route = createFileRoute("/_authenticated/app/clients")({
@@ -133,6 +134,20 @@ function ClientsPage() {
   const navigate = useNavigate();
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (searchParams.new) {
+      setOpen(true);
+      navigate({
+        search: (prev: any) => {
+          const copy = { ...prev };
+          delete copy.new;
+          return copy;
+        },
+        replace: true,
+      });
+    }
+  }, [searchParams.new, navigate]);
 
   useEffect(() => {
     if (searchParams.tab) {

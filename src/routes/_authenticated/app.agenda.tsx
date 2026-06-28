@@ -147,6 +147,20 @@ function AgendaPage() {
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
   const [closeMonthOpen, setCloseMonthOpen] = useState(false);
 
+  useEffect(() => {
+    if (searchParams.newAppt) {
+      setNewApptOpen(true);
+      navigate({
+        search: (prev: any) => {
+          const copy = { ...prev };
+          delete copy.newAppt;
+          return copy;
+        },
+        replace: true,
+      });
+    }
+  }, [searchParams.newAppt, navigate]);
+
   const isEmployee = profile?.role === "employee";
   const isAdm = profile?.role === "owner" || profile?.role === "admin";
   const shouldRestrictAgenda = isEmployee && !profile?.permissions?.view_other_professionals_agenda;

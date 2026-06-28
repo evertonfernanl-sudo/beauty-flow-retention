@@ -201,13 +201,13 @@ function AppShell() {
             <div className="hidden sm:flex items-center gap-1.5">
               {isAllowed("/app/clients") && (
                 <Button variant="outline" size="sm" asChild>
-                  <Link to="/app/clients">
+                  <Link to="/app/clients" search={{ new: true }}>
                     <Plus className="h-3.5 w-3.5" /> Cliente
                   </Link>
                 </Button>
               )}
               <Button size="sm" className="shadow-glow" asChild>
-                <Link to="/app/agenda">
+                <Link to="/app/agenda" search={{ newAppt: true }}>
                   <Plus className="h-3.5 w-3.5" /> Agendamento
                 </Link>
               </Button>
