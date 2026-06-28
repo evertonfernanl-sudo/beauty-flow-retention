@@ -1295,8 +1295,8 @@ export async function convertPdfBufferToCsvRaw(buf: Uint8Array, filename: string
   const { PipelineError } = await import("./ocr-normalizer.server");
   const pdf = await getDocumentProxy(buf);
   
-  // 1. Tentar extração nativa por coordenadas físicas (para PDFs nativos)
-  let nativeCsvRows: string[][] = [];
+  // 1. Tentar extração nativa por coordenadas físicas e estruturação via Gemini (para PDFs nativos)
+  let nativePagesText: string[] = [];
   let isNative = false;
   
   try {
@@ -1307,12 +1307,14 @@ export async function convertPdfBufferToCsvRaw(buf: Uint8Array, filename: string
       
       if (items && items.length > 0) {
         isNative = true;
-        const yThreshold = 5; // Limiar de alinhamento vertical (linha) em pontos
+        
+        // Agrupar itens por coordenada Y para preservar o layout original de linhas/colunas
+        const yThreshold = 5;
         const rowsMap: { y: number; items: typeof items }[] = [];
         
         for (const item of items) {
-          if (!item.str || !item.transform) continue;
-          const y = item.transform[5];
+          if (!item.str) continue;
+          const y = item.transform ? item.transform[5] : 0;
           let foundRow = rowsMap.find(r => Math.abs(r.y - y) <= yThreshold);
           if (foundRow) {
             foundRow.items.push(item);
@@ -1324,59 +1326,102 @@ export async function convertPdfBufferToCsvRaw(buf: Uint8Array, filename: string
         // Ordenar linhas do topo para o rodapé (Y decrescente)
         rowsMap.sort((a, b) => b.y - a.y);
         
+        let pageText = "";
         for (const row of rowsMap) {
           // Ordenar itens da esquerda para a direita (X crescente)
-          row.items.sort((a, b) => a.transform[4] - b.transform[4]);
+          row.items.sort((a, b) => (a.transform ? a.transform[4] : 0) - (b.transform ? b.transform[4] : 0));
           
-          const cells: string[] = [];
-          let currentCell = "";
+          let line = "";
           let lastXEnd = -1;
-          
           for (const item of row.items) {
-            const x = item.transform[4];
-            // Estimar largura física do item com base na altura ou no número de caracteres
+            const x = item.transform ? item.transform[4] : 0;
             const height = item.height || 10;
             const itemWidth = item.width || (item.str.length * (height * 0.6));
             
             if (lastXEnd === -1) {
-              currentCell = item.str;
-              lastXEnd = x + itemWidth;
+              line = item.str;
             } else {
-              const distance = x - lastXEnd;
-              // Se o espaço físico horizontal for maior que o limiar (10 pontos), inicia nova coluna
-              if (distance > 10) {
-                cells.push(currentCell.trim());
-                currentCell = item.str;
+              const spacing = x - lastXEnd;
+              if (spacing > 12) {
+                line += "\t" + item.str; // Tabulação indica separação física de coluna
               } else {
-                currentCell += (distance > 2 ? " " : "") + item.str;
+                line += (spacing > 2 ? " " : "") + item.str;
               }
-              lastXEnd = x + itemWidth;
             }
+            lastXEnd = x + itemWidth;
           }
-          if (currentCell) {
-            cells.push(currentCell.trim());
-          }
-          nativeCsvRows.push(cells);
+          pageText += line + "\n";
         }
-        if (i < pdf.numPages) {
-          nativeCsvRows.push([]); // Linha em branco entre páginas
+        
+        if (pageText.trim()) {
+          nativePagesText.push(pageText);
         }
       }
     }
   } catch (err) {
-    console.error("Erro na extração nativa por coordenadas:", err);
+    console.error("Erro na extração de texto nativo por coordenadas:", err);
   }
   
-  if (isNative && nativeCsvRows.length > 0) {
-    console.log("PDF Nativo detectado. Tabela de coordenadas reconstruída com sucesso.");
-    return Papa.unparse(nativeCsvRows);
+  const apiKey = process.env.LOVABLE_API_KEY;
+  if (!apiKey) {
+    throw new PipelineError("IA indisponível para OCR: LOVABLE_API_KEY ausente no ambiente de produção.", "OCR");
+  }
+
+  if (isNative && nativePagesText.length > 0) {
+    console.log("PDF Nativo detectado. Enviando texto estruturado para formatação CSV via Gemini...");
+    let nativeCsvAccumulator = "";
+    
+    for (let i = 0; i < nativePagesText.length; i++) {
+      const pageTextContent = nativePagesText[i];
+      console.log(`Enviando página nativa ${i + 1} para o AI Gateway para formatação CSV...`);
+      
+      const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Você é um especialista em estruturação de dados e reconstrução de tabelas. Sua tarefa é converter o texto de extrato bancário fornecido abaixo diretamente no formato CSV. O texto original foi extraído de um PDF nativo e preserva as quebras de linha e colunas (separadas por tabulação '\\t' ou múltiplos espaços). Identifique a estrutura física das tabelas e alinhe corretamente as informações em colunas correspondentes do CSV (como Data, Descrição, Documento, Valor, Saldo, etc.). Certifique-se de que cada registro ocupe uma única linha do CSV com todas as suas respectivas colunas preenchidas. Não resuma, não ignore linhas, não modifique os textos/valores originais e não aplique nenhuma regra de negócio. Retorne APENAS o código do CSV válido, sem blocos de código markdown (como ```csv), sem explicações e sem comentários.\n\nTexto original:\n" + pageTextContent
+                }
+              ]
+            }
+          ]
+        })
+      });
+      
+      if (!aiRes.ok) {
+        const errText = await aiRes.text();
+        throw new Error(`Erro no AI Gateway (${aiRes.status}): ${errText.slice(0, 200)}`);
+      }
+      
+      const aiJson = (await aiRes.json()) as { choices?: { message?: { content?: string } }[] };
+      let pageCsv = aiJson.choices?.[0]?.message?.content ?? "";
+      
+      pageCsv = pageCsv.trim();
+      if (pageCsv.startsWith("```")) {
+        pageCsv = pageCsv.replace(/^```[a-zA-Z]*\n/, "").replace(/\n```$/, "");
+      }
+      
+      if (pageCsv) {
+        nativeCsvAccumulator += pageCsv + "\n";
+      }
+    }
+    
+    return nativeCsvAccumulator;
   }
   
   // 2. Fallback para Gemini OCR estruturado em CSV para PDFs escaneados (imagens)
   console.log("PDF sem camada nativa ou extração falhou. Iniciando OCR Gemini estruturado para CSV...");
   
   let ocrCsvAccumulator = "";
-  const apiKey = process.env.LOVABLE_API_KEY;
   if (!apiKey) {
     throw new PipelineError("IA indisponível para OCR: LOVABLE_API_KEY ausente no ambiente de produção.", "OCR");
   }
