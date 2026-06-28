@@ -36,34 +36,47 @@ export async function runImportParseV2(
       get(target, prop) {
         if (prop === "from") {
           return (table: string) => {
+            const queryBuilder = target.from(table);
             if (table === "imports") {
-              return {
-                select(fields: string) {
-                  return {
-                    eq(field: string, value: any) {
-                      return {
-                        async single() {
-                          const { data, error } = await target
-                            .from("imports")
-                            .select(fields)
-                            .eq(field, value)
-                            .single();
-                          if (error) return { data: null, error };
-                          return {
-                            data: {
-                              ...data,
-                              source: "csv", // spoof to CSV
-                            },
-                            error: null,
-                          };
-                        },
-                      };
-                    },
-                  };
-                },
-              };
+              return new Proxy(queryBuilder, {
+                get(qTarget, qProp) {
+                  if (qProp === "select") {
+                    return (fields: string) => {
+                      const selectBuilder = qTarget.select(fields);
+                      return new Proxy(selectBuilder, {
+                        get(sTarget, sProp) {
+                          if (sProp === "eq") {
+                            return (field: string, value: any) => {
+                              const eqBuilder = sTarget.eq(field, value);
+                              return new Proxy(eqBuilder, {
+                                get(eTarget, eProp) {
+                                  if (eProp === "single") {
+                                    return async () => {
+                                      const res = await eTarget.single();
+                                      if (res.data) {
+                                        res.data.source = "csv"; // spoof to CSV
+                                      }
+                                      return res;
+                                    };
+                                  }
+                                  const eVal = Reflect.get(eTarget, eProp);
+                                  return typeof eVal === "function" ? eVal.bind(eTarget) : eVal;
+                                }
+                              });
+                            };
+                          }
+                          const sVal = Reflect.get(sTarget, sProp);
+                          return typeof sVal === "function" ? sVal.bind(sTarget) : sVal;
+                        }
+                      });
+                    };
+                  }
+                  const qVal = Reflect.get(qTarget, qProp);
+                  return typeof qVal === "function" ? qVal.bind(qTarget) : qVal;
+                }
+              });
             }
-            return target.from(table);
+            return queryBuilder;
           };
         }
         if (prop === "storage") {
@@ -85,7 +98,8 @@ export async function runImportParseV2(
             },
           };
         }
-        return Reflect.get(target, prop);
+        const val = Reflect.get(target, prop);
+        return typeof val === "function" ? val.bind(target) : val;
       },
     });
 
