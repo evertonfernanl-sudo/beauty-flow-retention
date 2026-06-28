@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -252,6 +252,21 @@ function SieV2Page() {
           e unifica o pipeline sob o mesmo fluxo de validação e importação.
         </p>
       </div>
+
+      {/* SIE V1 Back Banner */}
+      <Card className="p-4 border border-muted bg-muted/20 flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <div className="font-semibold text-muted-foreground flex items-center gap-1.5 text-sm">
+            <Sparkles className="h-4 w-4 text-muted-foreground" /> Você está usando a versão V2 (SIE V2)
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Esta é a versão experimental com pipeline unificado. Para voltar à versão clássica, use o botão ao lado.
+          </p>
+        </div>
+        <Link to="/app/sie">
+          <Button size="sm" variant="outline">Voltar para V1</Button>
+        </Link>
+      </Card>
 
       <Card className="p-5">
         <input

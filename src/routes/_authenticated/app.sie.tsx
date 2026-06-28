@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -252,6 +252,21 @@ function SiePage() {
           clientes, recria atendimentos e aprende seus padrões a cada importação.
         </p>
       </div>
+
+      {/* SIE V2 Try Banner */}
+      <Card className="p-4 border border-primary bg-primary/5 flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <div className="font-semibold text-primary flex items-center gap-1.5 text-sm">
+            <Sparkles className="h-4 w-4 animate-pulse" /> Nova Versão: SIE V2
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Experimente o novo Importador Inteligente V2 com pipeline unificado para CSV, XLSX e PDF (nativo/OCR).
+          </p>
+        </div>
+        <Link to="/app/siev2">
+          <Button size="sm">Testar Versão V2</Button>
+        </Link>
+      </Card>
 
       <Card className="p-5">
         <input
