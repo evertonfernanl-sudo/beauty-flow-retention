@@ -3249,7 +3249,7 @@ export type Database = {
         | "CANCELLED"
         | "NO_SHOW"
         | "BLOCKED"
-      business_vertical: "BEAUTY" | "SALES" | "GYM"
+      business_vertical: "BEAUTY" | "SALES" | "GYM" | "SERVICE" | "FINANCE"
       client_status: "ACTIVE" | "INACTIVE" | "LOST"
       company_plan: "starter" | "professional" | "premium"
       contact_channel:
@@ -3453,7 +3453,7 @@ export const Constants = {
         "NO_SHOW",
         "BLOCKED",
       ],
-      business_vertical: ["BEAUTY", "SALES", "GYM"],
+      business_vertical: ["BEAUTY", "SALES", "GYM", "SERVICE", "FINANCE"],
       client_status: ["ACTIVE", "INACTIVE", "LOST"],
       company_plan: ["starter", "professional", "premium"],
       contact_channel: ["WHATSAPP", "PHONE", "INSTAGRAM", "IN_PERSON", "EMAIL"],

@@ -16,7 +16,7 @@ export type CurrentProfile = {
     name: string;
     plan: string;
     onboarding_completed: boolean;
-    vertical: "BEAUTY" | "SALES" | "GYM";
+    vertical: "BEAUTY" | "SALES" | "GYM" | "SERVICE" | "FINANCE";
     whatsapp: string | null;
     whatsapp_template: string | null;
     email: string | null;

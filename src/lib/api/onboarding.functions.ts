@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { toStoragePhone } from "@/lib/phone";
 
-type Vertical = "BEAUTY" | "SALES" | "GYM";
+type Vertical = "BEAUTY" | "SALES" | "GYM" | "SERVICE" | "FINANCE";
 
 type Offering = {
   name: string;
@@ -81,6 +81,52 @@ const SEEDS: Record<Vertical, Offering[]> = {
       billing_cycle_days: 365,
     },
   ],
+  SERVICE: [
+    {
+      name: "Consultoria Geral",
+      kind: "SERVICE",
+      duration_minutes: 60,
+      price: 150,
+      return_days: 30,
+    },
+    {
+      name: "Atendimento Técnico",
+      kind: "SERVICE",
+      duration_minutes: 90,
+      price: 200,
+      return_days: 90,
+    },
+    {
+      name: "Suporte Especializado",
+      kind: "SERVICE",
+      duration_minutes: 45,
+      price: 120,
+      return_days: 30,
+    },
+  ],
+  FINANCE: [
+    {
+      name: "Planejamento Financeiro",
+      kind: "SERVICE",
+      duration_minutes: 60,
+      price: 250,
+      return_days: 90,
+    },
+    {
+      name: "Análise de Investimentos",
+      kind: "SERVICE",
+      duration_minutes: 60,
+      price: 300,
+      return_days: 60,
+    },
+    {
+      name: "Assessoria de Orçamento",
+      kind: "SERVICE",
+      duration_minutes: 45,
+      price: 180,
+      return_days: 30,
+    },
+  ],
 };
 
 export const createCompanyForCurrentUser = createServerFn({ method: "POST" })
@@ -91,7 +137,7 @@ export const createCompanyForCurrentUser = createServerFn({ method: "POST" })
         name: z.string().trim().min(2).max(120),
         phone: z.string().trim().max(40).optional().nullable(),
         ownerName: z.string().trim().min(2).max(120),
-        vertical: z.enum(["BEAUTY", "SALES", "GYM"]).default("BEAUTY"),
+        vertical: z.enum(["BEAUTY", "SALES", "GYM", "SERVICE", "FINANCE"]).default("BEAUTY"),
       })
       .parse(input),
   )
@@ -140,7 +186,7 @@ export const createCompanyForCurrentUser = createServerFn({ method: "POST" })
 export const setCompanyVertical = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) =>
-    z.object({ vertical: z.enum(["BEAUTY", "SALES", "GYM"]) }).parse(input),
+    z.object({ vertical: z.enum(["BEAUTY", "SALES", "GYM", "SERVICE", "FINANCE"]) }).parse(input),
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
@@ -274,3 +320,84 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+export const registerCardAndPayInitial = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) =>
+    z
+      .object({
+        holderName: z.string().trim().min(3, "Nome do titular inválido"),
+        cardNumber: z.string().trim().min(13, "Número do cartão inválido").max(19),
+        expiry: z.string().trim().min(5, "Validade inválida (MM/AA)"),
+        cvv: z.string().trim().min(3, "CVV inválido").max(4),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // 1) Find user's company
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("company_id")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (!profile?.company_id) {
+      throw new Error("Empresa não encontrada. Complete o passo inicial.");
+    }
+
+    const companyId = profile.company_id;
+
+    // Get current subscription
+    const { data: subscription } = await supabase
+      .from("subscriptions")
+      .select("id")
+      .eq("company_id", companyId)
+      .maybeSingle();
+
+    if (!subscription) {
+      throw new Error("Assinatura não cadastrada no sistema. Contate o suporte.");
+    }
+
+    // 2) Generate a transaction invoice of R$ 0,01
+    const invoiceNumber = `BF-${Math.floor(100000 + Math.random() * 900000)}`;
+
+    const { error: invoiceError } = await supabaseAdmin
+      .from("invoices")
+      .insert({
+        company_id: companyId,
+        subscription_id: subscription.id,
+        number: invoiceNumber,
+        amount: 0.01,
+        status: "PAID",
+        due_date: new Date().toISOString().split("T")[0],
+        paid_at: new Date().toISOString(),
+        gateway: "MOCK_GATEWAY",
+        gateway_invoice_id: `gtw_${Math.random().toString(36).substr(2, 9)}`,
+      });
+
+    if (invoiceError) {
+      throw new Error(`Falha ao registrar fatura inicial de R$ 0,01: ${invoiceError.message}`);
+    }
+
+    // 3) Update subscription status to ACTIVE and amount to 0.01
+    const { error: subError } = await supabaseAdmin
+      .from("subscriptions")
+      .update({
+        status: "ACTIVE",
+        amount: 0.01,
+        gateway: "MOCK_GATEWAY",
+        gateway_subscription_id: `sub_${Math.random().toString(36).substr(2, 9)}`,
+        current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      })
+      .eq("id", subscription.id);
+
+    if (subError) {
+      throw new Error(`Falha ao ativar assinatura: ${subError.message}`);
+    }
+
+    return { ok: true, invoiceNumber };
+  });
+

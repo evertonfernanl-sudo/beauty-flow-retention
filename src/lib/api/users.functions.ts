@@ -265,3 +265,127 @@ export const runAdminJobsTick = createServerFn({ method: "POST" })
       throw new Error(err instanceof Error ? err.message : String(err));
     }
   });
+
+export const listPlatformUsers = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+
+    // Verify platform admin access
+    const { data: adminCheck } = await supabase
+      .from("platform_admins")
+      .select("user_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!adminCheck) {
+      throw new Error("Acesso negado. Apenas administradores da plataforma podem listar usuários.");
+    }
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Fetch all profiles
+    const { data: profiles, error } = await supabaseAdmin
+      .from("profiles")
+      .select("id, name, email, created_at, active, company_id, companies(name)")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw new Error(`Erro ao listar perfis: ${error.message}`);
+    }
+
+    // Fetch roles
+    const { data: roles } = await supabaseAdmin
+      .from("user_roles")
+      .select("user_id, role");
+
+    const roleMap = new Map(roles?.map((r) => [r.user_id, r.role]) ?? []);
+
+    return (profiles ?? []).map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      email: p.email,
+      created_at: p.created_at,
+      active: p.active,
+      company_name: p.companies?.name ?? "Nenhuma",
+      role: roleMap.get(p.id) ?? "employee",
+    }));
+  });
+
+export const resetPlatformUserPassword = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) =>
+    z
+      .object({
+        targetUserId: z.string().uuid(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // 1) Verify the current user is a platform admin
+    const { data: adminCheck } = await supabase
+      .from("platform_admins")
+      .select("user_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!adminCheck) {
+      throw new Error("Acesso negado. Apenas administradores da plataforma podem resetar senhas.");
+    }
+
+    // 2) Fetch user email to make sure user exists
+    const { data: targetProfile, error: profileErr } = await supabaseAdmin
+      .from("profiles")
+      .select("email, name")
+      .eq("id", data.targetUserId)
+      .maybeSingle();
+
+    if (profileErr || !targetProfile) {
+      throw new Error("Usuário não encontrado.");
+    }
+
+    // Generate a secure temporary password
+    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let tempPassword = "BF-";
+    for (let i = 0; i < 8; i++) {
+      if (i === 4) tempPassword += "-";
+      tempPassword += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+
+    // 3) Update the auth user's password and metadata via admin API
+    const { data: authData, error: authUpdateError } = await supabaseAdmin.auth.admin.updateUserById(
+      data.targetUserId,
+      {
+        password: tempPassword,
+        user_metadata: {
+          password_reset_required: true,
+        },
+      },
+    );
+
+    if (authUpdateError) {
+      throw new Error(`Falha ao atualizar a senha no Supabase Auth: ${authUpdateError.message}`);
+    }
+
+    // 4) Generate a recovery link
+    const redirectToUrl = `${process.env.APP_URL || "http://localhost:5173"}/reset-password`;
+    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+      type: "recovery",
+      email: targetProfile.email,
+      options: {
+        redirectTo: redirectToUrl,
+      },
+    });
+
+    const recoveryLink = linkError ? null : linkData.properties?.action_link;
+
+    return {
+      ok: true,
+      tempPassword,
+      recoveryLink,
+    };
+  });
+

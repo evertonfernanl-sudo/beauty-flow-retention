@@ -40,7 +40,7 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 function applyNoCacheHeaders(response: Response, url: string): Response {
   const newHeaders = new Headers(response.headers)
 
-  if (url.includes("/agendar/")) {
+  if (url.includes("/agendar/") || url.includes("/auth")) {
     newHeaders.set(
       "Cache-Control",
       "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"

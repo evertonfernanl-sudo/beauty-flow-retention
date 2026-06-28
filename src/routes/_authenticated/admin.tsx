@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { runAdminJobsTick } from "@/lib/api/users.functions";
+import { runAdminJobsTick, listPlatformUsers, resetPlatformUserPassword } from "@/lib/api/users.functions";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,8 +24,39 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Building2, DollarSign, Users, TrendingUp, ArrowLeft, RefreshCw } from "lucide-react";
+import {
+  Building2,
+  DollarSign,
+  Users,
+  TrendingUp,
+  ArrowLeft,
+  RefreshCw,
+  Key,
+  Copy,
+  Check,
+  Search,
+  ShieldAlert,
+} from "lucide-react";
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
 
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({ meta: [{ title: "Painel SaaS — BeautyFlow Admin" }] }),
@@ -186,6 +217,7 @@ function AdminPanel() {
         <Tabs defaultValue="companies">
           <TabsList>
             <TabsTrigger value="companies">Empresas</TabsTrigger>
+            <TabsTrigger value="users">Usuários</TabsTrigger>
             <TabsTrigger value="features">Feature Flags</TabsTrigger>
             <TabsTrigger value="jobs">Filas</TabsTrigger>
           </TabsList>
@@ -255,6 +287,10 @@ function AdminPanel() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="users" className="mt-4">
+            <UsersPanel />
           </TabsContent>
 
           <TabsContent value="features" className="mt-4">
@@ -552,3 +588,250 @@ function StatCard({
     </Card>
   );
 }
+
+function UsersPanel() {
+  const qc = useQueryClient();
+  const listUsers = useServerFn(listPlatformUsers);
+  const resetPassword = useServerFn(resetPlatformUserPassword);
+
+  const [search, setSearch] = useState("");
+  const [resetConfirmUser, setResetConfirmUser] = useState<any | null>(null);
+  const [resetResult, setResetResult] = useState<any | null>(null);
+  const [resettingId, setResettingId] = useState<string | null>(null);
+  const [copiedField, setCopiedField] = useState<"pass" | "link" | null>(null);
+
+  const usersQuery = useQuery({
+    queryKey: ["admin-users"],
+    queryFn: async () => {
+      return await listUsers({ data: undefined });
+    },
+  });
+
+  async function handleResetPassword() {
+    if (!resetConfirmUser) return;
+    const targetUserId = resetConfirmUser.id;
+    setResettingId(targetUserId);
+    try {
+      const res = await resetPassword({ data: { targetUserId } });
+      if (res.ok) {
+        toast.success(`Senha de ${resetConfirmUser.name} resetada com sucesso!`);
+        setResetResult({
+          user: resetConfirmUser,
+          tempPassword: res.tempPassword,
+          recoveryLink: res.recoveryLink,
+        });
+        setResetConfirmUser(null);
+        qc.invalidateQueries({ queryKey: ["admin-users"] });
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Erro ao resetar senha.");
+    } finally {
+      setResettingId(null);
+    }
+  }
+
+  function copyText(text: string, field: "pass" | "link") {
+    navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    toast.success("Copiado!");
+    setTimeout(() => setCopiedField(null), 2000);
+  }
+
+  const users = usersQuery.data ?? [];
+  const filteredUsers = users.filter((u: any) => {
+    const s = search.toLowerCase();
+    return (
+      u.name.toLowerCase().includes(s) ||
+      u.email.toLowerCase().includes(s) ||
+      u.company_name.toLowerCase().includes(s)
+    );
+  });
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0 pb-4">
+        <div>
+          <CardTitle>Usuários Cadastrados ({users.length})</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Lista de proprietários, administradores e funcionários com acesso à plataforma.
+          </p>
+        </div>
+        <div className="relative w-72">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por nome, email ou empresa…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+      </CardHeader>
+      <CardContent>
+        {usersQuery.isLoading ? (
+          <p className="text-sm text-muted-foreground py-4">Carregando usuários…</p>
+        ) : filteredUsers.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4">Nenhum usuário encontrado.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>E-mail</TableHead>
+                  <TableHead>Empresa</TableHead>
+                  <TableHead>Função</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Criado em</TableHead>
+                  <TableHead className="text-right font-medium">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredUsers.map((u: any) => (
+                  <TableRow key={u.id}>
+                    <TableCell className="font-medium">{u.name}</TableCell>
+                    <TableCell className="text-sm">{u.email}</TableCell>
+                    <TableCell className="text-sm">{u.company_name}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="capitalize text-xs">
+                        {u.role === "owner"
+                          ? "Proprietário"
+                          : u.role === "admin"
+                            ? "Administrador"
+                            : "Funcionário"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {u.active ? (
+                        <Badge className="bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/10 border-0 text-xs">
+                          Ativo
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="text-xs">Inativo</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {new Date(u.created_at).toLocaleDateString("pt-BR")}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 h-8 text-xs gap-1.5"
+                        onClick={() => setResetConfirmUser(u)}
+                        disabled={resettingId === u.id}
+                      >
+                        <Key className="h-3.5 w-3.5" /> Resetar Senha
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+
+      {/* Confirmation Dialog */}
+      <AlertDialog open={!!resetConfirmUser} onOpenChange={(open) => !open && setResetConfirmUser(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-amber-600">
+              <ShieldAlert className="h-5 w-5" /> Resetar Senha do Usuário
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Você está prestes a resetar a senha de <strong>{resetConfirmUser?.name}</strong> ({resetConfirmUser?.email}).
+              <br /><br />
+              O cadastro e dados vinculados do cliente **não serão perdidos**. No próximo acesso, o cliente será orientado e obrigado a escolher uma nova senha de acesso.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleResetPassword();
+              }}
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              Confirmar Reset
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Result Dialog */}
+      <Dialog open={!!resetResult} onOpenChange={(open) => !open && setResetResult(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-600">
+              <Check className="h-5 w-5 rounded-full bg-emerald-100 p-0.5" /> Senha Resetada com Sucesso
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              A senha do cliente <strong>{resetResult?.user?.name}</strong> foi redefinida.
+              Copie e envie as credenciais temporárias abaixo para ele.
+            </p>
+
+            <div className="space-y-3">
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                  Senha Temporária
+                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <code className="text-sm font-mono font-bold select-all bg-muted px-2 py-1 rounded">
+                    {resetResult?.tempPassword}
+                  </code>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                    onClick={() => copyText(resetResult?.tempPassword || "", "pass")}
+                  >
+                    {copiedField === "pass" ? (
+                      <Check className="h-4 w-4 text-emerald-600" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              {resetResult?.recoveryLink && (
+                <div className="rounded-lg border bg-muted/30 p-3">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                    Link de Recuperação Direta
+                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-mono truncate select-all bg-muted px-2 py-1 rounded flex-1">
+                      {resetResult?.recoveryLink}
+                    </span>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
+                      onClick={() => copyText(resetResult?.recoveryLink || "", "link")}
+                    >
+                      {copiedField === "link" ? (
+                        <Check className="h-4 w-4 text-emerald-600" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+            <p className="text-[11px] text-muted-foreground italic">
+              Ao acessar usando a senha temporária ou o link direto, o cliente será orientado a cadastrar uma nova senha definitiva.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setResetResult(null)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
+

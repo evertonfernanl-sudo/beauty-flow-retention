@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TermosRouteImport } from './routes/termos'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as PrivacidadeRouteImport } from './routes/privacidade'
 import { Route as PlanosRouteImport } from './routes/planos'
 import { Route as FuncionalidadesRouteImport } from './routes/funcionalidades'
@@ -46,6 +47,11 @@ const TermosRoute = TermosRouteImport.update({
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
   path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacidadeRoute = PrivacidadeRouteImport.update({
@@ -192,6 +198,7 @@ export interface FileRoutesByFullPath {
   '/funcionalidades': typeof FuncionalidadesRoute
   '/planos': typeof PlanosRoute
   '/privacidade': typeof PrivacidadeRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/termos': typeof TermosRoute
   '/admin': typeof AuthenticatedAdminRoute
@@ -221,6 +228,7 @@ export interface FileRoutesByTo {
   '/funcionalidades': typeof FuncionalidadesRoute
   '/planos': typeof PlanosRoute
   '/privacidade': typeof PrivacidadeRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/termos': typeof TermosRoute
   '/admin': typeof AuthenticatedAdminRoute
@@ -251,6 +259,7 @@ export interface FileRoutesById {
   '/funcionalidades': typeof FuncionalidadesRoute
   '/planos': typeof PlanosRoute
   '/privacidade': typeof PrivacidadeRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/termos': typeof TermosRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
@@ -282,6 +291,7 @@ export interface FileRouteTypes {
     | '/funcionalidades'
     | '/planos'
     | '/privacidade'
+    | '/reset-password'
     | '/sitemap.xml'
     | '/termos'
     | '/admin'
@@ -311,6 +321,7 @@ export interface FileRouteTypes {
     | '/funcionalidades'
     | '/planos'
     | '/privacidade'
+    | '/reset-password'
     | '/sitemap.xml'
     | '/termos'
     | '/admin'
@@ -340,6 +351,7 @@ export interface FileRouteTypes {
     | '/funcionalidades'
     | '/planos'
     | '/privacidade'
+    | '/reset-password'
     | '/sitemap.xml'
     | '/termos'
     | '/_authenticated/admin'
@@ -371,6 +383,7 @@ export interface RootRouteChildren {
   FuncionalidadesRoute: typeof FuncionalidadesRoute
   PlanosRoute: typeof PlanosRoute
   PrivacidadeRoute: typeof PrivacidadeRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermosRoute: typeof TermosRoute
   AgendarSlugRoute: typeof AgendarSlugRoute
@@ -391,6 +404,13 @@ declare module '@tanstack/react-router' {
       path: '/sitemap.xml'
       fullPath: '/sitemap.xml'
       preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacidade': {
@@ -649,6 +669,7 @@ const rootRouteChildren: RootRouteChildren = {
   FuncionalidadesRoute: FuncionalidadesRoute,
   PlanosRoute: PlanosRoute,
   PrivacidadeRoute: PrivacidadeRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TermosRoute: TermosRoute,
   AgendarSlugRoute: AgendarSlugRoute,

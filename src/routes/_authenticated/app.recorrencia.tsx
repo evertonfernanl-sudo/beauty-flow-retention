@@ -56,14 +56,14 @@ const TAB_DEFS: {
   label: string;
   icon: typeof Clock;
   classes: ReturnClass[];
-  verticals: ("BEAUTY" | "SALES" | "GYM")[];
+  verticals: ("BEAUTY" | "SALES" | "GYM" | "SERVICE" | "FINANCE")[];
 }[] = [
   {
     key: "retorno",
     label: "Retorno",
     icon: Clock,
     classes: ["ATTENTION", "LATE"],
-    verticals: ["BEAUTY"],
+    verticals: ["BEAUTY", "SERVICE", "FINANCE"],
   },
   {
     key: "recompra",
@@ -84,21 +84,21 @@ const TAB_DEFS: {
     label: "Em Risco",
     icon: AlertCircle,
     classes: ["AT_RISK"],
-    verticals: ["BEAUTY", "SALES", "GYM"],
+    verticals: ["BEAUTY", "SALES", "GYM", "SERVICE", "FINANCE"],
   },
   {
     key: "perdidos",
     label: "Perdidos",
     icon: XCircle,
     classes: ["LOST"],
-    verticals: ["BEAUTY", "SALES", "GYM"],
+    verticals: ["BEAUTY", "SALES", "GYM", "SERVICE", "FINANCE"],
   },
 ];
 
 function RecorrenciaPage() {
   const { data: profile } = useCurrentProfile();
   const companyId = profile?.company?.id;
-  const vertical = (profile?.company?.vertical as "BEAUTY" | "SALES" | "GYM") ?? "BEAUTY";
+  const vertical = (profile?.company?.vertical as "BEAUTY" | "SALES" | "GYM" | "SERVICE" | "FINANCE") ?? "BEAUTY";
   const waTemplate =
     profile?.company?.whatsapp_template ?? "Olá {{nome}}! Vamos marcar seu próximo horário?";
   const qc = useQueryClient();

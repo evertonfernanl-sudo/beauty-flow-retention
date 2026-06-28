@@ -122,11 +122,14 @@ function AuthPage() {
 }
 
 function SignInForm({ onSuccess }: { onSuccess: () => void }) {
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+
   const form = useForm<z.infer<typeof signInSchema>>({
     resolver: zodResolver(signInSchema),
     defaultValues: { email: "", password: "" },
   });
-  const [loading, setLoading] = useState(false);
 
   async function onSubmit(values: z.infer<typeof signInSchema>) {
     setLoading(true);
@@ -144,6 +147,55 @@ function SignInForm({ onSuccess }: { onSuccess: () => void }) {
     onSuccess();
   }
 
+  async function onResetPasswordSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email) {
+      toast.error("Informe seu e-mail.");
+      return;
+    }
+    setLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setLoading(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("E-mail de recuperação enviado! Verifique sua caixa de entrada.");
+    setIsForgotPassword(false);
+  }
+
+  if (isForgotPassword) {
+    return (
+      <form onSubmit={onResetPasswordSubmit} className="space-y-4 animate-fade-in">
+        <div className="space-y-2">
+          <Label htmlFor="reset-email">E-mail de Recuperação</Label>
+          <Input
+            id="reset-email"
+            type="email"
+            placeholder="Digite seu e-mail cadastrado"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+        </div>
+        <Button type="submit" className="w-full" disabled={loading}>
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enviar Link de Recuperação"}
+        </Button>
+        <div className="text-center">
+          <button
+            type="button"
+            className="text-xs text-muted-foreground hover:underline"
+            onClick={() => setIsForgotPassword(false)}
+          >
+            Voltar para o Login
+          </button>
+        </div>
+      </form>
+    );
+  }
+
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
       <div className="space-y-2">
@@ -154,7 +206,20 @@ function SignInForm({ onSuccess }: { onSuccess: () => void }) {
         )}
       </div>
       <div className="space-y-2">
-        <Label htmlFor="signin-password">Senha</Label>
+        <div className="flex justify-between items-center">
+          <Label htmlFor="signin-password">Senha</Label>
+          <button
+            type="button"
+            className="text-xs text-primary hover:underline font-medium"
+            onClick={() => {
+              // Pre-fill email from the login input if the user already typed it
+              setEmail(form.getValues("email") || "");
+              setIsForgotPassword(true);
+            }}
+          >
+            Esqueci minha senha
+          </button>
+        </div>
         <Input
           id="signin-password"
           type="password"
