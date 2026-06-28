@@ -1192,6 +1192,125 @@ function NewTransactionDialog({
 
   async function onSubmit(v: z.infer<typeof txSchema>) {
     if (!companyId) return;
+
+    // Verificação de despesas pessoais que excedem Salário + Retiradas
+    if (v.type === "EXPENSE" && v.is_personal) {
+      try {
+        const { data: allTx } = await supabase
+          .from("financial_transactions")
+          .select("amount, type, transaction_date, is_personal, status")
+          .eq("company_id", companyId);
+        
+        if (allTx) {
+          const targetYM = v.transaction_date.slice(0, 7);
+          let startYM = targetYM;
+          for (const t of allTx) {
+            if (t.transaction_date && t.transaction_date.slice(0, 7) < startYM) {
+              startYM = t.transaction_date.slice(0, 7);
+            }
+          }
+          const [selYear, selMonth] = targetYM.split("-").map(Number);
+          const dateLimit = new Date(selYear, selMonth - 4, 1);
+          const limitYM = dateLimit.toISOString().slice(0, 7);
+          if (limitYM < startYM) {
+            startYM = limitYM;
+          }
+          
+          const ymList: string[] = [];
+          let currentYear = Number(startYM.split("-")[0]);
+          let currentMonth = Number(startYM.split("-")[1]);
+          while (currentYear < selYear || (currentYear === selYear && currentMonth <= selMonth)) {
+            ymList.push(`${currentYear}-${String(currentMonth).padStart(2, "0")}`);
+            currentMonth++;
+            if (currentMonth > 12) {
+              currentMonth = 1;
+              currentYear++;
+            }
+          }
+          
+          const monthlyData: Record<string, { revenueRealized: number; expenseRealized: number; expensePersonal: number; lucroEmpresa: number }> = {};
+          for (const ym of ymList) {
+            monthlyData[ym] = { revenueRealized: 0, expenseRealized: 0, expensePersonal: 0, lucroEmpresa: 0 };
+          }
+          for (const t of allTx) {
+            if (!t.transaction_date) continue;
+            const ym = t.transaction_date.slice(0, 7);
+            if (!monthlyData[ym]) continue;
+            const amt = Number(t.amount);
+            if (t.type === "INCOME") {
+              if (t.status === "PAID") {
+                monthlyData[ym].revenueRealized += amt;
+              }
+            } else if (t.type === "EXPENSE") {
+              if (t.is_personal) {
+                if (t.status === "PAID") {
+                  monthlyData[ym].expensePersonal += amt;
+                }
+              } else {
+                if (t.status === "PAID") {
+                  monthlyData[ym].expenseRealized += amt;
+                }
+              }
+            }
+          }
+          for (const ym of ymList) {
+            monthlyData[ym].lucroEmpresa = monthlyData[ym].revenueRealized - monthlyData[ym].expenseRealized;
+          }
+          
+          let prevSalarioNaoRecebido = 0;
+          let prevRetiradaLucroNaoRealizada = 0;
+          let prevLucro = 0;
+          let targetDireitoTotal = 0;
+          let targetCurrentPersonal = 0;
+          
+          for (let idx = 0; idx < ymList.length; idx++) {
+            const ym = ymList[idx];
+            const mData = monthlyData[ym];
+            let sumPersonal = mData.expensePersonal;
+            let countPersonal = 1;
+            if (idx >= 1) {
+              sumPersonal += monthlyData[ymList[idx - 1]].expensePersonal;
+              countPersonal++;
+            }
+            if (idx >= 2) {
+              sumPersonal += monthlyData[ymList[idx - 2]].expensePersonal;
+              countPersonal++;
+            }
+            const salarioCalculado = sumPersonal / countPersonal;
+            const lucro30Prev = 0.30 * prevLucro;
+            const retiradaPermitida = prevSalarioNaoRecebido + lucro30Prev + prevRetiradaLucroNaoRealizada;
+            const direitoTotal = retiradaPermitida + salarioCalculado;
+            
+            if (ym === targetYM) {
+              targetDireitoTotal = direitoTotal;
+              targetCurrentPersonal = mData.expensePersonal;
+            }
+            
+            const retiradasEfetuadas = mData.expensePersonal;
+            let salarioNaoRecebido = 0;
+            let retiradaLucroNaoRealizada = 0;
+            if (retiradasEfetuadas < salarioCalculado) {
+              salarioNaoRecebido = salarioCalculado - retiradasEfetuadas;
+              retiradaLucroNaoRealizada = retiradaPermitida;
+            } else {
+              salarioNaoRecebido = 0;
+              retiradaLucroNaoRealizada = Math.max(0, direitoTotal - retiradasEfetuadas);
+            }
+            prevSalarioNaoRecebido = salarioNaoRecebido;
+            prevRetiradaLucroNaoRealizada = retiradaLucroNaoRealizada;
+            prevLucro = mData.lucroEmpresa;
+          }
+          
+          const futurePersonalSum = targetCurrentPersonal + Number(v.amount);
+          if (futurePersonalSum > targetDireitoTotal) {
+            alert("você está adoecendo o fluxo de caixa de sua empresa.");
+          }
+        }
+      } catch (err) {
+        console.error("Erro ao verificar limite de despesas pessoais:", err);
+      }
+    }
+
     const count = v.recurring && v.type === "EXPENSE" && v.recurring_months && v.recurring_months > 1
       ? v.recurring_months
       : 1;
@@ -2108,14 +2227,6 @@ function NewProviderDialog({
   );
 }
 
-const blockSchema = z.object({
-  professional_id: z.string().uuid("Selecione o profissional"),
-  date: z.string().min(1, "Data obrigatória"),
-  start_time: z.string().min(1, "Horário de início obrigatório"),
-  end_time: z.string().min(1, "Horário de término obrigatório"),
-  notes: z.string().max(200).optional().or(z.literal("")),
-});
-
 function BlockSlotDialog({
   open,
   onOpenChange,
@@ -2142,130 +2253,206 @@ function BlockSlotDialog({
     },
   });
 
-  const form = useForm<z.infer<typeof blockSchema>>({
-    resolver: zodResolver(blockSchema),
-    defaultValues: {
-      professional_id: "",
-      date: toISODate(new Date()),
-      start_time: "09:00",
-      end_time: "10:00",
-      notes: "",
-    },
-  });
+  const [professionalId, setProfessionalId] = useState("");
+  const [date, setDate] = useState(toISODate(new Date()));
+  const [selectedHours, setSelectedHours] = useState<string[]>([]);
+  const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
+  // Reset when opening
   useEffect(() => {
     if (open) {
-      form.reset({
-        professional_id: "",
-        date: toISODate(new Date()),
-        start_time: "09:00",
-        end_time: "10:00",
-        notes: "",
-      });
+      setProfessionalId("");
+      setDate(toISODate(new Date()));
+      setSelectedHours([]);
+      setNotes("");
     }
   }, [open]);
 
-  async function onSubmit(v: z.infer<typeof blockSchema>) {
+  // If there's only one professional, auto-select it
+  useEffect(() => {
+    if (open && professionalsQuery.data && professionalsQuery.data.length > 0 && !professionalId) {
+      setProfessionalId(professionalsQuery.data[0].id);
+    }
+  }, [open, professionalsQuery.data, professionalId]);
+
+  const ALL_HOURS = [
+    "08:00", "08:30", "09:00", "09:30", "10:00", "10:30",
+    "11:00", "11:30", "12:00", "12:30", "13:00", "13:30",
+    "14:00", "14:30", "15:00", "15:30", "16:00", "16:30",
+    "17:00", "17:30", "18:00", "18:30", "19:00", "19:30"
+  ];
+
+  const toggleHour = (hour: string) => {
+    setSelectedHours((prev) =>
+      prev.includes(hour) ? prev.filter((h) => h !== hour) : [...prev, hour]
+    );
+  };
+
+  async function handleBlock() {
     if (!companyId) return;
-
-    const startDt = new Date(`${v.date}T${v.start_time}:00`);
-    const endDt = new Date(`${v.date}T${v.end_time}:00`);
-
-    if (endDt <= startDt) {
-      toast.error("O horário de término deve ser após o horário de início.");
+    if (!professionalId) {
+      toast.error("Selecione o profissional.");
+      return;
+    }
+    if (!date) {
+      toast.error("Selecione a data.");
+      return;
+    }
+    if (selectedHours.length === 0) {
+      toast.error("Selecione pelo menos um horário para bloquear.");
       return;
     }
 
-    const { error } = await supabase.from("appointments").insert({
-      company_id: companyId,
-      client_id: null,
-      service_id: null,
-      professional_id: v.professional_id,
-      start_datetime: startDt.toISOString(),
-      end_datetime: endDt.toISOString(),
-      status: "BLOCKED",
-      notes: v.notes || "Horário Bloqueado",
-      price: 0,
-    });
+    setSubmitting(true);
+    try {
+      // Sort selected hours chronologically
+      const sortedHours = [...selectedHours].sort((a, b) => {
+        const [ha, ma] = a.split(":").map(Number);
+        const [hb, mb] = b.split(":").map(Number);
+        return (ha * 60 + ma) - (hb * 60 + mb);
+      });
 
-    if (error) {
-      toast.error(error.message);
-      return;
+      // Merge contiguous slots (each is 30 mins)
+      const intervals: { start: string; end: string }[] = [];
+      let currentStart: string | null = null;
+      let currentEnd: string | null = null;
+
+      for (const hour of sortedHours) {
+        if (!currentStart) {
+          currentStart = hour;
+          const [h, m] = hour.split(":").map(Number);
+          const endMin = m + 30;
+          const eh = h + Math.floor(endMin / 60);
+          const em = endMin % 60;
+          currentEnd = `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
+        } else {
+          // If this slot starts exactly at currentEnd, extend the interval
+          if (hour === currentEnd) {
+            const [h, m] = hour.split(":").map(Number);
+            const endMin = m + 30;
+            const eh = h + Math.floor(endMin / 60);
+            const em = endMin % 60;
+            currentEnd = `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
+          } else {
+            // Save prev interval and start a new one
+            intervals.push({ start: currentStart, end: currentEnd });
+            currentStart = hour;
+            const [h, m] = hour.split(":").map(Number);
+            const endMin = m + 30;
+            const eh = h + Math.floor(endMin / 60);
+            const em = endMin % 60;
+            currentEnd = `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
+          }
+        }
+      }
+      if (currentStart && currentEnd) {
+        intervals.push({ start: currentStart, end: currentEnd });
+      }
+
+      // Insert into db
+      for (const interval of intervals) {
+        const startDt = new Date(`${date}T${interval.start}:00`);
+        const endDt = new Date(`${date}T${interval.end}:00`);
+
+        const { error } = await supabase.from("appointments").insert({
+          company_id: companyId,
+          client_id: null,
+          service_id: null,
+          professional_id: professionalId,
+          start_datetime: startDt.toISOString(),
+          end_datetime: endDt.toISOString(),
+          status: "BLOCKED",
+          notes: notes.trim() || "Horário Bloqueado",
+          price: 0,
+        });
+
+        if (error) throw error;
+      }
+
+      toast.success("Horário(s) bloqueado(s) com sucesso!");
+      onChanged();
+      onOpenChange(false);
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao bloquear horário.");
+    } finally {
+      setSubmitting(false);
     }
-
-    toast.success("Horário bloqueado com sucesso!");
-    onChanged();
-    onOpenChange(false);
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Bloquear Horário</DialogTitle>
+          <DialogTitle>Bloquear Horários</DialogTitle>
         </DialogHeader>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        
+        <div className="space-y-4 pt-2">
           <div className="space-y-2">
             <Label>Profissional *</Label>
-            <Controller
-              control={form.control}
-              name="professional_id"
-              render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um profissional" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(professionalsQuery.data ?? []).map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            />
-            {form.formState.errors.professional_id && (
-              <p className="text-xs text-destructive">{form.formState.errors.professional_id.message}</p>
-            )}
+            <Select value={professionalId} onValueChange={setProfessionalId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione um profissional" />
+              </SelectTrigger>
+              <SelectContent>
+                {(professionalsQuery.data ?? []).map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">
             <Label>Data *</Label>
-            <Input type="date" {...form.register("date")} />
-            {form.formState.errors.date && (
-              <p className="text-xs text-destructive">{form.formState.errors.date.message}</p>
-            )}
+            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label>Início *</Label>
-              <Input type="time" {...form.register("start_time")} />
-              {form.formState.errors.start_time && (
-                <p className="text-xs text-destructive">{form.formState.errors.start_time.message}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label>Término *</Label>
-              <Input type="time" {...form.register("end_time")} />
-              {form.formState.errors.end_time && (
-                <p className="text-xs text-destructive">{form.formState.errors.end_time.message}</p>
-              )}
+          <div className="space-y-2">
+            <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+              Selecione os Horários para Bloquear
+            </Label>
+            <div className="grid grid-cols-4 gap-2">
+              {ALL_HOURS.map((hour) => {
+                const isSelected = selectedHours.includes(hour);
+                return (
+                  <button
+                    key={hour}
+                    type="button"
+                    onClick={() => toggleHour(hour)}
+                    className={`px-2 py-2.5 text-xs font-semibold rounded-lg border transition ${
+                      isSelected
+                        ? "bg-destructive text-destructive-foreground border-destructive shadow-sm"
+                        : "bg-background hover:bg-secondary/40 text-foreground border-border"
+                    }`}
+                  >
+                    {hour}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           <div className="space-y-2">
             <Label>Justificativa / Notas</Label>
-            <Input {...form.register("notes")} placeholder="Ex: Almoço, Compromisso pessoal" />
+            <Textarea
+              placeholder="Ex: Horário de almoço, treinamento, etc."
+              rows={2}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
           </div>
 
-          <DialogFooter>
-            <Button type="submit" disabled={form.formState.isSubmitting}>
-              Bloquear Horário
+          <DialogFooter className="pt-2">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleBlock} disabled={submitting}>
+              {submitting ? "Bloqueando..." : "Bloquear Horário"}
             </Button>
           </DialogFooter>
-        </form>
+        </div>
       </DialogContent>
     </Dialog>
   );
