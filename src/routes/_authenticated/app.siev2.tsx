@@ -531,7 +531,8 @@ function ImportReview({ importId, status }: { importId: string; status: string }
           "id,row_index,client_name,client_phone,description,amount,occurred_at,payment_method,confidence,status,notes,parsed",
         )
         .eq("import_id", importId)
-        .order("confidence", { ascending: false })
+        .order("occurred_at", { ascending: true })
+        .order("row_index", { ascending: true })
         .limit(200);
       if (error) throw error;
       return (data ?? []) as Row[];
