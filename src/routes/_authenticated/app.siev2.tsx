@@ -795,7 +795,7 @@ function ImportReview({ importId, status }: { importId: string; status: string }
                   aria-label="Selecionar todas as linhas"
                 />
               </th>
-              <th className="text-left p-1">Cliente</th>
+              <th className="text-left p-1 w-[130px] max-w-[130px] truncate">Cliente</th>
               <th className="text-left p-1">Telefone</th>
               <th className="text-left p-1">Descrição</th>
               <th className="text-left p-1">Tipo</th>
@@ -839,7 +839,7 @@ function ImportReview({ importId, status }: { importId: string; status: string }
                       </div>
                     ) : null}
                   </td>
-                  <td className="p-1 font-medium">
+                  <td className="p-1 font-medium w-[130px] max-w-[130px] truncate">
                     {r.status !== "applied" && r.status !== "skipped" && r.status !== "internal" && !r.parsed?.isBankFee && !r.parsed?.isBankInterest ? (
                       <button
                         type="button"

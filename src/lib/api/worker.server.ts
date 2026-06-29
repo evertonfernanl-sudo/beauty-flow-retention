@@ -219,6 +219,7 @@ const isNameHeader = (h: string): boolean => {
     "fornecedor",
     "pagador",
     "recebedor",
+    "recebido de",
     "sacado",
     "cedente",
     "contraparte",
@@ -506,6 +507,16 @@ export interface CanonicalColumnMap {
 
 export function detectColumns(headers: string[]): CanonicalColumnMap {
   const out: CanonicalColumnMap = {};
+  
+  // First check for exact "descrição" or "descricao"
+  const exactDescIdx = headers.findIndex(h => {
+    const norm = (h ?? "").toString().trim().toLowerCase();
+    return norm === "descrição" || norm === "descricao";
+  });
+  if (exactDescIdx !== -1) {
+    out.description = exactDescIdx;
+  }
+
   headers.forEach((h, i) => {
     const norm = (h ?? "").toString().trim().toLowerCase();
 
@@ -1058,7 +1069,8 @@ function matchSpecialTransaction(desc: string | null | undefined): "APLICACAO" |
   const tarifaKeywords = [
     "tarifa", "taxa", "mensalidade", "pacote de servicos", "pacote de serviços", 
     "anuidade", "tarifa pix", "tarifa ted", "tarifa doc", "custo de transacao", 
-    "custo de transação", "debit fee", "bank fee"
+    "custo de transação", "debit fee", "bank fee",
+    "encargos limite de credencargo", "iof s/ utilizacao limite", "iof s/ utilização limite"
   ];
   if (tarifaKeywords.some(kw => s.includes(kw))) {
     return "TARIFA";
@@ -1588,6 +1600,155 @@ export async function convertPdfBufferToCsvRaw(buf: Uint8Array, filename: string
   return ocrCsvAccumulator;
 }
 
+// Configurações do Tratamento Inteligente de Dados
+export const SUMMARY_KEYWORDS = [
+  "saldo do dia", "saldo anterior", "saldo inicial", "saldo final",
+  "total", "totais", "total de creditos", "total de créditos",
+  "total de debitos", "total de débitos", "total geral", "resumo", "resumo do periodo", "resumo do período"
+];
+
+export function applyIntelligentDataTreatment(rawMatrix: unknown[][]): unknown[][] {
+  if (!rawMatrix || rawMatrix.length === 0) return rawMatrix;
+
+  // 1. Normalização da língua portuguesa & limpeza básica
+  let normalizedMatrix = rawMatrix.map(row => {
+    if (!Array.isArray(row)) return row;
+    return row.map(cell => {
+      if (cell == null || typeof cell === "number" || typeof cell === "boolean") return cell;
+      const s = String(cell);
+      
+      let norm = s;
+      norm = norm.replace(/\bP\s+X\s+receb\s+do\b/gi, "PIX RECEBIDO");
+      norm = norm.replace(/\bP\s+X\s+enviado\b/gi, "PIX ENVIADO");
+      norm = norm.replace(/\bP\s+X\b/gi, "PIX");
+      norm = norm.replace(/\breceb\s+do\b/gi, "RECEBIDO");
+      norm = norm.replace(/\btransf\b/gi, "TRANSFERÊNCIA");
+      norm = norm.replace(/\bted\s+s\b/gi, "TED");
+      norm = norm.replace(/\bdoc\s+s\b/gi, "DOC");
+      
+      return norm;
+    });
+  });
+
+  // 2. Correção de desalinhamento de colunas
+  const detectCellType = (val: unknown): "date" | "numeric" | "text" | "empty" => {
+    if (val == null || String(val).trim() === "") return "empty";
+    const s = String(val).trim();
+    if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/.test(s) || /^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}$/.test(s)) return "date";
+    const cleanNum = s.replace(/[^\d,.-]/g, "");
+    if (cleanNum && !isNaN(Number(cleanNum.replace(",", ".")))) {
+      return "numeric";
+    }
+    return "text";
+  };
+
+  const maxCols = Math.max(...normalizedMatrix.map(r => (Array.isArray(r) ? r.length : 0)));
+  const colTypesCounts = Array.from({ length: maxCols }, () => ({ date: 0, numeric: 0, text: 0 }));
+
+  normalizedMatrix.forEach(row => {
+    if (!Array.isArray(row)) return;
+    const textCount = row.filter(cell => detectCellType(cell) === "text").length;
+    if (textCount > row.length * 0.7) return; // likely header
+    
+    row.forEach((cell, cIdx) => {
+      const type = detectCellType(cell);
+      if (type !== "empty" && type !== "text") {
+        colTypesCounts[cIdx][type]++;
+      }
+    });
+  });
+
+  const expectedColTypes = colTypesCounts.map(counts => {
+    if (counts.date > counts.numeric) return "date";
+    if (counts.numeric > 0) return "numeric";
+    return "text";
+  });
+
+  normalizedMatrix = normalizedMatrix.map(row => {
+    if (!Array.isArray(row)) return row;
+    
+    const textCount = row.filter(cell => detectCellType(cell) === "text").length;
+    if (textCount > row.length * 0.7) return row;
+
+    const getScore = (r: unknown[]) => {
+      let score = 0;
+      r.forEach((cell, cIdx) => {
+        const type = detectCellType(cell);
+        if (type === "empty") return;
+        if (type === expectedColTypes[cIdx]) score += 2;
+        else if (type === "text" && expectedColTypes[cIdx] === "text") score += 1;
+      });
+      return score;
+    };
+
+    const currentScore = getScore(row);
+    let bestRow = [...row];
+    let bestScore = currentScore;
+
+    // Shift right
+    for (let shift = 1; shift <= 2; shift++) {
+      const shifted = Array(shift).fill("").concat(row).slice(0, maxCols);
+      const score = getScore(shifted);
+      if (score > bestScore) {
+        bestScore = score;
+        bestRow = shifted;
+      }
+    }
+
+    // Shift left
+    for (let shift = 1; shift <= 2; shift++) {
+      const prefix = row.slice(0, shift);
+      if (prefix.every(cell => detectCellType(cell) === "empty")) {
+        const shifted = row.slice(shift).concat(Array(shift).fill(""));
+        const score = getScore(shifted);
+        if (score > bestScore) {
+          bestScore = score;
+          bestRow = shifted;
+        }
+      }
+    }
+
+    return bestRow;
+  });
+
+  // 3. Remoção de cabeçalhos repetidos e exclusão de linhas de resumo
+  const hIdx = findHeaderRowIndex(normalizedMatrix);
+  let headerSignature = "";
+  if (hIdx !== -1 && normalizedMatrix[hIdx]) {
+    headerSignature = normalizedMatrix[hIdx].map(c => String(c ?? "").trim().toLowerCase()).filter(Boolean).join("|");
+  }
+
+  const cleanedMatrix: unknown[][] = [];
+  normalizedMatrix.forEach((row, idx) => {
+    if (!Array.isArray(row)) {
+      cleanedMatrix.push(row);
+      return;
+    }
+
+    const isSummaryRow = row.some(cell => {
+      if (cell == null) return false;
+      const s = String(cell).trim().toLowerCase();
+      return SUMMARY_KEYWORDS.some(kw => s === kw || s.startsWith(kw + " ") || s.startsWith(kw + ":"));
+    });
+    if (isSummaryRow) {
+      console.log(`[SIE V2 TREATMENT] Ignorando linha de resumo no índice ${idx}: ${JSON.stringify(row)}`);
+      return;
+    }
+
+    if (headerSignature && idx > hIdx) {
+      const sig = row.map(c => String(c ?? "").trim().toLowerCase()).filter(Boolean).join("|");
+      if (sig === headerSignature) {
+        console.log(`[SIE V2 TREATMENT] Ignorando cabeçalho repetido no índice ${idx}: ${JSON.stringify(row)}`);
+        return;
+      }
+    }
+
+    cleanedMatrix.push(row);
+  });
+
+  return cleanedMatrix;
+}
+
 export async function runImportParse(
   admin: Admin,
   job: { payload: Record<string, unknown> | null; company_id: string | null },
@@ -1663,6 +1824,9 @@ export async function runImportParse(
     }
 
     if (rawMatrix.length === 0) throw new Error("Arquivo de importação vazio");
+
+    // Camada Inteligente de Tratamento e Normalização de Dados
+    rawMatrix = applyIntelligentDataTreatment(rawMatrix);
 
     // Camada 2 — Mapeamento de Cabeçalhos
     const hIdx = findHeaderRowIndex(rawMatrix);
@@ -1769,9 +1933,14 @@ export async function runImportParse(
 
       const amount = amountRaw !== null ? Math.abs(amountRaw) : null;
       let name = "";
-      const nameFromCol = canonical.beneficiary ? String(canonical.beneficiary).trim() : "";
+      const hasNameCol = cols.beneficiary !== undefined;
+      const nameFromCol = hasNameCol && canonical.beneficiary ? String(canonical.beneficiary).trim() : "";
       
-      if (nameFromCol) {
+      if (hasNameCol && nameFromCol) {
+        name = nameFromCol;
+      } else if (specialCat === "TARIFA") {
+        name = inferBankName(imp?.filename, description);
+      } else if (hasNameCol) {
         name = nameFromCol;
       } else if (description) {
         const extracted = extractNameFromDescription(description);
@@ -1794,27 +1963,27 @@ export async function runImportParse(
       const phoneRaw = phoneRaw1 || phoneRaw2;
 
       if (specialCat === "INTERNA") {
-        name = "Transferência Interna";
+        name = name || "Transferência Interna";
         status = "applied";
         confidence = 100;
         autoApply = true;
       } else if (specialCat === "TARIFA") {
-        name = "Tarifa Bancária";
+        name = name || inferBankName(imp?.filename, description);
         status = "applied";
         confidence = 100;
         autoApply = true;
       } else if (specialCat === "JUROS") {
-        name = "Juros Bancários";
+        name = name || "Juros Bancários";
         status = "applied";
         confidence = 100;
         autoApply = true;
       } else if (specialCat === "APLICACAO") {
-        name = "Aplicação Financeira";
+        name = name || "Aplicação Financeira";
         status = "applied";
         confidence = 100;
         autoApply = true;
       } else if (specialCat === "RESGATE") {
-        name = "Resgate de Investimento";
+        name = name || "Resgate de Investimento";
         status = "applied";
         confidence = 100;
         autoApply = true;
@@ -2163,6 +2332,33 @@ async function runImportApplyRow(
     const category = isExpense
       ? expenseScope ? `Despesa ${expenseScope}` : "Despesa"
       : "Aporte";
+    let providerIdToUse: string | null = null;
+    const isTarifa = parsedObj.isBankFee || (row.description && matchSpecialTransaction(row.description) === "TARIFA");
+    if (isTarifa) {
+      const { data: imp } = await admin
+        .from("imports")
+        .select("filename")
+        .eq("id", row.import_id)
+        .single();
+      const bankName = inferBankName(imp?.filename, row.description);
+      const { data: existingProviders } = await admin
+        .from("providers")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("name", bankName)
+        .limit(1);
+      if (existingProviders && existingProviders.length > 0) {
+        providerIdToUse = existingProviders[0].id;
+      } else {
+        const { data: newProvider } = await admin
+          .from("providers")
+          .insert({ company_id: companyId, name: bankName })
+          .select("id")
+          .single();
+        if (newProvider) providerIdToUse = newProvider.id;
+      }
+    }
+
     const { data: tx, error: txErr } = await admin
       .from("financial_transactions")
       .insert({
@@ -2174,6 +2370,7 @@ async function runImportApplyRow(
         amount: row.amount ?? 0,
         transaction_date: row.occurred_at ?? new Date().toISOString().slice(0, 10),
         payment_method: row.payment_method ?? null,
+        provider_id: providerIdToUse,
       })
       .select("id")
       .single();
