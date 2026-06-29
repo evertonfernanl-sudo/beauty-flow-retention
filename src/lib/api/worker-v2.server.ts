@@ -37,109 +37,33 @@ export async function runImportParseV2(
     const csvText = await convertPdfBufferToCsvRaw(buf, imp.filename || "extrato.pdf");
     console.log(`[SIE V2] Conversão PDF -> CSV concluída. CSV gerado com ${csvText.split("\n").length} linhas.`);
 
-    // Helper to wrap builders recursively
-    const wrapBuilder = (builder: any): any => {
-      return new Proxy(builder, {
-        get(target, prop) {
-          if (prop === "single") {
-            return async (...args: any[]) => {
-              console.log(`[SIE V2 PROXY] Interceptando .single()`);
-              const res = await target.single(...args);
-              if (res && res.data) {
-                console.log(`[SIE V2 PROXY] Alterando source de ${res.data.source} para 'csv' em .single()`);
-                res.data.source = "csv";
-              }
-              return res;
-            };
-          }
-          if (prop === "then") {
-            return (onfulfilled: any, onrejected: any) => {
-              console.log(`[SIE V2 PROXY] Interceptando .then()`);
-              return target.then((res: any) => {
-                if (res && res.data) {
-                  if (Array.isArray(res.data)) {
-                    res.data.forEach((item: any) => {
-                      if (item) {
-                        console.log(`[SIE V2 PROXY] Alterando source de ${item.source} para 'csv' em array .then()`);
-                        item.source = "csv";
-                      }
-                    });
-                  } else if (typeof res.data === "object") {
-                    console.log(`[SIE V2 PROXY] Alterando source de ${res.data.source} para 'csv' em objeto .then()`);
-                    res.data.source = "csv";
-                  }
-                }
-                return onfulfilled ? onfulfilled(res) : res;
-              }, onrejected);
-            };
-          }
-          const val = Reflect.get(target, prop);
-          if (typeof val === "function") {
-            return (...args: any[]) => {
-              const res = val.apply(target, args);
-              if (res && typeof res === "object") {
-                return wrapBuilder(res);
-              }
-              return res;
-            };
-          }
-          return val;
-        }
+    // 3. Salvar o CSV fisicamente no storage no bucket "imports"
+    const csvStoragePath = imp.storage_path.replace(/\.[^/.]+$/, "") + ".converted.csv";
+    console.log(`[SIE V2] Gravando arquivo CSV convertido no storage path: ${csvStoragePath}`);
+    
+    const csvBuffer = Buffer.from(csvText, "utf8");
+    const { error: upErr } = await admin.storage
+      .from("imports")
+      .upload(csvStoragePath, csvBuffer, {
+        contentType: "text/csv",
+        upsert: true,
       });
-    };
+    if (upErr) throw new Error(`Falha ao salvar CSV convertido no storage: ${upErr.message}`);
 
-    // 3. Mock the admin client to intercept and return the in-memory CSV
-    const mockedAdmin = new Proxy(admin, {
-      get(target, prop) {
-        if (prop === "from") {
-          return (table: string) => {
-            console.log(`[SIE V2 PROXY] Acessando tabela: ${table}`);
-            const queryBuilder = target.from(table);
-            if (table === "imports") {
-              return wrapBuilder(queryBuilder);
-            }
-            return queryBuilder;
-          };
-        }
-        if (prop === "storage") {
-          return {
-            from(bucket: string) {
-              console.log(`[SIE V2 PROXY] Acessando bucket: ${bucket}`);
-              const bucketObj = target.storage.from(bucket);
-              return {
-                ...bucketObj,
-                async download(path: string) {
-                  console.log(`[SIE V2 PROXY] Interceptando download do path: ${path}`);
-                  if (bucket === "imports") {
-                    console.log(`[SIE V2 PROXY] Retornando CSV em memória como mockBlob`);
-                    const mockBlob = {
-                      text: async () => csvText,
-                      arrayBuffer: async () => {
-                        const encoder = new TextEncoder();
-                        return encoder.encode(csvText).buffer;
-                      },
-                      size: Buffer.byteLength(csvText, "utf8"),
-                      type: "text/csv",
-                    };
-                    return {
-                      data: mockBlob as any,
-                      error: null,
-                    };
-                  }
-                  return bucketObj.download(path);
-                },
-              };
-            },
-          };
-        }
-        const val = Reflect.get(target, prop);
-        return typeof val === "function" ? val.bind(target) : val;
-      },
-    });
+    // 4. Atualizar a origem e o caminho do arquivo no registro da importação no banco
+    console.log(`[SIE V2] Atualizando registro de importação no banco de dados para source="csv" e storage_path="${csvStoragePath}"`);
+    const { error: updErr } = await admin
+      .from("imports")
+      .update({
+        source: "csv",
+        storage_path: csvStoragePath,
+      })
+      .eq("id", import_id);
+    if (updErr) throw new Error(`Falha ao atualizar registro de importação no banco: ${updErr.message}`);
 
-    // 4. Run the parser with the mocked client
-    console.log(`[SIE V2] Delegando para runImportParse clássico com mockedAdmin...`);
-    return runImportParse(mockedAdmin, job);
+    // 5. Delegar o processamento diretamente para a lógica de importação clássica (sem Proxy)
+    console.log(`[SIE V2] Delegando diretamente para runImportParse clássico...`);
+    return runImportParse(admin, job);
   }
 
   // If CSV or XLSX, run it directly without changes
