@@ -360,7 +360,6 @@ const isDateHeader = (h: string): boolean => {
     "data mov",
     "data movimentacao",
     "data movimentação",
-    "data lancamento",
     "data lançamento",
     "data operação",
     "data operacao",
@@ -373,6 +372,10 @@ const isDateHeader = (h: string): boolean => {
     "dt lancamento",
     "movement date",
     "transaction date",
+    "lançamento",
+    "lançamentos",
+    "lancamento",
+    "lancamentos",
   ];
   if (exactDates.includes(norm)) return true;
 
@@ -382,12 +385,19 @@ const isDateHeader = (h: string): boolean => {
     norm.includes("dia") ||
     norm.includes("dt") ||
     norm.includes("quando") ||
-    norm.includes("occurred")
+    norm.includes("occurred") ||
+    norm === "lançamento" ||
+    norm === "lançamentos" ||
+    norm === "lancamento" ||
+    norm === "lancamentos"
   );
 };
 
 const isDescriptionHeader = (h: string): boolean => {
   const norm = h.toLowerCase().trim();
+  if (norm === "lançamento" || norm === "lançamentos" || norm === "lancamento" || norm === "lancamentos") {
+    return false;
+  }
   const exactDescriptions = [
     "descricao",
     "descrição",
@@ -1834,6 +1844,17 @@ export async function runImportParse(
     const normalizedHeaders = normalizeAndMapHeaders(rawHeaders);
     const cols = detectColumns(normalizedHeaders);
 
+    // Validate Header Mapping Consistency (Rule 2: Fail-Fast)
+    const hasDate = cols.date !== undefined;
+    const hasAmount = cols.amount !== undefined || cols.credit !== undefined || cols.debit !== undefined;
+    const hasDescription = cols.description !== undefined;
+    const headerMappingFailed = !hasDate || !hasAmount || !hasDescription;
+
+    console.log(`[SIE PIPELINE] Etapa 2 (Mapeamento): Headers mapeados =`, JSON.stringify(cols));
+    if (headerMappingFailed) {
+      console.warn(`[SIE PIPELINE] Critérios mínimos de consistência de mapeamento não atingidos. Mapeado: Date=${hasDate}, Amount=${hasAmount}, Desc=${hasDescription}`);
+    }
+
     // Camada 3 — Modelo Canônico
     interface CanonicalRow {
       date: unknown;
@@ -1891,6 +1912,15 @@ export async function runImportParse(
 
     for (let i = 0; i < canonicalRows.length; i++) {
       const canonical = canonicalRows[i];
+
+      console.log(`[SIE PIPELINE] Etapa 1 (Raw): Linha ${i} =`, JSON.stringify(canonical.rawRecord));
+      console.log(`[SIE PIPELINE] Etapa 3 (Canonical): Linha ${i} =`, JSON.stringify({
+        date: canonical.date,
+        description: canonical.description,
+        beneficiary: canonical.beneficiary,
+        amount: canonical.amount,
+        balance: canonical.balance,
+      }));
 
       const description = canonical.description ? String(canonical.description).trim() : null;
       const balanceVal = canonical.balance !== null && canonical.balance !== undefined ? parseAmount(canonical.balance) : null;
@@ -2001,7 +2031,7 @@ export async function runImportParse(
           if (byNormName && byNormName.length > 0) {
             clientId = byNormName[0].id;
             clientFound = true;
-            name = byNormName[0].name;
+            console.log(`[SIE PIPELINE] Etapa 4 (Client Match): Match exato encontrado no DB: ID=${clientId}, Nome no DB="${byNormName[0].name}" (Nome original preservado no import_rows)`);
           }
         }
 
@@ -2016,7 +2046,12 @@ export async function runImportParse(
           if (first) {
             clientId = first.id;
             clientFound = true;
+            console.log(`[SIE PIPELINE] Etapa 4 (Client Match): Match aproximado encontrado no DB: ID=${clientId}, Nome no DB="${first.name}" (Nome original preservado no import_rows)`);
           }
+        }
+
+        if (!clientFound) {
+          console.log(`[SIE PIPELINE] Etapa 4 (Client Match): Nenhum cliente correspondente encontrado no DB.`);
         }
       }
 
@@ -2050,6 +2085,7 @@ export async function runImportParse(
             offeringLabel = p.label;
             amountMatch = true;
             if (p.reason === "kb_amount") tenantPattern = true;
+            console.log(`[SIE PIPELINE] Etapa 5 (Offering Match): Serviço previsto do KB por valor: ID=${offeringId}, Tipo=${offeringKind}, Label="${offeringLabel}"`);
           } else if (activeServices.length > 0) {
             const matchedCombination = findServiceCombination(amount, activeServices);
             if (matchedCombination && matchedCombination.length > 0) {
@@ -2057,6 +2093,7 @@ export async function runImportParse(
               offeringKind = "service";
               offeringLabel = matchedCombination.map((s) => s.name).join(" + ");
               amountMatch = true;
+              console.log(`[SIE PIPELINE] Etapa 5 (Offering Match): Combinação de serviços encontrada por valor próximo: ID=${offeringId}, Label="${offeringLabel}"`);
             }
           }
         }
@@ -2077,6 +2114,7 @@ export async function runImportParse(
               offeringId = kb.mapped_entity_id;
               offeringKind = kb.mapped_entity_type;
               offeringLabel = kb.mapped_label;
+              console.log(`[SIE PIPELINE] Etapa 5 (Offering Match): Serviço previsto do KB por descrição: ID=${offeringId}, Tipo=${offeringKind}, Label="${offeringLabel}"`);
             }
           }
         }
@@ -2199,6 +2237,49 @@ export async function runImportParse(
         }
       }
 
+      // --- ASSERTION GUARD & PROTECTOR (Rule 4) ---
+      const originalName = nameFromCol || "";
+      const originalAmount = amountRaw !== null ? Math.abs(amountRaw) : null;
+      const originalDescription = description || "";
+      const originalDate = occurred;
+      const originalBalance = balanceVal;
+
+      let nameToSave = name;
+      let notesToSave = headerMappingFailed
+        ? "Falha no mapeamento: cabeçalhos obrigatórios (Data, Valor, Descrição) não identificados."
+        : (specialCat === "INTERNA" ? "Movimentação interna automática" : specialCat === "TARIFA" ? "Tarifa bancária automática" : specialCat === "JUROS" ? "Juros bancários automáticos" : specialCat === "APLICACAO" ? "Aplicação automática detectada" : specialCat === "RESGATE" ? "Resgate automático de investimento" : isDuplicate ? "Possível duplicidade: já existe um lançamento com o mesmo valor e data." : isExpense ? "Despesa automática detectada" : offeringLabel ? `Sugestão: ${offeringLabel}` : null);
+      let finalStatusToSave = headerMappingFailed ? "failed" : finalStatus;
+
+      let guardViolationDetected = false;
+
+      if (!headerMappingFailed) {
+        if (name !== originalName && !specialCat && hasNameCol) {
+          console.error(`[CRITICAL PIPELINE VIOLATION] client_name was mutated! Original: "${originalName}" | Mutated: "${name}"`);
+          nameToSave = originalName; // PROTECT: Restore original name!
+          guardViolationDetected = true;
+        }
+        if (amount !== originalAmount) {
+          console.error(`[CRITICAL PIPELINE VIOLATION] amount was mutated! Original: ${originalAmount} | Mutated: ${amount}`);
+          guardViolationDetected = true;
+        }
+        if (description !== originalDescription && !specialCat) {
+          console.error(`[CRITICAL PIPELINE VIOLATION] description was mutated! Original: "${originalDescription}" | Mutated: "${description}"`);
+          guardViolationDetected = true;
+        }
+        if (occurred !== originalDate) {
+          console.error(`[CRITICAL PIPELINE VIOLATION] occurred_at was mutated! Original: "${originalDate}" | Mutated: "${occurred}"`);
+          guardViolationDetected = true;
+        }
+        if (balanceVal !== originalBalance) {
+          console.error(`[CRITICAL PIPELINE VIOLATION] balance was mutated! Original: ${originalBalance} | Mutated: ${balanceVal}`);
+          guardViolationDetected = true;
+        }
+
+        if (guardViolationDetected) {
+          notesToSave = notesToSave ? `${notesToSave} | Lançamento preservado fielmente pelo Assertion Guard.` : "Lançamento preservado fielmente pelo Assertion Guard.";
+        }
+      }
+
       total++;
       const { data: insertedRow, error: rowErr } = await admin
         .from("import_rows")
@@ -2208,7 +2289,7 @@ export async function runImportParse(
           row_index: i,
           raw: canonical.rawRecord as never,
           parsed: {
-            name,
+            name: nameToSave,
             phoneRaw: phoneRaw1,
             phoneRaw2,
             description,
@@ -2225,7 +2306,7 @@ export async function runImportParse(
             expenseScope: isExpense ? "empresa" : undefined,
             revenueKindSet: !isExpense ? true : undefined,
           } as never,
-          client_name: name || null,
+          client_name: nameToSave || null,
           client_phone: phoneApi,
           client_phone2: phoneApi2,
           description,
@@ -2236,10 +2317,10 @@ export async function runImportParse(
           resolved_offering_id: offeringId,
           resolved_offering_kind: offeringKind,
           confidence,
-          status: finalStatus,
+          status: finalStatusToSave,
           action_taken: autoApplyTxId ? (isExpense ? "create_expense" : "create_income") : null,
           transaction_id: autoApplyTxId ?? null,
-          notes: specialCat === "INTERNA" ? "Movimentação interna automática" : specialCat === "TARIFA" ? "Tarifa bancária automática" : specialCat === "JUROS" ? "Juros bancários automáticos" : specialCat === "APLICACAO" ? "Aplicação automática detectada" : specialCat === "RESGATE" ? "Resgate automático de investimento" : isDuplicate ? "Possível duplicidade: já existe um lançamento com o mesmo valor e data." : isExpense ? "Despesa automática detectada" : offeringLabel ? `Sugestão: ${offeringLabel}` : null,
+          notes: notesToSave,
         })
         .select("id")
         .single();
