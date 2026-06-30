@@ -139,11 +139,11 @@ function ClientsPage() {
     if (searchParams.new) {
       setOpen(true);
       navigate({
-        search: (prev: any) => {
+        search: ((prev: any) => {
           const copy = { ...prev };
           delete copy.new;
           return copy;
-        },
+        }) as any,
         replace: true,
       });
     }

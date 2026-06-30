@@ -1,0 +1,1 @@
+ALTER VIEW public.v3_row_audit SET (security_invoker = true);

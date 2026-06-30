@@ -163,7 +163,7 @@ export const createCompanyForCurrentUser = createServerFn({ method: "POST" })
         phone: toStoragePhone(data.phone ?? "") ?? null,
         email,
         plan: "starter",
-        vertical: data.vertical,
+        vertical: data.vertical as any,
       })
       .select("id")
       .single();
@@ -198,7 +198,7 @@ export const setCompanyVertical = createServerFn({ method: "POST" })
     if (!profile?.company_id) throw new Error("Empresa não encontrada");
     const { error } = await supabase
       .from("companies")
-      .update({ vertical: data.vertical })
+      .update({ vertical: data.vertical as any })
       .eq("id", profile.company_id);
     if (error) throw new Error(error.message);
     return { ok: true };

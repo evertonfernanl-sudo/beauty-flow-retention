@@ -151,11 +151,11 @@ function AgendaPage() {
     if (searchParams.newAppt) {
       setNewApptOpen(true);
       navigate({
-        search: (prev: any) => {
+        search: ((prev: any) => {
           const copy = { ...prev };
           delete copy.newAppt;
           return copy;
-        },
+        }) as any,
         replace: true,
       });
     }
@@ -2318,31 +2318,27 @@ function BlockSlotDialog({
       let currentStart: string | null = null;
       let currentEnd: string | null = null;
 
+      const computeEnd = (hour: string): string => {
+        const parts = hour.split(":").map((v) => Number(v));
+        const hh: number = parts[0];
+        const mm: number = parts[1];
+        const endMinutes: number = mm + 30;
+        const endHour: number = hh + Math.floor(endMinutes / 60);
+        const endMin: number = endMinutes % 60;
+        return `${String(endHour).padStart(2, "0")}:${String(endMin).padStart(2, "0")}`;
+      };
+
       for (const hour of sortedHours) {
         if (!currentStart) {
           currentStart = hour;
-          const [h, m] = hour.split(":").map(Number);
-          const endMin = m + 30;
-          const eh = h + Math.floor(endMin / 60);
-          const em = endMin % 60;
-          currentEnd = `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
+          currentEnd = computeEnd(hour);
         } else {
-          // If this slot starts exactly at currentEnd, extend the interval
           if (hour === currentEnd) {
-            const [h, m] = hour.split(":").map(Number);
-            const endMin = m + 30;
-            const eh = h + Math.floor(endMin / 60);
-            const em = endMin % 60;
-            currentEnd = `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
+            currentEnd = computeEnd(hour);
           } else {
-            // Save prev interval and start a new one
-            intervals.push({ start: currentStart, end: currentEnd });
+            intervals.push({ start: currentStart as string, end: currentEnd as string });
             currentStart = hour;
-            const [h, m] = hour.split(":").map(Number);
-            const endMin = m + 30;
-            const eh = h + Math.floor(endMin / 60);
-            const em = endMin % 60;
-            currentEnd = `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
+            currentEnd = computeEnd(hour);
           }
         }
       }
