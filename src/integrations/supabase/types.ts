@@ -2788,6 +2788,487 @@ export type Database = {
           },
         ]
       }
+      v3_audit_log: {
+        Row: {
+          company_id: string
+          created_at: string
+          event: string
+          id: string
+          import_id: string | null
+          input: Json | null
+          output: Json | null
+          reason: string
+          row_id: string | null
+          stage: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          event: string
+          id?: string
+          import_id?: string | null
+          input?: Json | null
+          output?: Json | null
+          reason: string
+          row_id?: string | null
+          stage: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          event?: string
+          id?: string
+          import_id?: string | null
+          input?: Json | null
+          output?: Json | null
+          reason?: string
+          row_id?: string | null
+          stage?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v3_audit_log_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v3_audit_log_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "v3_audit_log_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "v3_audit_log_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "v3_imports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v3_audit_log_row_id_fkey"
+            columns: ["row_id"]
+            isOneToOne: false
+            referencedRelation: "v3_import_rows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v3_audit_log_row_id_fkey"
+            columns: ["row_id"]
+            isOneToOne: false
+            referencedRelation: "v3_row_audit"
+            referencedColumns: ["row_id"]
+          },
+        ]
+      }
+      v3_financial_transactions: {
+        Row: {
+          amount: number
+          category: string | null
+          client_id: string | null
+          company_id: string
+          created_at: string
+          description: string
+          engine: string
+          id: string
+          is_personal: boolean
+          notes: string | null
+          revenue_type: string | null
+          service_id: string | null
+          status: string
+          transaction_date: string
+          type: string
+          updated_at: string
+          v3_row_id: string | null
+        }
+        Insert: {
+          amount: number
+          category?: string | null
+          client_id?: string | null
+          company_id: string
+          created_at?: string
+          description: string
+          engine?: string
+          id?: string
+          is_personal?: boolean
+          notes?: string | null
+          revenue_type?: string | null
+          service_id?: string | null
+          status?: string
+          transaction_date: string
+          type: string
+          updated_at?: string
+          v3_row_id?: string | null
+        }
+        Update: {
+          amount?: number
+          category?: string | null
+          client_id?: string | null
+          company_id?: string
+          created_at?: string
+          description?: string
+          engine?: string
+          id?: string
+          is_personal?: boolean
+          notes?: string | null
+          revenue_type?: string | null
+          service_id?: string | null
+          status?: string
+          transaction_date?: string
+          type?: string
+          updated_at?: string
+          v3_row_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v3_financial_transactions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "birthday_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v3_financial_transactions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v3_financial_transactions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "top_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v3_financial_transactions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "vip_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v3_financial_transactions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v3_financial_transactions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "v3_financial_transactions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "v3_financial_transactions_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "service_metrics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v3_financial_transactions_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v3_financial_transactions_v3_row_id_fkey"
+            columns: ["v3_row_id"]
+            isOneToOne: false
+            referencedRelation: "v3_import_rows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v3_financial_transactions_v3_row_id_fkey"
+            columns: ["v3_row_id"]
+            isOneToOne: false
+            referencedRelation: "v3_row_audit"
+            referencedColumns: ["row_id"]
+          },
+        ]
+      }
+      v3_import_rows: {
+        Row: {
+          applied_result: Json | null
+          canonical: Json
+          company_id: string
+          confidence: number
+          created_at: string
+          id: string
+          import_id: string
+          original_snapshot: Json
+          processing_metadata: Json
+          protected_fields: string[]
+          resolved_client_id: string | null
+          resolved_service_id: string | null
+          row_index: number
+          status: string
+          suggestions: Json
+          updated_at: string
+        }
+        Insert: {
+          applied_result?: Json | null
+          canonical: Json
+          company_id: string
+          confidence?: number
+          created_at?: string
+          id?: string
+          import_id: string
+          original_snapshot: Json
+          processing_metadata?: Json
+          protected_fields?: string[]
+          resolved_client_id?: string | null
+          resolved_service_id?: string | null
+          row_index: number
+          status?: string
+          suggestions?: Json
+          updated_at?: string
+        }
+        Update: {
+          applied_result?: Json | null
+          canonical?: Json
+          company_id?: string
+          confidence?: number
+          created_at?: string
+          id?: string
+          import_id?: string
+          original_snapshot?: Json
+          processing_metadata?: Json
+          protected_fields?: string[]
+          resolved_client_id?: string | null
+          resolved_service_id?: string | null
+          row_index?: number
+          status?: string
+          suggestions?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v3_import_rows_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v3_import_rows_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "v3_import_rows_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "v3_import_rows_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "v3_imports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v3_import_rows_resolved_client_id_fkey"
+            columns: ["resolved_client_id"]
+            isOneToOne: false
+            referencedRelation: "birthday_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v3_import_rows_resolved_client_id_fkey"
+            columns: ["resolved_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v3_import_rows_resolved_client_id_fkey"
+            columns: ["resolved_client_id"]
+            isOneToOne: false
+            referencedRelation: "top_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v3_import_rows_resolved_client_id_fkey"
+            columns: ["resolved_client_id"]
+            isOneToOne: false
+            referencedRelation: "vip_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v3_import_rows_resolved_service_id_fkey"
+            columns: ["resolved_service_id"]
+            isOneToOne: false
+            referencedRelation: "service_metrics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v3_import_rows_resolved_service_id_fkey"
+            columns: ["resolved_service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v3_imports: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          filename: string
+          finished_at: string | null
+          id: string
+          last_error: string | null
+          size_bytes: number
+          source: string
+          status: string
+          storage_path: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          filename: string
+          finished_at?: string | null
+          id?: string
+          last_error?: string | null
+          size_bytes?: number
+          source: string
+          status?: string
+          storage_path: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          filename?: string
+          finished_at?: string | null
+          id?: string
+          last_error?: string | null
+          size_bytes?: number
+          source?: string
+          status?: string
+          storage_path?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v3_imports_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v3_imports_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "v3_imports_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+        ]
+      }
+      v3_row_snapshots: {
+        Row: {
+          company_id: string
+          decided_at: string
+          id: string
+          payload: Json
+          reason: string | null
+          row_id: string
+          stage: string
+        }
+        Insert: {
+          company_id: string
+          decided_at?: string
+          id?: string
+          payload: Json
+          reason?: string | null
+          row_id: string
+          stage: string
+        }
+        Update: {
+          company_id?: string
+          decided_at?: string
+          id?: string
+          payload?: Json
+          reason?: string | null
+          row_id?: string
+          stage?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v3_row_snapshots_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v3_row_snapshots_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "v3_row_snapshots_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "v3_row_snapshots_row_id_fkey"
+            columns: ["row_id"]
+            isOneToOne: false
+            referencedRelation: "v3_import_rows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v3_row_snapshots_row_id_fkey"
+            columns: ["row_id"]
+            isOneToOne: false
+            referencedRelation: "v3_row_audit"
+            referencedColumns: ["row_id"]
+          },
+        ]
+      }
     }
     Views: {
       birthday_clients: {
@@ -3031,6 +3512,83 @@ export type Database = {
             columns: ["professional_id"]
             isOneToOne: false
             referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v3_row_audit: {
+        Row: {
+          applied_result: Json | null
+          audit_trail: Json | null
+          canonical: Json | null
+          company_id: string | null
+          confidence: number | null
+          import_id: string | null
+          original_snapshot: Json | null
+          processing_metadata: Json | null
+          row_id: string | null
+          row_index: number | null
+          snapshots: Json | null
+          status: string | null
+          suggestions: Json | null
+        }
+        Insert: {
+          applied_result?: Json | null
+          audit_trail?: never
+          canonical?: Json | null
+          company_id?: string | null
+          confidence?: number | null
+          import_id?: string | null
+          original_snapshot?: Json | null
+          processing_metadata?: Json | null
+          row_id?: string | null
+          row_index?: number | null
+          snapshots?: never
+          status?: string | null
+          suggestions?: Json | null
+        }
+        Update: {
+          applied_result?: Json | null
+          audit_trail?: never
+          canonical?: Json | null
+          company_id?: string | null
+          confidence?: number | null
+          import_id?: string | null
+          original_snapshot?: Json | null
+          processing_metadata?: Json | null
+          row_id?: string | null
+          row_index?: number | null
+          snapshots?: never
+          status?: string | null
+          suggestions?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v3_import_rows_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v3_import_rows_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_metrics"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "v3_import_rows_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "retention_report"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "v3_import_rows_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "v3_imports"
             referencedColumns: ["id"]
           },
         ]
