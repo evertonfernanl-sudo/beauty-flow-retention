@@ -39,6 +39,7 @@ const NAV: NavItem[] = [
   { to: "/app/agenda", label: "Agenda", icon: Calendar },
   { to: "/app/clients", label: "Clientes & Recorrência", icon: Users },
   { to: "/app/sie", label: "Importar Dados", icon: Sparkles },
+  { to: "/app/import", label: "Import (V3)", icon: Sparkles },
   { to: "/app/settings", label: "Configurações", icon: Settings },
 ];
 
