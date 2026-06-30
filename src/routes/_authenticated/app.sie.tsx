@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
@@ -16,6 +16,10 @@ import {
   AlertTriangle,
   Lock,
   Trash2,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -522,6 +526,9 @@ function ImportReview({ importId, status }: { importId: string; status: string }
     return p.revenueKindSet === true;
   }
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
+  const [sortField, setSortField] = useState<string>("occurred_at");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [searchTerm, setSearchTerm] = useState<string>("");
 
   const rows = useQuery({
     queryKey: ["sie-rows", importId],
@@ -545,8 +552,79 @@ function ImportReview({ importId, status }: { importId: string; status: string }
     qc.invalidateQueries({ queryKey: ["sie-imports"] });
   }, [rows.data, qc]);
 
-  const checkableRows =
-    rows.data?.filter((r) => r.status !== "applied" && r.status !== "skipped") ?? [];
+  const filteredAndSortedRows = useMemo(() => {
+    let list = [...(rows.data ?? [])];
+
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      list = list.filter(
+        (r) =>
+          (r.client_name ?? "").toLowerCase().includes(term) ||
+          (r.description ?? "").toLowerCase().includes(term) ||
+          (r.client_phone ?? "").toLowerCase().includes(term) ||
+          (r.notes ?? "").toLowerCase().includes(term)
+      );
+    }
+
+    list.sort((a, b) => {
+      let valA: any = "";
+      let valB: any = "";
+
+      if (sortField === "occurred_at") {
+        const dateA = a.occurred_at ? new Date(a.occurred_at).getTime() : 0;
+        const dateB = b.occurred_at ? new Date(b.occurred_at).getTime() : 0;
+        if (dateA !== dateB) {
+          return sortDirection === "asc" ? dateA - dateB : dateB - dateA;
+        }
+        return sortDirection === "asc" ? a.row_index - b.row_index : b.row_index - a.row_index;
+      }
+
+      if (sortField === "client_name") {
+        valA = a.client_name ?? "";
+        valB = b.client_name ?? "";
+      } else if (sortField === "description") {
+        valA = a.description ?? "";
+        valB = b.description ?? "";
+      } else if (sortField === "amount") {
+        valA = a.amount ?? 0;
+        valB = b.amount ?? 0;
+      } else if (sortField === "confidence") {
+        valA = a.confidence ?? 0;
+        valB = b.confidence ?? 0;
+      } else if (sortField === "status") {
+        valA = a.status ?? "";
+        valB = b.status ?? "";
+      } else if (sortField === "type") {
+        valA = a.parsed?.isExpense ? "expense" : "revenue";
+        valB = b.parsed?.isExpense ? "expense" : "revenue";
+      }
+
+      if (typeof valA === "string") {
+        return sortDirection === "asc"
+          ? valA.localeCompare(valB)
+          : valB.localeCompare(valA);
+      } else {
+        return sortDirection === "asc"
+          ? valA - valB
+          : valB - valA;
+      }
+    });
+
+    return list;
+  }, [rows.data, sortField, sortDirection, searchTerm]);
+
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+
+  const checkableRows = useMemo(() => {
+    return filteredAndSortedRows.filter((r) => r.status !== "applied" && r.status !== "skipped");
+  }, [filteredAndSortedRows]);
   const allChecked =
     checkableRows.length > 0 && checkableRows.every((r) => selectedRowIds.has(r.id));
   const someChecked =
@@ -762,14 +840,23 @@ function ImportReview({ importId, status }: { importId: string; status: string }
 
   return (
     <div className="mt-3 border-t pt-3 space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="text-xs text-muted-foreground flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
           <span>{rows.data?.length ?? 0} linhas</span>
           {selectedRowIds.size > 0 && (
             <Badge variant="secondary" className="text-[10px]">
               {selectedRowIds.size} selecionadas
             </Badge>
           )}
+          <div className="relative w-48 ml-2">
+            <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Buscar..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8 h-7 text-xs"
+            />
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {selectedRowIds.size > 0 && (
@@ -798,19 +885,103 @@ function ImportReview({ importId, status }: { importId: string; status: string }
                   aria-label="Selecionar todas as linhas"
                 />
               </th>
-              <th className="text-left p-1 w-[130px] max-w-[130px] truncate">Cliente</th>
+              <th 
+                className="text-left p-1 w-[130px] max-w-[130px] truncate cursor-pointer select-none hover:bg-muted/10 rounded transition-colors"
+                onClick={() => handleSort("client_name")}
+              >
+                <div className="flex items-center gap-1">
+                  Cliente
+                  {sortField === "client_name" ? (
+                    sortDirection === "asc" ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />
+                  ) : (
+                    <ArrowUpDown className="h-3.5 w-3.5 opacity-30" />
+                  )}
+                </div>
+              </th>
               <th className="text-left p-1">Telefone</th>
-              <th className="text-left p-1">Descrição</th>
-              <th className="text-left p-1">Tipo</th>
-              <th className="text-right p-1">Valor</th>
-              <th className="text-left p-1">Data</th>
-              <th className="text-right p-1">Score</th>
-              <th className="text-left p-1">Status</th>
+              <th 
+                className="text-left p-1 cursor-pointer select-none hover:bg-muted/10 rounded transition-colors"
+                onClick={() => handleSort("description")}
+              >
+                <div className="flex items-center gap-1">
+                  Descrição
+                  {sortField === "description" ? (
+                    sortDirection === "asc" ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />
+                  ) : (
+                    <ArrowUpDown className="h-3.5 w-3.5 opacity-30" />
+                  )}
+                </div>
+              </th>
+              <th 
+                className="text-left p-1 cursor-pointer select-none hover:bg-muted/10 rounded transition-colors"
+                onClick={() => handleSort("type")}
+              >
+                <div className="flex items-center gap-1">
+                  Tipo
+                  {sortField === "type" ? (
+                    sortDirection === "asc" ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />
+                  ) : (
+                    <ArrowUpDown className="h-3.5 w-3.5 opacity-30" />
+                  )}
+                </div>
+              </th>
+              <th 
+                className="text-right p-1 cursor-pointer select-none hover:bg-muted/10 rounded transition-colors"
+                onClick={() => handleSort("amount")}
+              >
+                <div className="flex items-center justify-end gap-1">
+                  Valor
+                  {sortField === "amount" ? (
+                    sortDirection === "asc" ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />
+                  ) : (
+                    <ArrowUpDown className="h-3.5 w-3.5 opacity-30" />
+                  )}
+                </div>
+              </th>
+              <th 
+                className="text-left p-1 cursor-pointer select-none hover:bg-muted/10 rounded transition-colors"
+                onClick={() => handleSort("occurred_at")}
+              >
+                <div className="flex items-center gap-1">
+                  Data
+                  {sortField === "occurred_at" ? (
+                    sortDirection === "asc" ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />
+                  ) : (
+                    <ArrowUpDown className="h-3.5 w-3.5 opacity-30" />
+                  )}
+                </div>
+              </th>
+              <th 
+                className="text-right p-1 cursor-pointer select-none hover:bg-muted/10 rounded transition-colors"
+                onClick={() => handleSort("confidence")}
+              >
+                <div className="flex items-center justify-end gap-1">
+                  Score
+                  {sortField === "confidence" ? (
+                    sortDirection === "asc" ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />
+                  ) : (
+                    <ArrowUpDown className="h-3.5 w-3.5 opacity-30" />
+                  )}
+                </div>
+              </th>
+              <th 
+                className="text-left p-1 cursor-pointer select-none hover:bg-muted/10 rounded transition-colors"
+                onClick={() => handleSort("status")}
+              >
+                <div className="flex items-center gap-1">
+                  Status
+                  {sortField === "status" ? (
+                    sortDirection === "asc" ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />
+                  ) : (
+                    <ArrowUpDown className="h-3.5 w-3.5 opacity-30" />
+                  )}
+                </div>
+              </th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {(rows.data ?? []).map((r) => {
+            {filteredAndSortedRows.map((r) => {
               const isExpense = r.parsed?.isExpense ?? false;
               const isContribution = r.parsed?.isContribution ?? false;
               const rowLocked = r.status === "applied" || r.status === "skipped" || busy != null;
