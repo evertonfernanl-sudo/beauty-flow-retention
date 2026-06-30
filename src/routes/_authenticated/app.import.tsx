@@ -22,7 +22,7 @@ export const Route = createFileRoute("/_authenticated/app/import")({
 
 function ImportV3Page() {
   const profileQ = useCurrentProfile();
-  const companyId = profileQ.data?.company_id ?? null;
+  const companyId = (profileQ.data as any)?.company_id ?? profileQ.data?.company?.id ?? null;
   const qc = useQueryClient();
   const [selected, setSelected] = useState<string | null>(null);
   const [auditRowId, setAuditRowId] = useState<string | null>(null);
@@ -60,10 +60,10 @@ function ImportV3Page() {
     enabled: !!auditRowId,
     queryKey: ["v3-audit", auditRowId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("v3_row_audit").select("*").eq("id", auditRowId!).maybeSingle();
       if (error) throw error;
-      return data;
+      return data as any;
     },
   });
 
