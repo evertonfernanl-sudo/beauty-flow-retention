@@ -2790,6 +2790,7 @@ export type Database = {
       }
       v3_audit_log: {
         Row: {
+          algorithm_version: string | null
           company_id: string
           created_at: string
           event: string
@@ -2798,10 +2799,12 @@ export type Database = {
           input: Json | null
           output: Json | null
           reason: string
+          responsavel: string
           row_id: string | null
           stage: string
         }
         Insert: {
+          algorithm_version?: string | null
           company_id: string
           created_at?: string
           event: string
@@ -2810,10 +2813,12 @@ export type Database = {
           input?: Json | null
           output?: Json | null
           reason: string
+          responsavel?: string
           row_id?: string | null
           stage: string
         }
         Update: {
+          algorithm_version?: string | null
           company_id?: string
           created_at?: string
           event?: string
@@ -2822,6 +2827,7 @@ export type Database = {
           input?: Json | null
           output?: Json | null
           reason?: string
+          responsavel?: string
           row_id?: string | null
           stage?: string
         }
@@ -3012,14 +3018,18 @@ export type Database = {
         Row: {
           applied_result: Json | null
           canonical: Json
+          classification_confidence: number | null
           company_id: string
           confidence: number
           created_at: string
+          duplicate_of: string[] | null
           id: string
           import_id: string
           original_snapshot: Json
+          possible_duplicate: boolean | null
           processing_metadata: Json
           protected_fields: string[]
+          reason: string | null
           resolved_client_id: string | null
           resolved_service_id: string | null
           row_index: number
@@ -3030,14 +3040,18 @@ export type Database = {
         Insert: {
           applied_result?: Json | null
           canonical: Json
+          classification_confidence?: number | null
           company_id: string
           confidence?: number
           created_at?: string
+          duplicate_of?: string[] | null
           id?: string
           import_id: string
           original_snapshot: Json
+          possible_duplicate?: boolean | null
           processing_metadata?: Json
           protected_fields?: string[]
+          reason?: string | null
           resolved_client_id?: string | null
           resolved_service_id?: string | null
           row_index: number
@@ -3048,14 +3062,18 @@ export type Database = {
         Update: {
           applied_result?: Json | null
           canonical?: Json
+          classification_confidence?: number | null
           company_id?: string
           confidence?: number
           created_at?: string
+          duplicate_of?: string[] | null
           id?: string
           import_id?: string
           original_snapshot?: Json
+          possible_duplicate?: boolean | null
           processing_metadata?: Json
           protected_fields?: string[]
+          reason?: string | null
           resolved_client_id?: string | null
           resolved_service_id?: string | null
           row_index?: number
@@ -3138,45 +3156,66 @@ export type Database = {
       }
       v3_imports: {
         Row: {
+          charset: string | null
           company_id: string
           created_at: string
           created_by: string | null
+          failed_rows: number | null
+          file_hash: string | null
           filename: string
+          final_state: string | null
           finished_at: string | null
           id: string
           last_error: string | null
+          ocr_confidence: number | null
+          review_rows: number | null
           size_bytes: number
           source: string
           status: string
           storage_path: string
+          total_rows: number | null
           updated_at: string
         }
         Insert: {
+          charset?: string | null
           company_id: string
           created_at?: string
           created_by?: string | null
+          failed_rows?: number | null
+          file_hash?: string | null
           filename: string
+          final_state?: string | null
           finished_at?: string | null
           id?: string
           last_error?: string | null
+          ocr_confidence?: number | null
+          review_rows?: number | null
           size_bytes?: number
           source: string
           status?: string
           storage_path: string
+          total_rows?: number | null
           updated_at?: string
         }
         Update: {
+          charset?: string | null
           company_id?: string
           created_at?: string
           created_by?: string | null
+          failed_rows?: number | null
+          file_hash?: string | null
           filename?: string
+          final_state?: string | null
           finished_at?: string | null
           id?: string
           last_error?: string | null
+          ocr_confidence?: number | null
+          review_rows?: number | null
           size_bytes?: number
           source?: string
           status?: string
           storage_path?: string
+          total_rows?: number | null
           updated_at?: string
         }
         Relationships: [
