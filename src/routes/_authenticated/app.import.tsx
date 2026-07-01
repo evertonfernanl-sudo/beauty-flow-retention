@@ -199,14 +199,15 @@ function ImportV3Page() {
                       <td className="p-2">{sugg.type ?? "—"}</td>
                       <td className="p-2 text-center">{r.confidence}</td>
                       <td className="p-2">
-                        <Badge variant={r.status === "applied" ? "default" : r.status === "matched" ? "secondary" : "outline"}>
+                        <Badge variant={r.status === "applied" ? "default" : r.status === "LINE_FAILED" ? "destructive" : r.status === "LINE_REVIEW" ? "outline" : "secondary"}>
                           {r.status === "applied" ? <CheckCircle2 className="h-3 w-3 mr-1" /> : <AlertCircle className="h-3 w-3 mr-1" />}
                           {r.status}
                         </Badge>
+                        {r.possible_duplicate && <Badge variant="destructive" className="ml-1">DUP</Badge>}
                       </td>
                       <td className="p-2 flex gap-1">
                         <Button size="sm" variant="outline" onClick={() => setAuditRowId(r.id)}>Auditoria</Button>
-                        {r.status !== "applied" && (
+                        {r.status !== "applied" && r.status !== "LINE_FAILED" && (
                           <Button size="sm" onClick={() => applyMut.mutate(r.id)} disabled={applyMut.isPending}>Aplicar</Button>
                         )}
                       </td>
