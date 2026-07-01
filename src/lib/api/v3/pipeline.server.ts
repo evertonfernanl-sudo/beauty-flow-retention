@@ -53,7 +53,8 @@ export type FinalState = "SUCCESS" | "PARTIAL_SUCCESS" | "REVIEW" | "FAILED";
 // ============================================================
 
 async function sha256Hex(buf: Uint8Array): Promise<string> {
-  const h = await crypto.subtle.digest("SHA-256", buf);
+  const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+  const h = await crypto.subtle.digest("SHA-256", ab);
   return Array.from(new Uint8Array(h)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
