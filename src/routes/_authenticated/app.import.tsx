@@ -141,10 +141,18 @@ function ImportV3Page() {
                 <div className="font-medium truncate flex items-center gap-1">
                   <FileText className="h-3 w-3" /> {imp.filename}
                 </div>
-                <div className="flex items-center justify-between mt-1">
-                  <Badge variant={imp.status === "failed" ? "destructive" : "secondary"}>{imp.status}</Badge>
-                  <span className="text-muted-foreground">{new Date(imp.created_at).toLocaleString("pt-BR")}</span>
+                <div className="flex items-center justify-between mt-1 gap-1">
+                  <Badge variant={imp.final_state === "FAILED" ? "destructive" : imp.final_state === "SUCCESS" ? "default" : "secondary"}>
+                    {imp.final_state ?? imp.status}
+                  </Badge>
+                  <span className="text-muted-foreground text-[10px]">{new Date(imp.created_at).toLocaleString("pt-BR")}</span>
                 </div>
+                {(imp.total_rows ?? 0) > 0 && (
+                  <div className="text-[10px] text-muted-foreground mt-1">
+                    {imp.total_rows} linhas · {imp.failed_rows ?? 0} falha · {imp.review_rows ?? 0} revisão
+                    {imp.ocr_confidence != null && ` · OCR ${(imp.ocr_confidence * 100).toFixed(0)}%`}
+                  </div>
+                )}
                 {imp.last_error && <div className="text-destructive text-[10px] mt-1 line-clamp-2">{imp.last_error}</div>}
                 <div className="flex justify-end mt-1">
                   <Button size="sm" variant="ghost" className="h-6 px-1"
