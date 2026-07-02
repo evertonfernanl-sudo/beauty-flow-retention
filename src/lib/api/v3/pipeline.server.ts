@@ -92,33 +92,92 @@ export function parseXlsx(buffer: Uint8Array): RawTable {
   return finalizeTable(clean, { source: "xlsx", sheet: wb.SheetNames[0] }, "utf-8");
 }
 
-// PDF — reconstrução tabular via unpdf. Sem interpretação semântica.
-// Confiança = razão células com coordenada válida / células estimadas.
+// PDF — reconstrução tabular via pdfjs-dist (unpdf) usando coordenadas X/Y.
+// - Agrupa itens por Y (mesma linha visual) e ordena por X (colunas).
+// - Se a página tiver texto insuficiente, marca imagePages para fallback OCR (Cap. 24.5–24.6).
 export async function parsePdf(buffer: Uint8Array): Promise<RawTable> {
-  const { extractText, getDocumentProxy } = await import("unpdf");
-  const pdf = await getDocumentProxy(buffer);
+  const unpdf: any = await import("unpdf");
+  const pdf = await unpdf.getDocumentProxy(buffer);
   const perPage: string[][][] = [];
+  const imagePages: number[] = [];
   let totalCellsEst = 0, totalCellsGot = 0;
 
-  for (let p = 1; p <= pdf.numPages; p++) {
-    const { text } = await extractText(pdf, { mergePages: false });
-    const pageText = Array.isArray(text) ? (text[p - 1] ?? "") : String(text ?? "");
-    const lines = pageText.split(/\r?\n/).map((l) => l.replace(/\s+$/g, "")).filter((l) => l.trim().length > 0);
-    const matrix = lines.map((l) => l.split(/\s{2,}|\t/).map((c) => c.trim()).filter(Boolean));
+  const numPages = pdf.numPages;
+  for (let p = 1; p <= numPages; p++) {
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    const items: Array<{ str: string; x: number; y: number; w: number }> = (content.items ?? [])
+      .filter((it: any) => it && typeof it.str === "string" && it.str.trim().length > 0)
+      .map((it: any) => ({
+        str: String(it.str),
+        x: Array.isArray(it.transform) ? Number(it.transform[4]) : 0,
+        y: Array.isArray(it.transform) ? Number(it.transform[5]) : 0,
+        w: typeof it.width === "number" ? it.width : 0,
+      }));
+
+    // Texto insuficiente → provável página imagem/scan → candidata a OCR
+    const totalChars = items.reduce((s, it) => s + it.str.replace(/\s+/g, "").length, 0);
+    if (items.length < 5 || totalChars < 20) {
+      imagePages.push(p);
+      continue;
+    }
+
+    // Agrupa por linha (Y). Tolerância = mediana da altura de fonte estimada.
+    const yTol = 3.0;
+    const sorted = [...items].sort((a, b) => b.y - a.y || a.x - b.x);
+    const lines: Array<Array<{ str: string; x: number }>> = [];
+    let currentY: number | null = null;
+    let current: Array<{ str: string; x: number }> = [];
+    for (const it of sorted) {
+      if (currentY == null || Math.abs(currentY - it.y) <= yTol) {
+        current.push({ str: it.str, x: it.x });
+        currentY = currentY == null ? it.y : (currentY + it.y) / 2;
+      } else {
+        lines.push(current);
+        current = [{ str: it.str, x: it.x }];
+        currentY = it.y;
+      }
+    }
+    if (current.length) lines.push(current);
+
+    // Colunas por gaps de X: agrupa tokens contíguos com gap < xGap; separa em células.
+    const xGap = 8;
+    const matrix: string[][] = [];
+    for (const line of lines) {
+      line.sort((a, b) => a.x - b.x);
+      const cells: string[] = [];
+      let buf = "";
+      let lastX = -Infinity;
+      for (const t of line) {
+        if (buf === "") { buf = t.str; lastX = t.x + (t.str.length * 3); continue; }
+        if (t.x - lastX > xGap) { cells.push(buf.trim()); buf = t.str; }
+        else { buf += " " + t.str; }
+        lastX = t.x + (t.str.length * 3);
+      }
+      if (buf) cells.push(buf.trim());
+      if (cells.some((c) => c.length > 0)) matrix.push(cells);
+    }
+
     const modeCols = mostCommon(matrix.map((r) => r.length));
-    // estima células
     totalCellsEst += matrix.length * Math.max(modeCols, 1);
     totalCellsGot += matrix.reduce((s, r) => s + r.length, 0);
     perPage.push(matrix);
   }
 
-  // empilha páginas, redetectando header por página (removido dedupe automático)
   const merged: string[][] = [];
   for (const page of perPage) merged.push(...page);
   const confidence = totalCellsEst > 0 ? Math.min(1, totalCellsGot / totalCellsEst) : 0;
 
-  const table = finalizeTable(merged, { source: "pdf", pages: pdf.numPages }, "utf-8");
+  // Item 4/5 — se todas as páginas são imagem OU se não conseguimos NADA de texto,
+  // devolve tabela vazia com sinal para o orquestrador emitir OCR_REVIEW.
+  const meta: Record<string, unknown> = { source: "pdf", pages: numPages, imagePages };
+  if (merged.length === 0) {
+    return { headers: [], rows: [], meta, charset: "utf-8", headerFailed: true, ocrConfidence: 0 };
+  }
+
+  const table = finalizeTable(merged, meta, "utf-8");
   table.ocrConfidence = confidence;
+  (table.meta as any).imagePages = imagePages;
   return table;
 }
 
