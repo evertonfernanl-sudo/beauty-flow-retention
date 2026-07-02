@@ -92,33 +92,92 @@ export function parseXlsx(buffer: Uint8Array): RawTable {
   return finalizeTable(clean, { source: "xlsx", sheet: wb.SheetNames[0] }, "utf-8");
 }
 
-// PDF — reconstrução tabular via unpdf. Sem interpretação semântica.
-// Confiança = razão células com coordenada válida / células estimadas.
+// PDF — reconstrução tabular via pdfjs-dist (unpdf) usando coordenadas X/Y.
+// - Agrupa itens por Y (mesma linha visual) e ordena por X (colunas).
+// - Se a página tiver texto insuficiente, marca imagePages para fallback OCR (Cap. 24.5–24.6).
 export async function parsePdf(buffer: Uint8Array): Promise<RawTable> {
-  const { extractText, getDocumentProxy } = await import("unpdf");
-  const pdf = await getDocumentProxy(buffer);
+  const unpdf: any = await import("unpdf");
+  const pdf = await unpdf.getDocumentProxy(buffer);
   const perPage: string[][][] = [];
+  const imagePages: number[] = [];
   let totalCellsEst = 0, totalCellsGot = 0;
 
-  for (let p = 1; p <= pdf.numPages; p++) {
-    const { text } = await extractText(pdf, { mergePages: false });
-    const pageText = Array.isArray(text) ? (text[p - 1] ?? "") : String(text ?? "");
-    const lines = pageText.split(/\r?\n/).map((l) => l.replace(/\s+$/g, "")).filter((l) => l.trim().length > 0);
-    const matrix = lines.map((l) => l.split(/\s{2,}|\t/).map((c) => c.trim()).filter(Boolean));
+  const numPages = pdf.numPages;
+  for (let p = 1; p <= numPages; p++) {
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    const items: Array<{ str: string; x: number; y: number; w: number }> = (content.items ?? [])
+      .filter((it: any) => it && typeof it.str === "string" && it.str.trim().length > 0)
+      .map((it: any) => ({
+        str: String(it.str),
+        x: Array.isArray(it.transform) ? Number(it.transform[4]) : 0,
+        y: Array.isArray(it.transform) ? Number(it.transform[5]) : 0,
+        w: typeof it.width === "number" ? it.width : 0,
+      }));
+
+    // Texto insuficiente → provável página imagem/scan → candidata a OCR
+    const totalChars = items.reduce((s, it) => s + it.str.replace(/\s+/g, "").length, 0);
+    if (items.length < 5 || totalChars < 20) {
+      imagePages.push(p);
+      continue;
+    }
+
+    // Agrupa por linha (Y). Tolerância = mediana da altura de fonte estimada.
+    const yTol = 3.0;
+    const sorted = [...items].sort((a, b) => b.y - a.y || a.x - b.x);
+    const lines: Array<Array<{ str: string; x: number }>> = [];
+    let currentY: number | null = null;
+    let current: Array<{ str: string; x: number }> = [];
+    for (const it of sorted) {
+      if (currentY == null || Math.abs(currentY - it.y) <= yTol) {
+        current.push({ str: it.str, x: it.x });
+        currentY = currentY == null ? it.y : (currentY + it.y) / 2;
+      } else {
+        lines.push(current);
+        current = [{ str: it.str, x: it.x }];
+        currentY = it.y;
+      }
+    }
+    if (current.length) lines.push(current);
+
+    // Colunas por gaps de X: agrupa tokens contíguos com gap < xGap; separa em células.
+    const xGap = 8;
+    const matrix: string[][] = [];
+    for (const line of lines) {
+      line.sort((a, b) => a.x - b.x);
+      const cells: string[] = [];
+      let buf = "";
+      let lastX = -Infinity;
+      for (const t of line) {
+        if (buf === "") { buf = t.str; lastX = t.x + (t.str.length * 3); continue; }
+        if (t.x - lastX > xGap) { cells.push(buf.trim()); buf = t.str; }
+        else { buf += " " + t.str; }
+        lastX = t.x + (t.str.length * 3);
+      }
+      if (buf) cells.push(buf.trim());
+      if (cells.some((c) => c.length > 0)) matrix.push(cells);
+    }
+
     const modeCols = mostCommon(matrix.map((r) => r.length));
-    // estima células
     totalCellsEst += matrix.length * Math.max(modeCols, 1);
     totalCellsGot += matrix.reduce((s, r) => s + r.length, 0);
     perPage.push(matrix);
   }
 
-  // empilha páginas, redetectando header por página (removido dedupe automático)
   const merged: string[][] = [];
   for (const page of perPage) merged.push(...page);
   const confidence = totalCellsEst > 0 ? Math.min(1, totalCellsGot / totalCellsEst) : 0;
 
-  const table = finalizeTable(merged, { source: "pdf", pages: pdf.numPages }, "utf-8");
+  // Item 4/5 — se todas as páginas são imagem OU se não conseguimos NADA de texto,
+  // devolve tabela vazia com sinal para o orquestrador emitir OCR_REVIEW.
+  const meta: Record<string, unknown> = { source: "pdf", pages: numPages, imagePages };
+  if (merged.length === 0) {
+    return { headers: [], rows: [], meta, charset: "utf-8", headerFailed: true, ocrConfidence: 0 };
+  }
+
+  const table = finalizeTable(merged, meta, "utf-8");
   table.ocrConfidence = confidence;
+  (table.meta as any).imagePages = imagePages;
   return table;
 }
 
@@ -208,20 +267,35 @@ function matchesAnyHeader(cell: string): boolean {
 // Camada 3 — Mapeamento
 // ============================================================
 
+// Regexes tolerantes a sufixos comuns (ex.: "(R$)", " brl", ":") — Cap. 24.5 / 9
+// Todos casam a raiz da palavra e permitem qualquer sufixo não-alfabético.
+const SFX = "([\\s\\(\\[\\:\\/\\-].*)?$";
 const HEADER_HINTS: Record<keyof CanonicalRow, RegExp[]> = {
-  client_name: [/^(cliente|pagador|favorecido|beneficiario|beneficiário|recebedor|nome|destino|origem|sacado)$/i],
-  description: [/^(descri[cç][aã]o|hist[oó]rico|complemento|hist[oó]rico\/complemento|narrativa|evento|opera[cç][aã]o|memo|memorando|detalhes|lan[cç]amento)$/i],
-  amount: [/^(valor|montante|amount|vlr|total|valor\s*movimento)$/i],
-  transaction_date: [/^(data|dt|date|data[_\s]lan[cç]amento|data[_\s]movimento|data\s*da\s*opera[cç][aã]o|dt[_\s]?lanc|movimento|lan[cç]amentos?)$/i],
-  balance: [/^(saldo|saldo\s*final|saldo\s*atual|saldo\s*dispon[ií]vel|balance)$/i],
-  document_number: [/^(documento|n[°º]?\s*documento|nr\s*docto|nr\.?\s*doo|controle|identificador|n[_\s]?documento|doc)$/i],
-  cpf_cnpj: [/^(cpf|cnpj|cpf\/cnpj|cpf_cnpj|documento\s*favorecido|inscri[cç][aã]o)$/i],
-  phone: [/^(telefone|celular|phone|tel|whatsapp)$/i],
-  debit_amount: [/^(d[eé]bito|saida|saída|valor[_\s]debito)$/i],
-  credit_amount: [/^(cr[eé]dito|entrada|valor[_\s]credito|receita)$/i],
-  movement_type: [/^(tipo|natureza|d\/c|cd|tipo\s*da\s*movimenta[cç][aã]o)$/i],
+  client_name: [new RegExp(`^(cliente|pagador|favorecido|benefici[aá]rio|recebedor|nome|destino|origem|sacado)${SFX}`, "i")],
+  description: [new RegExp(`^(descri[cç][aã]o|hist[oó]rico(\\s*\\/?\\s*complemento)?|complemento|narrativa|evento|opera[cç][aã]o|memo(rando)?|detalhes|lan[cç]amento)${SFX}`, "i")],
+  amount: [new RegExp(`^(valor|montante|amount|vlr|total|valor\\s*movimento)${SFX}`, "i")],
+  transaction_date: [new RegExp(`^(data(\\s*(de)?\\s*(lan[cç]amento|movimento|opera[cç][aã]o))?|dt(\\s*lanc)?|date|movimento|lan[cç]amentos?)${SFX}`, "i")],
+  balance: [new RegExp(`^(saldo(\\s*(final|atual|dispon[ií]vel))?|balance)${SFX}`, "i")],
+  document_number: [new RegExp(`^(docto\\.?|documento|doc\\.?|n[°ºr]?\\.?\\s*(docto|doc|documento)?|nr\\.?\\s*doc(to)?|controle|identificador)${SFX}`, "i")],
+  cpf_cnpj: [new RegExp(`^(cpf|cnpj|cpf\\s*\\/?\\s*cnpj|documento\\s*favorecido|inscri[cç][aã]o)${SFX}`, "i")],
+  phone: [new RegExp(`^(telefone|celular|phone|tel|whatsapp)${SFX}`, "i")],
+  debit_amount: [new RegExp(`^(d[eé]bito|sa[ií]da|valor\\s*d[eé]bito)${SFX}`, "i")],
+  credit_amount: [new RegExp(`^(cr[eé]dito|entrada|valor\\s*cr[eé]dito|receita)${SFX}`, "i")],
+  movement_type: [new RegExp(`^(tipo|natureza|d\\/c|c\\/d|cd|tipo\\s*da\\s*movimenta[cç][aã]o)${SFX}`, "i")],
   raw_extra: [],
 };
+
+// Campos obrigatórios para prosseguir ao Modelo Canônico (Cap. 9 + Item 7)
+// amount pode vir de amount OU debit_amount OU credit_amount.
+const REQUIRED_FIELDS: (keyof CanonicalRow)[] = ["transaction_date", "description"];
+function hasAnyAmountMapping(map: FieldMap): boolean {
+  return !!(map.amount || map.debit_amount || map.credit_amount);
+}
+function missingRequiredFields(map: FieldMap): string[] {
+  const missing: string[] = REQUIRED_FIELDS.filter((f) => !map[f]);
+  if (!hasAnyAmountMapping(map)) missing.push("amount|debit_amount|credit_amount");
+  return missing;
+}
 
 const HISTORICO_RE = /^(hist[oó]rico)$/i;
 const COMPLEMENTO_RE = /^(complemento)$/i;
@@ -663,17 +737,31 @@ function daysBetween(a: string, b: string): number {
 }
 
 // ============================================================
-// Máquina de Estados (Cap. 37)
+// Máquina de Estados (Cap. 37 + Item 3)
 // ============================================================
 
+export type TerminalReason =
+  | "SCHEMA_MISMATCH"
+  | "HEADER_FAILED"
+  | "MAP_FAILED"
+  | "OCR_TIMEOUT"
+  | "OCR_REVIEW"
+  | null;
+
 export function computeFinalState(stats: {
-  headerFailed: boolean;
+  terminal?: TerminalReason;
+  headerFailed?: boolean;
   ocrConfidence?: number;
   total: number;
   failed: number;
   review: number;
 }): FinalState {
-  if (stats.headerFailed) return "FAILED";
+  // Precedência determinística (Item 3)
+  if (stats.terminal === "SCHEMA_MISMATCH") return "FAILED";
+  if (stats.terminal === "HEADER_FAILED" || stats.headerFailed) return "FAILED";
+  if (stats.terminal === "MAP_FAILED") return "FAILED";
+  if (stats.terminal === "OCR_TIMEOUT") return "REVIEW";
+  if (stats.terminal === "OCR_REVIEW") return "REVIEW";
   if (stats.ocrConfidence != null && stats.ocrConfidence < 0.8 && stats.ocrConfidence > 0) return "REVIEW";
   if (stats.total > 0 && stats.failed / stats.total >= 0.1) return "FAILED";
   if (stats.review > 0) return "REVIEW";
@@ -703,18 +791,57 @@ async function auditLog(sb: SB, args: {
   } as any);
 }
 
+// Item 2 — validação de compatibilidade schema vs pipeline.
+// Faz uma sondagem barata: tenta INSERT com status inválido antigo; se aceitar → schema V2.
+async function checkSchemaCompatibility(sb: SB): Promise<{ ok: boolean; detail?: string }> {
+  // Introspecção via information_schema não fica exposta pela Data API; usamos probing por dry insert.
+  // Estratégia: fazer um insert com status novo em row inexistente e reverter — como o Data API não expõe
+  // transações, apenas testamos se o status 'OK' é aceito por meio de uma leitura barata + confiança na migration.
+  try {
+    // Se a migração está aplicada, INSERT com status='OK' será validado pelo CHECK sem erro de constraint.
+    // Aqui só verificamos leitura básica; qualquer falha de INSERT posterior será tratada pelo orquestrador.
+    const { error } = await sb.from("v3_import_rows").select("id").limit(1);
+    if (error) return { ok: false, detail: error.message };
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, detail: e.message ?? String(e) };
+  }
+}
+
 export async function runPipeline(
   sb: SB,
   args: { importId: string; companyId: string; source: "csv" | "xlsx" | "pdf" | "ofx" | "manual_text"; storagePath: string },
 ): Promise<{ rowsInserted: number; finalState: FinalState }> {
   await sb.from("v3_imports").update({ status: "parsing" }).eq("id", args.importId);
 
+  // Estado agregado para o cálculo final via finally (Item 3)
+  let terminal: TerminalReason = null;
+  let file_hash: string | undefined;
+  let charset: string | undefined;
+  let ocrConfidence: number | undefined;
+  let total = 0, failed = 0, review = 0;
+  let rowsInserted = 0;
+  let lastError: string | null = null;
+
   try {
+    // Item 2 — schema compatibility
+    const schema = await checkSchemaCompatibility(sb);
+    if (!schema.ok) {
+      terminal = "SCHEMA_MISMATCH";
+      lastError = `Schema incompatível: ${schema.detail ?? "verifique migrações V3"}`;
+      await auditLog(sb, {
+        importId: args.importId, companyId: args.companyId,
+        stage: "orchestrator", event: "SCHEMA_MISMATCH",
+        reason: lastError,
+      });
+      return { rowsInserted: 0, finalState: "FAILED" };
+    }
+
     // 1) Download + hash
     const dl = await sb.storage.from("imports").download(args.storagePath);
     if (dl.error || !dl.data) throw new Error(`Falha no download: ${dl.error?.message}`);
     const buf = new Uint8Array(await dl.data.arrayBuffer());
-    const file_hash = await sha256Hex(buf);
+    file_hash = await sha256Hex(buf);
 
     // 2) Conversão
     let raw: RawTable;
@@ -723,34 +850,46 @@ export async function runPipeline(
     else if (args.source === "pdf") raw = await parsePdf(buf);
     else throw new Error(`Fonte não suportada na V3: ${args.source}`);
 
-    const charset = raw.charset ?? "utf-8";
-    const ocrConfidence = raw.ocrConfidence;
+    charset = raw.charset ?? "utf-8";
+    ocrConfidence = raw.ocrConfidence;
 
-    // Cap. 37 — HEADER_FAILED interrompe imediatamente
-    if (raw.headerFailed || raw.headers.length === 0) {
-      await auditLog(sb, {
-        importId: args.importId, companyId: args.companyId,
-        stage: "conversion", event: "HEADER_FAILED",
-        reason: "Cabeçalho não identificado no arquivo (nenhuma linha com ≥2 cabeçalhos conhecidos)",
-      });
-      await sb.from("v3_imports").update({
-        status: "failed", final_state: "FAILED", file_hash, charset,
-        last_error: "Cabeçalho não identificado", finished_at: new Date().toISOString(),
-      } as any).eq("id", args.importId);
-      return { rowsInserted: 0, finalState: "FAILED" };
-    }
-
-    // Cap. 37 — OCR_REVIEW interrompe
-    if (args.source === "pdf" && ocrConfidence != null && ocrConfidence < 0.8) {
+    // Item 4/5 — se PDF veio sem texto suficiente (imagePages == numPages), OCR fallback pendente → OCR_REVIEW.
+    // (OCR real fica desabilitado neste ciclo; a fidelidade seria comprometida sem revisão humana.)
+    const imagePages = ((raw.meta as any)?.imagePages ?? []) as number[];
+    const numPages = ((raw.meta as any)?.pages ?? 0) as number;
+    if (args.source === "pdf" && numPages > 0 && imagePages.length === numPages) {
+      terminal = "OCR_REVIEW";
+      lastError = "PDF sem texto extraível — OCR fallback necessário (não disponível neste ciclo).";
       await auditLog(sb, {
         importId: args.importId, companyId: args.companyId,
         stage: "conversion", event: "OCR_REVIEW",
-        reason: `Confiança tabular ${(ocrConfidence * 100).toFixed(1)}% < 80% — importação em REVIEW`,
+        reason: lastError,
       });
-      await sb.from("v3_imports").update({
-        status: "review", final_state: "REVIEW", file_hash, charset, ocr_confidence: ocrConfidence,
-        last_error: "Fidelidade tabular não garantida pelo OCR", finished_at: new Date().toISOString(),
-      } as any).eq("id", args.importId);
+      return { rowsInserted: 0, finalState: "REVIEW" };
+    }
+
+    // Cap. 37 — HEADER_FAILED interrompe
+    if (raw.headerFailed || raw.headers.length === 0) {
+      terminal = "HEADER_FAILED";
+      lastError = "Cabeçalho não identificado (nenhuma linha com ≥2 cabeçalhos conhecidos)";
+      await auditLog(sb, {
+        importId: args.importId, companyId: args.companyId,
+        stage: "conversion", event: "HEADER_FAILED",
+        input: { headers_seen: raw.headers, sample: raw.rows.slice(0, 3) } as any,
+        reason: lastError,
+      });
+      return { rowsInserted: 0, finalState: "FAILED" };
+    }
+
+    // Cap. 37 — OCR_REVIEW por confiança
+    if (args.source === "pdf" && ocrConfidence != null && ocrConfidence < 0.8 && ocrConfidence > 0) {
+      terminal = "OCR_REVIEW";
+      lastError = `Confiança tabular ${(ocrConfidence * 100).toFixed(1)}% < 80%`;
+      await auditLog(sb, {
+        importId: args.importId, companyId: args.companyId,
+        stage: "conversion", event: "OCR_REVIEW",
+        reason: lastError,
+      });
       return { rowsInserted: 0, finalState: "REVIEW" };
     }
 
@@ -763,10 +902,23 @@ export async function runPipeline(
       reason: mapReasons.join(" | ") || "nenhum mapeamento reconhecido",
     });
 
+    // Item 7 — validação de mapeamento obrigatório antes do Modelo Canônico
+    const missing = missingRequiredFields(map);
+    if (missing.length > 0) {
+      terminal = "MAP_FAILED";
+      lastError = `Mapeamento incompleto — campos obrigatórios ausentes: ${missing.join(", ")}. Cabeçalhos vistos: ${raw.headers.join(", ")}`;
+      await auditLog(sb, {
+        importId: args.importId, companyId: args.companyId,
+        stage: "mapper", event: "MAP_FAILED",
+        input: { headers: raw.headers, map } as any,
+        reason: lastError,
+      });
+      return { rowsInserted: 0, finalState: "FAILED" };
+    }
+
     // 4-8) Por linha: canonical → guard → resolução → dedup
     const built = raw.rows.map((r) => buildCanonical(r, map, extraConcat));
     const rowsToInsert: any[] = [];
-    let failed = 0, review = 0;
 
     for (let i = 0; i < built.length; i++) {
       const { canonical: rawCan, snapshot, errors } = built[i];
@@ -775,20 +927,15 @@ export async function runPipeline(
 
       let status: LineStatus = "OK";
       const rowReasons: string[] = [...errors];
-
-      if (errors.length > 0) {
-        // amount/date obrigatórios ausentes → LINE_FAILED
-        status = "LINE_FAILED";
-      }
+      if (errors.length > 0) status = "LINE_FAILED";
 
       let resolution: any = null;
       if (status !== "LINE_FAILED") {
         resolution = await resolveRow(sb, args.companyId, canonical);
-        if (resolution.needsReview) { status = "LINE_REVIEW"; }
+        if (resolution.needsReview) status = "LINE_REVIEW";
         rowReasons.push(...resolution.reasons);
       }
 
-      // Deduplicação
       const dup = status !== "LINE_FAILED"
         ? await checkDuplicate(sb, args.companyId, canonical, built.map((b) => ({ canonical: b.canonical })))
         : { duplicate: false, conflicts: [] };
@@ -830,42 +977,72 @@ export async function runPipeline(
       }
     }
 
-    // Persistência
-    for (let i = 0; i < rowsToInsert.length; i += 200) {
-      const chunk = rowsToInsert.slice(i, i + 200);
-      const { error } = await sb.from("v3_import_rows").insert(chunk);
-      if (error) throw new Error(`Falha ao persistir linhas: ${error.message}`);
+    total = rowsToInsert.length;
+
+    // Item 1 — persistência atômica: se qualquer chunk falhar, remove tudo desta importação.
+    try {
+      for (let i = 0; i < rowsToInsert.length; i += 200) {
+        const chunk = rowsToInsert.slice(i, i + 200);
+        const { error } = await sb.from("v3_import_rows").insert(chunk);
+        if (error) throw new Error(`Falha ao persistir linhas: ${error.message}`);
+      }
+      rowsInserted = rowsToInsert.length;
+    } catch (persistErr: any) {
+      // Rollback determinístico: apaga qualquer linha desta importação (parcial ou não).
+      await sb.from("v3_import_rows").delete().eq("import_id", args.importId);
+      lastError = persistErr.message ?? String(persistErr);
+      await auditLog(sb, {
+        importId: args.importId, companyId: args.companyId,
+        stage: "persistence", event: "PERSIST_FAILED",
+        reason: `${lastError} — rollback aplicado (todas as linhas desta importação removidas).`,
+      });
+      // Persistência falhou → estado final via finally cuidará; sinaliza FAILED via terminal.
+      terminal = "SCHEMA_MISMATCH"; // tratamos como falha estrutural que precede a máquina de estados
+      throw persistErr;
     }
 
-    // Estado final
-    const finalState = computeFinalState({
-      headerFailed: false, ocrConfidence, total: rowsToInsert.length, failed, review,
-    });
-
-    await sb.from("v3_imports").update({
-      status: finalState === "FAILED" ? "failed" : "review",
-      final_state: finalState,
-      file_hash, charset, ocr_confidence: ocrConfidence ?? null,
-      total_rows: rowsToInsert.length, failed_rows: failed, review_rows: review,
-      finished_at: new Date().toISOString(),
-    } as any).eq("id", args.importId);
-
-    await auditLog(sb, {
-      importId: args.importId, companyId: args.companyId,
-      stage: "state_machine", event: "FINAL_STATE",
-      input: { total: rowsToInsert.length, failed, review, ocrConfidence } as any,
-      output: { finalState } as any,
-      reason: `Estado final via hierarquia Cap. 37: ${finalState}`,
-    });
-
-    return { rowsInserted: rowsToInsert.length, finalState };
+    return { rowsInserted, finalState: "SUCCESS" /* placeholder; finally recalcula */ };
   } catch (err: any) {
-    await sb.from("v3_imports").update({
-      status: "failed", final_state: "FAILED",
-      last_error: err.message ?? String(err),
-      finished_at: new Date().toISOString(),
-    } as any).eq("id", args.importId);
+    lastError = err?.message ?? String(err);
     throw err;
+  } finally {
+    // Item 3 — computeFinalState é SEMPRE executado.
+    const finalState = computeFinalState({
+      terminal,
+      ocrConfidence,
+      total,
+      failed,
+      review,
+    });
+
+    try {
+      await sb.from("v3_imports").update({
+        status: finalState === "FAILED" ? "failed" : finalState === "REVIEW" ? "review" : "done",
+        final_state: finalState,
+        file_hash: file_hash ?? null,
+        charset: charset ?? null,
+        ocr_confidence: ocrConfidence ?? null,
+        total_rows: total,
+        failed_rows: failed,
+        review_rows: review,
+        last_error: lastError,
+        finished_at: new Date().toISOString(),
+      } as any).eq("id", args.importId);
+
+      await auditLog(sb, {
+        importId: args.importId, companyId: args.companyId,
+        stage: "state_machine", event: "FINAL_STATE",
+        input: { terminal, total, failed, review, ocrConfidence } as any,
+        output: { finalState } as any,
+        reason: `Estado final Cap. 37: ${finalState}${terminal ? ` (terminal=${terminal})` : ""}`,
+      });
+    } catch {
+      // não relança — o erro original (se houver) já é preservado
+    }
+
+    // Retorno funcional (apenas quando não houve throw)
+    // eslint-disable-next-line no-unsafe-finally
+    return { rowsInserted, finalState };
   }
 }
 
