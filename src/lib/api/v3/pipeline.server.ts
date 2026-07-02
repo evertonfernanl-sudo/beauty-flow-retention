@@ -233,7 +233,7 @@ function hasAnyAmountMapping(map: FieldMap): boolean {
   return !!(map.amount || map.debit_amount || map.credit_amount);
 }
 function missingRequiredFields(map: FieldMap): string[] {
-  const missing = REQUIRED_FIELDS.filter((f) => !map[f]);
+  const missing: string[] = REQUIRED_FIELDS.filter((f) => !map[f]);
   if (!hasAnyAmountMapping(map)) missing.push("amount|debit_amount|credit_amount");
   return missing;
 }
