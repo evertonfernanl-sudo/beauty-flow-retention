@@ -208,20 +208,35 @@ function matchesAnyHeader(cell: string): boolean {
 // Camada 3 — Mapeamento
 // ============================================================
 
+// Regexes tolerantes a sufixos comuns (ex.: "(R$)", " brl", ":") — Cap. 24.5 / 9
+// Todos casam a raiz da palavra e permitem qualquer sufixo não-alfabético.
+const SFX = "([\\s\\(\\[\\:\\/\\-].*)?$";
 const HEADER_HINTS: Record<keyof CanonicalRow, RegExp[]> = {
-  client_name: [/^(cliente|pagador|favorecido|beneficiario|beneficiário|recebedor|nome|destino|origem|sacado)$/i],
-  description: [/^(descri[cç][aã]o|hist[oó]rico|complemento|hist[oó]rico\/complemento|narrativa|evento|opera[cç][aã]o|memo|memorando|detalhes|lan[cç]amento)$/i],
-  amount: [/^(valor|montante|amount|vlr|total|valor\s*movimento)$/i],
-  transaction_date: [/^(data|dt|date|data[_\s]lan[cç]amento|data[_\s]movimento|data\s*da\s*opera[cç][aã]o|dt[_\s]?lanc|movimento|lan[cç]amentos?)$/i],
-  balance: [/^(saldo|saldo\s*final|saldo\s*atual|saldo\s*dispon[ií]vel|balance)$/i],
-  document_number: [/^(documento|n[°º]?\s*documento|nr\s*docto|nr\.?\s*doo|controle|identificador|n[_\s]?documento|doc)$/i],
-  cpf_cnpj: [/^(cpf|cnpj|cpf\/cnpj|cpf_cnpj|documento\s*favorecido|inscri[cç][aã]o)$/i],
-  phone: [/^(telefone|celular|phone|tel|whatsapp)$/i],
-  debit_amount: [/^(d[eé]bito|saida|saída|valor[_\s]debito)$/i],
-  credit_amount: [/^(cr[eé]dito|entrada|valor[_\s]credito|receita)$/i],
-  movement_type: [/^(tipo|natureza|d\/c|cd|tipo\s*da\s*movimenta[cç][aã]o)$/i],
+  client_name: [new RegExp(`^(cliente|pagador|favorecido|benefici[aá]rio|recebedor|nome|destino|origem|sacado)${SFX}`, "i")],
+  description: [new RegExp(`^(descri[cç][aã]o|hist[oó]rico(\\s*\\/?\\s*complemento)?|complemento|narrativa|evento|opera[cç][aã]o|memo(rando)?|detalhes|lan[cç]amento)${SFX}`, "i")],
+  amount: [new RegExp(`^(valor|montante|amount|vlr|total|valor\\s*movimento)${SFX}`, "i")],
+  transaction_date: [new RegExp(`^(data(\\s*(de)?\\s*(lan[cç]amento|movimento|opera[cç][aã]o))?|dt(\\s*lanc)?|date|movimento|lan[cç]amentos?)${SFX}`, "i")],
+  balance: [new RegExp(`^(saldo(\\s*(final|atual|dispon[ií]vel))?|balance)${SFX}`, "i")],
+  document_number: [new RegExp(`^(docto\\.?|documento|doc\\.?|n[°ºr]?\\.?\\s*(docto|doc|documento)?|nr\\.?\\s*doc(to)?|controle|identificador)${SFX}`, "i")],
+  cpf_cnpj: [new RegExp(`^(cpf|cnpj|cpf\\s*\\/?\\s*cnpj|documento\\s*favorecido|inscri[cç][aã]o)${SFX}`, "i")],
+  phone: [new RegExp(`^(telefone|celular|phone|tel|whatsapp)${SFX}`, "i")],
+  debit_amount: [new RegExp(`^(d[eé]bito|sa[ií]da|valor\\s*d[eé]bito)${SFX}`, "i")],
+  credit_amount: [new RegExp(`^(cr[eé]dito|entrada|valor\\s*cr[eé]dito|receita)${SFX}`, "i")],
+  movement_type: [new RegExp(`^(tipo|natureza|d\\/c|c\\/d|cd|tipo\\s*da\\s*movimenta[cç][aã]o)${SFX}`, "i")],
   raw_extra: [],
 };
+
+// Campos obrigatórios para prosseguir ao Modelo Canônico (Cap. 9 + Item 7)
+// amount pode vir de amount OU debit_amount OU credit_amount.
+const REQUIRED_FIELDS: (keyof CanonicalRow)[] = ["transaction_date", "description"];
+function hasAnyAmountMapping(map: FieldMap): boolean {
+  return !!(map.amount || map.debit_amount || map.credit_amount);
+}
+function missingRequiredFields(map: FieldMap): string[] {
+  const missing = REQUIRED_FIELDS.filter((f) => !map[f]);
+  if (!hasAnyAmountMapping(map)) missing.push("amount|debit_amount|credit_amount");
+  return missing;
+}
 
 const HISTORICO_RE = /^(hist[oó]rico)$/i;
 const COMPLEMENTO_RE = /^(complemento)$/i;
