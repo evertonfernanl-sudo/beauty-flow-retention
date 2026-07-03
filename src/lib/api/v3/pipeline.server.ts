@@ -713,7 +713,8 @@ export async function checkDuplicate(
     if (nm !== sn) continue;
     if (Math.abs(daysBetween(s.canonical.transaction_date!, target)) > 1) continue;
     if (s.id) conflicts.push(s.id);
-    else conflicts.push("sibling");
+    // irmãos sem id (mesma importação, ainda não persistidos) são sinalizados
+    // apenas via possible_duplicate=true; duplicate_of é uuid[] e só aceita UUIDs reais.
   }
 
   // Últimos 30 dias no banco
