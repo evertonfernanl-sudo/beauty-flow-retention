@@ -1300,16 +1300,7 @@ export async function extractFullTextFromPdfBuffer(buf: Uint8Array, filename: st
 }
 
 export async function convertPdfBufferToCsvForImport(buf: Uint8Array, filename: string): Promise<string> {
-  const { PipelineError } = await import("./ocr-normalizer.server");
-  const fullText = await extractFullTextFromPdfBuffer(buf, filename);
-  const parsedPdf = parsePdfTextToRows(fullText);
-  if (parsedPdf.rows.length === 0) {
-    throw new PipelineError("Nenhuma linha de extrato identificada no PDF", "PARSER");
-  }
-  return Papa.unparse({
-    fields: parsedPdf.headers,
-    data: parsedPdf.rows.map((r) => parsedPdf.headers.map((h) => r[h] ?? "")),
-  });
+  return convertPdfBufferToCsvRaw(buf, filename);
 }
 
 export async function convertPdfBufferToCsvRaw(buf: Uint8Array, filename: string): Promise<string> {
