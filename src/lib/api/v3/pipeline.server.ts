@@ -703,6 +703,7 @@ export async function checkDuplicate(
   const target = canonical.transaction_date;
   const nm = normalizeName(canonical.client_name);
   const conflicts: string[] = [];
+  let siblingConflict = false;
 
   // Dentro da importação
   for (const s of siblings) {
@@ -713,8 +714,7 @@ export async function checkDuplicate(
     if (nm !== sn) continue;
     if (Math.abs(daysBetween(s.canonical.transaction_date!, target)) > 1) continue;
     if (s.id) conflicts.push(s.id);
-    // irmãos sem id (mesma importação, ainda não persistidos) são sinalizados
-    // apenas via possible_duplicate=true; duplicate_of é uuid[] e só aceita UUIDs reais.
+    else siblingConflict = true;
   }
 
   // Últimos 30 dias no banco
@@ -730,7 +730,7 @@ export async function checkDuplicate(
     if (Math.abs(daysBetween(r.transaction_date, target)) > 1) continue;
     conflicts.push(r.id);
   }
-  return { duplicate: conflicts.length > 0, conflicts };
+  return { duplicate: conflicts.length > 0 || siblingConflict, conflicts };
 }
 
 function daysBetween(a: string, b: string): number {
