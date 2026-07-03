@@ -258,21 +258,37 @@ function finalizeTable(matrix: string[][], meta: Record<string, unknown>, charse
   const descIdx = headers.findIndex((h) => HEADER_HINTS.description.some((r) => r.test(h)));
 
   const merged: string[][] = [];
+  let lastValidDateCell = "";
   for (const row of filteredBodyMatrix) {
     const dateCell = dateIdx >= 0 ? String(row[dateIdx] ?? "").trim() : "";
     const hasValue = valueIdxs.some((i) => String(row[i] ?? "").trim().length > 0);
     const hasDate = parseDate(dateCell) != null;
+    
+    if (hasDate) {
+      lastValidDateCell = dateCell;
+    }
+
     if (!hasDate && !hasValue && merged.length > 0 && descIdx >= 0) {
       const prev = merged[merged.length - 1];
       const extra = row.map((c) => String(c ?? "").trim()).filter(Boolean).join(" ");
       if (extra) prev[descIdx] = `${prev[descIdx] ?? ""} ${extra}`.trim();
       continue;
     }
+
+    if (!hasDate && hasValue && lastValidDateCell && dateIdx >= 0) {
+      row[dateIdx] = lastValidDateCell;
+    }
+
     merged.push(row);
   }
 
   const rows: RawRow[] = merged
-    .filter((r) => r.some((c) => String(c ?? "").trim() !== ""))
+    .filter((r) => {
+      const dateCell = dateIdx >= 0 ? String(r[dateIdx] ?? "").trim() : "";
+      const hasValue = valueIdxs.some((i) => String(r[i] ?? "").trim().length > 0);
+      const hasDate = parseDate(dateCell) != null;
+      return hasDate && hasValue;
+    })
     .map((r) => {
       const obj: RawRow = {};
       headers.forEach((h, i) => { obj[h] = String(r[i] ?? "").trim(); });
@@ -1300,9 +1316,9 @@ export async function applyRow(sb: SB, args: { rowId: string }): Promise<{ ok: b
 }
 
 async function executePdfOcr(buffer: Uint8Array, filename: string): Promise<string> {
-  const unpdf: any = await import("unpdf");
+  const { getDocumentProxy, extractImages } = await import("unpdf");
   const { PipelineError } = await import("../ocr-normalizer.server");
-  const pdf = await unpdf.getDocumentProxy(buffer);
+  const pdf = await getDocumentProxy(buffer);
   
   const apiKey = process.env.LOVABLE_API_KEY;
   if (!apiKey) {
@@ -1371,7 +1387,7 @@ async function executePdfOcr(buffer: Uint8Array, filename: string): Promise<stri
   let ocrCsvAccumulator = "";
 
   for (let i = 1; i <= pdf.numPages; i++) {
-    const pageImages = await unpdf.extractImages(pdf, i);
+    const pageImages = await extractImages(pdf, i);
     if (pageImages && pageImages.length > 0) {
       for (let idx = 0; idx < pageImages.length; idx++) {
         const img = pageImages[idx];
