@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Sparkles, Upload, Trash2, ShieldCheck, FileText, CheckCircle2, AlertCircle } from "lucide-react";
+import { Sparkles, Upload, Trash2, ShieldCheck, FileText, CheckCircle2, AlertCircle, XCircle, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import {
   registerImportV3,
   applyRowV3,
   deleteImportV3,
+  updateRowV3,
 } from "@/lib/api/siev3.functions";
 
 export const Route = createFileRoute("/_authenticated/app/import")({
@@ -27,7 +28,12 @@ function ImportV3Page() {
   const [selected, setSelected] = useState<string | null>(null);
   const [auditRowId, setAuditRowId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setSelectedRowIds([]);
+  }, [selected]);
 
   const importsQ = useQuery({
     enabled: !!companyId,
@@ -54,6 +60,20 @@ function ImportV3Page() {
       return data ?? [];
     },
     refetchInterval: 4000,
+  });
+
+  const clientsQ = useQuery({
+    enabled: !!companyId,
+    queryKey: ["v3-clients", companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, name")
+        .eq("company_id", companyId!)
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    }
   });
 
   const auditQ = useQuery({
@@ -85,6 +105,84 @@ function ImportV3Page() {
       qc.invalidateQueries({ queryKey: ["v3-imports"] });
     },
     onError: (e: any) => toast.error(e.message),
+  });
+
+  const updateRowMut = useMutation({
+    mutationFn: async (args: {
+      rowId: string;
+      updates: any;
+      oldValue: any;
+      newValue: any;
+      auditEvent: string;
+      auditReason: string;
+    }) => {
+      await updateRowV3({
+        data: {
+          rowId: args.rowId,
+          updates: args.updates,
+          auditEvent: args.auditEvent,
+          auditReason: args.auditReason,
+          oldValue: args.oldValue,
+          newValue: args.newValue
+        }
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["v3-rows", selected] });
+      toast.success("Linha atualizada com sucesso");
+    },
+    onError: (e: any) => toast.error("Erro ao atualizar linha: " + e.message),
+  });
+
+  const batchApplyMut = useMutation({
+    mutationFn: async (rowIds: string[]) => {
+      let applied = 0;
+      for (const rowId of rowIds) {
+        await applyRowV3({ data: { rowId } });
+        applied++;
+      }
+      return applied;
+    },
+    onSuccess: (count) => {
+      toast.success(`${count} linhas aplicadas com sucesso`);
+      setSelectedRowIds([]);
+      qc.invalidateQueries({ queryKey: ["v3-rows", selected] });
+    },
+    onError: (e: any) => toast.error("Erro ao aplicar lote: " + e.message),
+  });
+
+  const batchSkipMut = useMutation({
+    mutationFn: async (rowIds: string[]) => {
+      let skipped = 0;
+      for (const rowId of rowIds) {
+        const { data: row } = await supabase
+          .from("v3_import_rows")
+          .select("status")
+          .eq("id", rowId)
+          .single();
+        
+        if (row && row.status !== "applied" && row.status !== "skipped") {
+          await updateRowV3({
+            data: {
+              rowId,
+              updates: { status: "skipped" },
+              auditEvent: "ROW_SKIPPED",
+              auditReason: "Usuário recusou a linha manualmente via ação em lote",
+              oldValue: row.status,
+              newValue: "skipped",
+            }
+          });
+          skipped++;
+        }
+      }
+      return skipped;
+    },
+    onSuccess: (count) => {
+      toast.success(`${count} linhas recusadas com sucesso`);
+      setSelectedRowIds([]);
+      qc.invalidateQueries({ queryKey: ["v3-rows", selected] });
+    },
+    onError: (e: any) => toast.error("Erro ao recusar lote: " + e.message),
   });
 
   async function onPick(file: File) {
@@ -171,54 +269,236 @@ function ImportV3Page() {
         <Card className="p-3 max-h-[70vh] overflow-auto">
           {!selected && <div className="text-sm text-muted-foreground p-4">Selecione uma importação para revisar as linhas.</div>}
           {selected && (
-            <table className="w-full text-xs">
-              <thead className="bg-muted/40 sticky top-0">
-                <tr>
-                  <th className="p-2 text-left">#</th>
-                  <th className="p-2 text-left">Data</th>
-                  <th className="p-2 text-left">Descrição</th>
-                  <th className="p-2 text-right">Valor</th>
-                  <th className="p-2 text-left">Cliente</th>
-                  <th className="p-2 text-left">Tipo</th>
-                  <th className="p-2 text-center">Conf.</th>
-                  <th className="p-2 text-left">Status</th>
-                  <th className="p-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {(rowsQ.data ?? []).map((r: any) => {
-                  const c = r.canonical ?? {};
-                  const sugg = r.suggestions ?? {};
-                  return (
-                    <tr key={r.id} className="border-t">
-                      <td className="p-2">{r.row_index}</td>
-                      <td className="p-2">{c.transaction_date ?? "—"}</td>
-                      <td className="p-2 max-w-[260px] truncate" title={c.description ?? ""}>{c.description ?? "—"}</td>
-                      <td className="p-2 text-right">{c.amount != null ? Number(c.amount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—"}</td>
-                      <td className="p-2">{c.client_name ?? "—"}{sugg.client ? <span className="text-emerald-600"> → {sugg.client.name}</span> : null}</td>
-                      <td className="p-2">{sugg.type ?? "—"}</td>
-                      <td className="p-2 text-center">{r.confidence}</td>
-                      <td className="p-2">
-                        <Badge variant={r.status === "applied" ? "default" : r.status === "LINE_FAILED" ? "destructive" : r.status === "LINE_REVIEW" ? "outline" : "secondary"}>
-                          {r.status === "applied" ? <CheckCircle2 className="h-3 w-3 mr-1" /> : <AlertCircle className="h-3 w-3 mr-1" />}
-                          {r.status}
-                        </Badge>
-                        {r.possible_duplicate && <Badge variant="destructive" className="ml-1">DUP</Badge>}
-                      </td>
-                      <td className="p-2 flex gap-1">
-                        <Button size="sm" variant="outline" onClick={() => setAuditRowId(r.id)}>Auditoria</Button>
-                        {r.status !== "applied" && r.status !== "LINE_FAILED" && (
-                          <Button size="sm" onClick={() => applyMut.mutate(r.id)} disabled={applyMut.isPending}>Aplicar</Button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {rowsQ.data && rowsQ.data.length === 0 && (
-                  <tr><td colSpan={9} className="p-4 text-center text-muted-foreground">Sem linhas. Aguardando processamento ou arquivo vazio.</td></tr>
-                )}
-              </tbody>
-            </table>
+            <div className="space-y-3">
+              {/* Painel de Ações em Lote */}
+              {selectedRowIds.length > 0 && (
+                <div className="flex items-center justify-between bg-muted/40 p-2 rounded border mb-2">
+                  <span className="text-xs font-medium">
+                    {selectedRowIds.length} linha{selectedRowIds.length > 1 ? "s" : ""} selecionada{selectedRowIds.length > 1 ? "s" : ""}
+                  </span>
+                  <div className="flex gap-2">
+                    <Button 
+                      size="sm" 
+                      onClick={() => batchApplyMut.mutate(selectedRowIds)}
+                      disabled={batchApplyMut.isPending || batchSkipMut.isPending}
+                    >
+                      Aprovar em Lote
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant="destructive"
+                      onClick={() => batchSkipMut.mutate(selectedRowIds)}
+                      disabled={batchApplyMut.isPending || batchSkipMut.isPending}
+                    >
+                      Recusar em Lote
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <table className="w-full text-xs">
+                <thead className="bg-muted/40 sticky top-0">
+                  <tr>
+                    <th className="p-2 text-left w-6">
+                      <input 
+                        type="checkbox" 
+                        checked={(rowsQ.data ?? []).length > 0 && selectedRowIds.length === (rowsQ.data ?? []).filter(r => r.status !== 'applied').length}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedRowIds((rowsQ.data ?? []).filter(r => r.status !== 'applied').map(r => r.id));
+                          } else {
+                            setSelectedRowIds([]);
+                          }
+                        }}
+                      />
+                    </th>
+                    <th className="p-2 text-left">#</th>
+                    <th className="p-2 text-left">Data</th>
+                    <th className="p-2 text-left">Descrição</th>
+                    <th className="p-2 text-right">Valor</th>
+                    <th className="p-2 text-left">Cliente</th>
+                    <th className="p-2 text-left">Tipo</th>
+                    <th className="p-2 text-center">Conf.</th>
+                    <th className="p-2 text-left">Status</th>
+                    <th className="p-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(rowsQ.data ?? []).map((r: any) => {
+                    const c = r.canonical ?? {};
+                    const sugg = r.suggestions ?? {};
+                    const isSkipped = r.status === "skipped";
+                    const isApplied = r.status === "applied";
+                    
+                    return (
+                      <tr key={r.id} className={`border-t transition-colors ${isSkipped ? "opacity-50 line-through text-muted-foreground bg-muted/20" : ""} ${isApplied ? "bg-muted/5 text-muted-foreground" : ""}`}>
+                        <td className="p-2">
+                          {!isApplied && (
+                            <input 
+                              type="checkbox"
+                              checked={selectedRowIds.includes(r.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedRowIds(prev => [...prev, r.id]);
+                                } else {
+                                  setSelectedRowIds(prev => prev.filter(id => id !== r.id));
+                                }
+                              }}
+                            />
+                          )}
+                        </td>
+                        <td className="p-2">{r.row_index}</td>
+                        <td className="p-2">{c.transaction_date ?? "—"}</td>
+                        <td className="p-2 max-w-[260px] truncate" title={c.description ?? ""}>{c.description ?? "—"}</td>
+                        <td className="p-2 text-right">{c.amount != null ? Number(c.amount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—"}</td>
+                        
+                        {/* Cliente */}
+                        <td className="p-2">
+                          {isApplied ? (
+                            <span>{sugg.client?.name ?? c.client_name ?? "—"}</span>
+                          ) : (
+                            <div className="flex flex-col gap-0.5">
+                              <select 
+                                className="bg-background border rounded px-1 py-0.5 max-w-[150px] truncate text-[11px]"
+                                value={r.resolved_client_id ?? ""}
+                                disabled={updateRowMut.isPending}
+                                onChange={(e) => {
+                                  const val = e.target.value || null;
+                                  const clientName = clientsQ.data?.find(cl => cl.id === val)?.name ?? null;
+                                  updateRowMut.mutate({
+                                    rowId: r.id,
+                                    updates: { 
+                                      resolved_client_id: val,
+                                      suggestions: {
+                                        ...sugg,
+                                        client: val ? { id: val, name: clientName } : null
+                                      }
+                                    },
+                                    oldValue: r.resolved_client_id,
+                                    newValue: val,
+                                    auditEvent: "MANUAL_CLIENT_CHANGE",
+                                    auditReason: `Alterado cliente para ${clientName ?? "Nenhum"}`
+                                  });
+                                }}
+                              >
+                                <option value="">(Nenhum)</option>
+                                {(clientsQ.data ?? []).map(cl => (
+                                  <option key={cl.id} value={cl.id}>{cl.name}</option>
+                                ))}
+                              </select>
+                              {sugg.client_from_description && !r.resolved_client_id && (
+                                <span className="text-[10px] text-muted-foreground">Sugerido: {sugg.client_from_description}</span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                        
+                        {/* Tipo / Classificação */}
+                        <td className="p-2">
+                          {isApplied ? (
+                            <Badge variant="outline">{sugg.subtype ?? sugg.type ?? "—"}</Badge>
+                          ) : (
+                            <select
+                              className="bg-background border rounded px-1 py-0.5 text-[11px]"
+                              value={`${sugg.type ?? ""}:${sugg.subtype ?? ""}`}
+                              disabled={updateRowMut.isPending}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const [type, subtype] = val.split(":");
+                                updateRowMut.mutate({
+                                  rowId: r.id,
+                                  updates: {
+                                    suggestions: {
+                                      ...sugg,
+                                      type,
+                                      subtype
+                                    }
+                                  },
+                                  oldValue: `${sugg.type ?? ""}:${sugg.subtype ?? ""}`,
+                                  newValue: val,
+                                  auditEvent: "MANUAL_CLASSIFICATION_CHANGE",
+                                  auditReason: `Alterada classificação para ${type} / ${subtype}`
+                                });
+                              }}
+                            >
+                              <option value="INCOME:RECEITA">Receita</option>
+                              <option value="INCOME:APORTE">Aporte</option>
+                              <option value="EXPENSE:DESPESA_EMPRESA">Despesa Empresa</option>
+                              <option value="EXPENSE:DESPESA_PESSOAL">Despesa Pessoal</option>
+                            </select>
+                          )}
+                        </td>
+                        
+                        <td className="p-2 text-center">{r.confidence}</td>
+                        <td className="p-2">
+                          <Badge variant={r.status === "applied" ? "default" : r.status === "skipped" ? "secondary" : r.status === "LINE_FAILED" ? "destructive" : r.status === "LINE_REVIEW" ? "outline" : "secondary"}>
+                            {r.status === "applied" ? <CheckCircle2 className="h-3 w-3 mr-1 inline" /> : <AlertCircle className="h-3 w-3 mr-1 inline" />}
+                            {r.status}
+                          </Badge>
+                          {r.possible_duplicate && <Badge variant="destructive" className="ml-1">DUP</Badge>}
+                        </td>
+                        <td className="p-2 flex gap-1 justify-end">
+                          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setAuditRowId(r.id)}>Auditoria</Button>
+                          {!isApplied && r.status !== "LINE_FAILED" && (
+                            <>
+                              {isSkipped ? (
+                                <Button 
+                                  size="sm" 
+                                  variant="outline" 
+                                  className="h-7 text-xs flex items-center gap-1"
+                                  onClick={() => updateRowMut.mutate({
+                                    rowId: r.id,
+                                    updates: { status: "LINE_REVIEW" },
+                                    oldValue: "skipped",
+                                    newValue: "LINE_REVIEW",
+                                    auditEvent: "ROW_RESTORED",
+                                    auditReason: "Usuário reverteu a recusa da linha manualmente"
+                                  })}
+                                  disabled={updateRowMut.isPending}
+                                >
+                                  <Undo2 className="h-3 w-3" /> Restaurar
+                                </Button>
+                              ) : (
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost" 
+                                  className="h-7 text-destructive text-xs flex items-center gap-1 hover:bg-destructive/10 hover:text-destructive"
+                                  onClick={() => updateRowMut.mutate({
+                                    rowId: r.id,
+                                    updates: { status: "skipped" },
+                                    oldValue: r.status,
+                                    newValue: "skipped",
+                                    auditEvent: "ROW_SKIPPED",
+                                    auditReason: "Usuário recusou a linha manualmente"
+                                  })}
+                                  disabled={updateRowMut.isPending}
+                                >
+                                  <XCircle className="h-3 w-3" /> Recusar
+                                </Button>
+                              )}
+                              
+                              {!isSkipped && (
+                                <Button 
+                                  size="sm" 
+                                  className="h-7" 
+                                  onClick={() => applyMut.mutate(r.id)} 
+                                  disabled={applyMut.isPending}
+                                >
+                                  Aplicar
+                                </Button>
+                              )}
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {rowsQ.data && rowsQ.data.length === 0 && (
+                    <tr><td colSpan={10} className="p-4 text-center text-muted-foreground">Sem linhas. Aguardando processamento ou arquivo vazio.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           )}
         </Card>
       </div>

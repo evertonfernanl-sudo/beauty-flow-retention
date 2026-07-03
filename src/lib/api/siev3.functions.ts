@@ -61,3 +61,57 @@ export const deleteImportV3 = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { success: true } as const;
   });
+
+export const updateRowV3 = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i) => z.object({
+    rowId: z.string().uuid(),
+    updates: z.object({
+      resolved_client_id: z.string().uuid().nullable().optional(),
+      resolved_service_id: z.string().uuid().nullable().optional(),
+      status: z.enum(["OK", "LINE_FAILED", "LINE_REVIEW", "applied", "skipped"]).optional(),
+      suggestions: z.record(z.any()).optional(),
+    }),
+    auditEvent: z.string().min(1),
+    auditReason: z.string().min(1),
+    oldValue: z.any().optional(),
+    newValue: z.any().optional(),
+  }).parse(i))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    
+    // Fetch row first to get company_id and import_id
+    const { data: row, error: fetchErr } = await supabase
+      .from("v3_import_rows")
+      .select("company_id, import_id")
+      .eq("id", data.rowId)
+      .single();
+    if (fetchErr || !row) throw new Error("Linha não encontrada");
+
+    // Update row
+    const { error: updateErr } = await supabase
+      .from("v3_import_rows")
+      .update(data.updates)
+      .eq("id", data.rowId);
+    if (updateErr) throw new Error(updateErr.message);
+
+    // Audit Log
+    const { error: auditErr } = await supabase.from("v3_audit_log").insert({
+      import_id: row.import_id,
+      company_id: row.company_id,
+      row_id: data.rowId,
+      stage: "user_correction",
+      event: data.auditEvent,
+      input: data.oldValue ? { value: data.oldValue } : null,
+      output: data.newValue ? { value: data.newValue } : null,
+      reason: data.auditReason,
+      responsavel: "Usuário",
+      algorithm_version: "v3.0.0",
+    } as any);
+    if (auditErr) {
+      console.error("Erro ao gravar log de auditoria:", auditErr.message);
+    }
+
+    return { success: true } as const;
+  });
+
