@@ -27,20 +27,22 @@ export const registerImportV3 = createServerFn({ method: "POST" })
       created_by: userId,
     }).select("id").single();
     if (error) throw new Error(error.message);
+    // Executa pipeline em background (assíncrono) para evitar timeouts de requisição HTTP,
+    // permitindo que o frontend com polling (3s) acompanhe o status da importação.
+    (async () => {
+      try {
+        const { runPipeline } = await import("@/lib/api/v3/pipeline.server");
+        await runPipeline(supabase as any, {
+          importId: imp.id,
+          companyId: profile.company_id,
+          source: data.source,
+          storagePath: data.storagePath,
+        });
+      } catch (e: any) {
+        console.error("Erro em background na execução da pipeline V3:", e);
+      }
+    })();
 
-    // Executa pipeline inline (síncrono). Erros são capturados e gravados em v3_imports.last_error.
-    try {
-      const { runPipeline } = await import("@/lib/api/v3/pipeline.server");
-      await runPipeline(supabase as any, {
-        importId: imp.id,
-        companyId: profile.company_id,
-        source: data.source,
-        storagePath: data.storagePath,
-      });
-    } catch (e: any) {
-      // Já registrado pelo pipeline; devolve sucesso parcial para UI poder navegar à revisão.
-      return { success: false, importId: imp.id, error: e.message ?? String(e) } as const;
-    }
     return { success: true, importId: imp.id } as const;
   });
 
