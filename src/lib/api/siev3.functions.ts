@@ -34,7 +34,7 @@ export const registerImportV3 = createServerFn({ method: "POST" })
         const { runPipeline } = await import("@/lib/api/v3/pipeline.server");
         await runPipeline(supabase as any, {
           importId: imp.id,
-          companyId: profile.company_id,
+          companyId: profile.company_id!,
           source: data.source,
           storagePath: data.storagePath,
         });
@@ -43,7 +43,7 @@ export const registerImportV3 = createServerFn({ method: "POST" })
       }
     })();
 
-    return { success: true, importId: imp.id } as const;
+    return { success: true, importId: imp.id, error: undefined as string | undefined } as const;
   });
 
 export const applyRowV3 = createServerFn({ method: "POST" })

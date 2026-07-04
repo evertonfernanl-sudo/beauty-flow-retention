@@ -284,10 +284,18 @@ function finalizeTable(matrix: string[][], meta: Record<string, unknown>, charse
 
   const rows: RawRow[] = merged
     .filter((r) => {
-      const dateCell = dateIdx >= 0 ? String(r[dateIdx] ?? "").trim() : "";
+      // Se não identificamos data ou valor nos cabeçalhos nesta fase preliminar,
+      // preservamos todas as linhas não vazias.
+      if (dateIdx < 0 || valueIdxs.length === 0) {
+        return r.some((c) => String(c ?? "").trim() !== "");
+      }
+
+      const dateCell = String(r[dateIdx] ?? "").trim();
       const hasValue = valueIdxs.some((i) => String(r[i] ?? "").trim().length > 0);
       const hasDate = parseDate(dateCell) != null;
-      return hasDate && hasValue;
+
+      // Preserva linhas que possuam data OU valor, evitando perda silenciosa.
+      return hasDate || hasValue;
     })
     .map((r) => {
       const obj: RawRow = {};
@@ -513,7 +521,7 @@ function parseDate(s: string): string | null {
       return shifted.toISOString().slice(0, 10);
     }
   }
-  // DD/MM/YYYY
+  // DD/MM/YYYY ou DD/MM/YY
   const br = t.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
   if (br) {
     const a = parseInt(br[1], 10);
@@ -527,6 +535,18 @@ function parseDate(s: string): string | null {
     // padrão BR
     if (a <= 31 && b <= 12) return `${yy}-${String(b).padStart(2, "0")}-${String(a).padStart(2, "0")}`;
   }
+  
+  // DD/MM ou DD-MM ou DD.MM (sem ano)
+  const brShort = t.match(/^(\d{1,2})[\/\-.](\d{1,2})$/);
+  if (brShort) {
+    const a = parseInt(brShort[1], 10);
+    const b = parseInt(brShort[2], 10);
+    const currentYear = new Date().getFullYear();
+    if (a <= 31 && b <= 12) {
+      return `${currentYear}-${String(b).padStart(2, "0")}-${String(a).padStart(2, "0")}`;
+    }
+  }
+
   // ISO YYYY-MM-DD
   const iso = t.match(/^(\d{4})[\-.](\d{1,2})[\-.](\d{1,2})/);
   if (iso) return `${iso[1]}-${iso[2].padStart(2, "0")}-${iso[3].padStart(2, "0")}`;
@@ -1016,7 +1036,7 @@ export async function runPipeline(
       console.log(`[SIE V3] PDF Imagem/Escaneado detectado (file_hash: ${file_hash}). Iniciando OCR Fallback...`);
       
       // 1. Verificar cache determinístico
-      const { data: cached } = await sb
+      const { data: cached } = await (sb as any)
         .from("v3_ocr_cache")
         .select("ocr_text")
         .eq("file_hash", file_hash!)
@@ -1047,7 +1067,7 @@ export async function runPipeline(
         const duration = Date.now() - startTime;
 
         // Salvar em cache
-        const { error: cacheErr } = await sb.from("v3_ocr_cache").insert({
+        const { error: cacheErr } = await (sb as any).from("v3_ocr_cache").insert({
           file_hash: file_hash!,
           ocr_text: ocrCsvText,
         });
