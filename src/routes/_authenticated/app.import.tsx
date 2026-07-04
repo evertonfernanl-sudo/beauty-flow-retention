@@ -252,280 +252,294 @@ function ImportV3Page() {
         <Badge variant="outline">v3.0.0</Badge>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-[320px_1fr] gap-4">
-        <Card className="p-3 max-h-[70vh] overflow-y-auto">
-          <h3 className="text-sm font-semibold mb-2">Importações</h3>
-          <div className="space-y-1">
-            {(importsQ.data ?? []).map((imp) => (
-              <button key={imp.id} onClick={() => setSelected(imp.id)}
-                      className={`w-full text-left p-2 rounded border text-xs ${selected === imp.id ? "bg-primary/10 border-primary" : "bg-card"}`}>
-                <div className="font-medium truncate flex items-center gap-1">
-                  <FileText className="h-3 w-3" /> {imp.filename}
+      <div className="space-y-4">
+        {(importsQ.data ?? []).map((imp) => {
+          const isExpanded = selected === imp.id;
+          
+          return (
+            <Card key={imp.id} className={`p-4 transition-all ${isExpanded ? "border-primary ring-1 ring-primary/20" : "hover:bg-muted/10 cursor-pointer"}`}
+                  onClick={() => !isExpanded && setSelected(imp.id)}>
+              {/* Cabeçalho do Extrato / Importação */}
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div className="flex-1 min-w-0" onClick={(e) => { if (isExpanded) { e.stopPropagation(); setSelected(null); } }}>
+                  <div className="font-semibold text-sm truncate flex items-center gap-1.5 text-foreground cursor-pointer">
+                    <FileText className="h-4 w-4 text-primary" /> {imp.filename}
+                  </div>
+                  {(imp.total_rows ?? 0) > 0 && (
+                    <div className="text-[11px] text-muted-foreground mt-1">
+                      {imp.total_rows} linhas · {imp.failed_rows ?? 0} falha · {imp.review_rows ?? 0} revisão
+                      {imp.ocr_confidence != null && ` · OCR ${(imp.ocr_confidence * 100).toFixed(0)}%`}
+                    </div>
+                  )}
+                  {imp.last_error && <div className="text-destructive text-[11px] mt-1 line-clamp-2">{imp.last_error}</div>}
                 </div>
-                <div className="flex items-center justify-between mt-1 gap-1">
+                
+                <div className="flex items-center gap-3 justify-between md:justify-end">
                   <Badge variant={imp.final_state === "FAILED" ? "destructive" : imp.final_state === "SUCCESS" ? "default" : "secondary"}>
                     {imp.final_state ?? imp.status}
                   </Badge>
-                  <span className="text-muted-foreground text-[10px]">{new Date(imp.created_at).toLocaleString("pt-BR")}</span>
-                </div>
-                {(imp.total_rows ?? 0) > 0 && (
-                  <div className="text-[10px] text-muted-foreground mt-1">
-                    {imp.total_rows} linhas · {imp.failed_rows ?? 0} falha · {imp.review_rows ?? 0} revisão
-                    {imp.ocr_confidence != null && ` · OCR ${(imp.ocr_confidence * 100).toFixed(0)}%`}
+                  <span className="text-muted-foreground text-xs">{new Date(imp.created_at).toLocaleString("pt-BR")}</span>
+                  
+                  <div className="flex items-center gap-1">
+                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0"
+                            onClick={(e) => { e.stopPropagation(); if (confirm("Excluir esta importação?")) deleteMut.mutate({ id: imp.id, storagePath: imp.storage_path }); }}>
+                      <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                    </Button>
                   </div>
-                )}
-                {imp.last_error && <div className="text-destructive text-[10px] mt-1 line-clamp-2">{imp.last_error}</div>}
-                <div className="flex justify-end mt-1">
-                  <Button size="sm" variant="ghost" className="h-6 px-1"
-                          onClick={(e) => { e.stopPropagation(); if (confirm("Excluir esta importação?")) deleteMut.mutate({ id: imp.id, storagePath: imp.storage_path }); }}>
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
                 </div>
-              </button>
-            ))}
-            {(!importsQ.data || importsQ.data.length === 0) && (
-              <div className="text-xs text-muted-foreground p-2">Nenhuma importação ainda.</div>
-            )}
-          </div>
-        </Card>
+              </div>
 
-        <Card className="p-3 max-h-[70vh] overflow-auto">
-          {!selected && <div className="text-sm text-muted-foreground p-4">Selecione uma importação para revisar as linhas.</div>}
-          {selected && (
-            <div className="space-y-3">
-              {/* Painel de Ações em Lote */}
-              {selectedRowIds.length > 0 && (
-                <div className="flex items-center justify-between bg-muted/40 p-2 rounded border mb-2">
-                  <span className="text-xs font-medium">
-                    {selectedRowIds.length} linha{selectedRowIds.length > 1 ? "s" : ""} selecionada{selectedRowIds.length > 1 ? "s" : ""}
-                  </span>
-                  <div className="flex gap-2">
-                    <Button 
-                      size="sm" 
-                      onClick={() => batchApplyMut.mutate(selectedRowIds)}
-                      disabled={batchApplyMut.isPending || batchSkipMut.isPending}
-                    >
-                      Aprovar em Lote
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      variant="destructive"
-                      onClick={() => batchSkipMut.mutate(selectedRowIds)}
-                      disabled={batchApplyMut.isPending || batchSkipMut.isPending}
-                    >
-                      Recusar em Lote
-                    </Button>
-                  </div>
+              {/* Listagem de operações integrada (Expandível) */}
+              {isExpanded && (
+                <div className="mt-4 pt-4 border-t space-y-3 cursor-default" onClick={(e) => e.stopPropagation()}>
+                  {rowsQ.isLoading && <div className="text-xs text-muted-foreground">Carregando lançamentos...</div>}
+                  {rowsQ.isError && <div className="text-xs text-destructive">Erro ao carregar lançamentos.</div>}
+                  {rowsQ.data && rowsQ.data.length === 0 && (
+                    <div className="text-xs text-muted-foreground">Nenhum lançamento encontrado nesta importação.</div>
+                  )}
+                  
+                  {rowsQ.data && rowsQ.data.length > 0 && (
+                    <div className="space-y-3">
+                      {/* Painel de Ações em Lote */}
+                      {selectedRowIds.length > 0 && (
+                        <div className="flex items-center justify-between bg-muted/40 p-2 rounded border mb-2">
+                          <span className="text-xs font-medium">
+                            {selectedRowIds.length} linha{selectedRowIds.length > 1 ? "s" : ""} selecionada{selectedRowIds.length > 1 ? "s" : ""}
+                          </span>
+                          <div className="flex gap-2">
+                            <Button 
+                              size="sm" 
+                              onClick={() => batchApplyMut.mutate(selectedRowIds)}
+                              disabled={batchApplyMut.isPending || batchSkipMut.isPending}
+                            >
+                              Aprovar em Lote
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="destructive"
+                              onClick={() => batchSkipMut.mutate(selectedRowIds)}
+                              disabled={batchApplyMut.isPending || batchSkipMut.isPending}
+                            >
+                              Recusar em Lote
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Tabela com scroll horizontal independente e scroll vertical interno limitado */}
+                      <div className="w-full overflow-x-auto max-h-[500px] overflow-y-auto border rounded-md">
+                        <table className="w-full text-xs">
+                          <thead className="bg-muted/40 sticky top-0 z-10">
+                            <tr>
+                              <th className="p-2 text-left w-6">
+                                <input 
+                                  type="checkbox" 
+                                  checked={(rowsQ.data ?? []).length > 0 && selectedRowIds.length === (rowsQ.data ?? []).filter(r => r.status !== 'applied').length}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedRowIds((rowsQ.data ?? []).filter(r => r.status !== 'applied').map(r => r.id));
+                                    } else {
+                                      setSelectedRowIds([]);
+                                    }
+                                  }}
+                                />
+                              </th>
+                              <th className="p-2 text-left">#</th>
+                              <th className="p-2 text-left">Cliente</th>
+                              <th className="p-2 text-left w-24">Data</th>
+                              <th className="p-2 text-left w-24">Descrição</th>
+                              <th className="p-2 text-right">Valor</th>
+                              <th className="p-2 text-left">Tipo</th>
+                              <th className="p-2 text-center">Conf.</th>
+                              <th className="p-2 text-left">Status</th>
+                              <th className="p-2"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(rowsQ.data ?? []).map((r: any) => {
+                              const c = r.canonical ?? {};
+                              const sugg = r.suggestions ?? {};
+                              const isSkipped = r.status === "skipped";
+                              const isApplied = r.status === "applied";
+                              
+                              return (
+                                <tr key={r.id} className={`border-t transition-colors ${isSkipped ? "opacity-50 line-through text-muted-foreground bg-muted/20" : ""} ${isApplied ? "bg-muted/5 text-muted-foreground" : ""}`}>
+                                  <td className="p-2">
+                                    {!isApplied && (
+                                      <input 
+                                        type="checkbox"
+                                        checked={selectedRowIds.includes(r.id)}
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                              setSelectedRowIds(prev => [...prev, r.id]);
+                                            } else {
+                                              setSelectedRowIds(prev => prev.filter(id => id !== r.id));
+                                            }
+                                        }}
+                                      />
+                                    )}
+                                  </td>
+                                  <td className="p-2">{r.row_index}</td>
+                                  
+                                  {/* Cliente */}
+                                  <td className="p-2">
+                                    {isApplied ? (
+                                      <span>{sugg.client?.name ?? c.client_name ?? "—"}</span>
+                                    ) : (
+                                      <div className="flex flex-col gap-1">
+                                        {/* Nome do cliente importado/extraído sempre visível */}
+                                        <div className="font-semibold text-foreground">
+                                          {c.client_name ?? "—"}
+                                        </div>
+                                        <select 
+                                          className="bg-background border rounded px-1 py-0.5 max-w-[150px] truncate text-[11px] text-muted-foreground"
+                                          value={r.resolved_client_id ?? ""}
+                                          disabled={updateRowMut.isPending}
+                                          onChange={(e) => {
+                                            const val = e.target.value || null;
+                                            const clientName = clientsQ.data?.find(cl => cl.id === val)?.name ?? null;
+                                            updateRowMut.mutate({
+                                              rowId: r.id,
+                                              updates: { 
+                                                resolved_client_id: val,
+                                                suggestions: {
+                                                  ...sugg,
+                                                  client: val ? { id: val, name: clientName } : null
+                                                }
+                                              },
+                                              oldValue: r.resolved_client_id,
+                                              newValue: val,
+                                              auditEvent: "MANUAL_CLIENT_CHANGE",
+                                              auditReason: `Alterado cliente para ${clientName ?? "Nenhum"}`
+                                            });
+                                          }}
+                                        >
+                                          <option value="">(Associar da base...)</option>
+                                          {(clientsQ.data ?? []).map(cl => (
+                                            <option key={cl.id} value={cl.id}>{cl.name}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                    )}
+                                  </td>
+
+                                  <td className="p-2 w-24 truncate">{formatDateBr(c.transaction_date)}</td>
+                                  <td className="p-2 w-24 max-w-[96px] truncate" title={c.description ?? ""}>{c.description ?? "—"}</td>
+                                  <td className="p-2 text-right">{c.amount != null ? Number(c.amount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—"}</td>
+                                  
+                                  {/* Tipo / Classificação */}
+                                  <td className="p-2">
+                                    {isApplied ? (
+                                      <Badge variant="outline">{sugg.subtype ?? sugg.type ?? "—"}</Badge>
+                                    ) : (
+                                      <select
+                                        className="bg-background border rounded px-1 py-0.5 text-[11px]"
+                                        value={`${sugg.type ?? ""}:${sugg.subtype ?? ""}`}
+                                        disabled={updateRowMut.isPending}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          const [type, subtype] = val.split(":");
+                                          updateRowMut.mutate({
+                                            rowId: r.id,
+                                            updates: {
+                                              suggestions: {
+                                                ...sugg,
+                                                type,
+                                                subtype
+                                              }
+                                            },
+                                            oldValue: `${sugg.type ?? ""}:${sugg.subtype ?? ""}`,
+                                            newValue: val,
+                                            auditEvent: "MANUAL_CLASSIFICATION_CHANGE",
+                                            auditReason: `Alterada classificação para ${type} / ${subtype}`
+                                          });
+                                        }}
+                                      >
+                                        <option value="INCOME:RECEITA">Receita</option>
+                                        <option value="INCOME:APORTE">Aporte</option>
+                                        <option value="EXPENSE:DESPESA_EMPRESA">Despesa Empresa</option>
+                                        <option value="EXPENSE:DESPESA_PESSOAL">Despesa Pessoal</option>
+                                      </select>
+                                    )}
+                                  </td>
+                                  
+                                  <td className="p-2 text-center">{r.confidence}</td>
+                                  <td className="p-2">
+                                    <Badge variant={r.status === "applied" ? "default" : r.status === "skipped" ? "secondary" : r.status === "LINE_FAILED" ? "destructive" : r.status === "LINE_REVIEW" ? "outline" : "secondary"}>
+                                      {r.status === "applied" ? <CheckCircle2 className="h-3 w-3 mr-1 inline" /> : <AlertCircle className="h-3 w-3 mr-1 inline" />}
+                                      {r.status}
+                                    </Badge>
+                                    {r.possible_duplicate && <Badge variant="destructive" className="ml-1">DUP</Badge>}
+                                  </td>
+                                  <td className="p-2 flex gap-1 justify-end">
+                                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setAuditRowId(r.id)}>Auditoria</Button>
+                                    {!isApplied && r.status !== "LINE_FAILED" && (
+                                      <>
+                                        {isSkipped ? (
+                                          <Button 
+                                            size="sm" 
+                                            variant="outline" 
+                                            className="h-7 text-xs flex items-center gap-1"
+                                            onClick={() => updateRowMut.mutate({
+                                              rowId: r.id,
+                                              updates: { status: "LINE_REVIEW" },
+                                              oldValue: "skipped",
+                                              newValue: "LINE_REVIEW",
+                                              auditEvent: "ROW_RESTORED",
+                                              auditReason: "Usuário reverteu a recusa da linha manualmente"
+                                            })}
+                                            disabled={updateRowMut.isPending}
+                                          >
+                                            <Undo2 className="h-3 w-3" /> Restaurar
+                                          </Button>
+                                        ) : (
+                                          <Button 
+                                            size="sm" 
+                                            variant="ghost" 
+                                            className="h-7 text-destructive text-xs flex items-center gap-1 hover:bg-destructive/10 hover:text-destructive"
+                                            onClick={() => updateRowMut.mutate({
+                                              rowId: r.id,
+                                              updates: { status: "skipped" },
+                                              oldValue: r.status,
+                                              newValue: "skipped",
+                                              auditEvent: "ROW_SKIPPED",
+                                              auditReason: "Usuário recusou a linha manualmente"
+                                            })}
+                                            disabled={updateRowMut.isPending}
+                                          >
+                                            <XCircle className="h-3 w-3" /> Recusar
+                                          </Button>
+                                        )}
+                                        
+                                        {!isSkipped && (
+                                          <Button 
+                                            size="sm" 
+                                            className="h-7" 
+                                            onClick={() => applyMut.mutate(r.id)} 
+                                            disabled={applyMut.isPending}
+                                          >
+                                            Aplicar
+                                          </Button>
+                                        )}
+                                      </>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
-
-              <table className="w-full text-xs">
-                <thead className="bg-muted/40 sticky top-0">
-                  <tr>
-                    <th className="p-2 text-left w-6">
-                      <input 
-                        type="checkbox" 
-                        checked={(rowsQ.data ?? []).length > 0 && selectedRowIds.length === (rowsQ.data ?? []).filter(r => r.status !== 'applied').length}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedRowIds((rowsQ.data ?? []).filter(r => r.status !== 'applied').map(r => r.id));
-                          } else {
-                            setSelectedRowIds([]);
-                          }
-                        }}
-                      />
-                    </th>
-                    <th className="p-2 text-left">#</th>
-                    <th className="p-2 text-left">Cliente</th>
-                    <th className="p-2 text-left w-24">Data</th>
-                    <th className="p-2 text-left w-24">Descrição</th>
-                    <th className="p-2 text-right">Valor</th>
-                    <th className="p-2 text-left">Tipo</th>
-                    <th className="p-2 text-center">Conf.</th>
-                    <th className="p-2 text-left">Status</th>
-                    <th className="p-2"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(rowsQ.data ?? []).map((r: any) => {
-                    const c = r.canonical ?? {};
-                    const sugg = r.suggestions ?? {};
-                    const isSkipped = r.status === "skipped";
-                    const isApplied = r.status === "applied";
-                    
-                    return (
-                      <tr key={r.id} className={`border-t transition-colors ${isSkipped ? "opacity-50 line-through text-muted-foreground bg-muted/20" : ""} ${isApplied ? "bg-muted/5 text-muted-foreground" : ""}`}>
-                        <td className="p-2">
-                          {!isApplied && (
-                            <input 
-                              type="checkbox"
-                              checked={selectedRowIds.includes(r.id)}
-                              onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedRowIds(prev => [...prev, r.id]);
-                                  } else {
-                                    setSelectedRowIds(prev => prev.filter(id => id !== r.id));
-                                  }
-                              }}
-                            />
-                          )}
-                        </td>
-                        <td className="p-2">{r.row_index}</td>
-                        
-                        {/* Cliente */}
-                        <td className="p-2">
-                          {isApplied ? (
-                            <span>{sugg.client?.name ?? c.client_name ?? "—"}</span>
-                          ) : (
-                            <div className="flex flex-col gap-1">
-                              {/* Nome do cliente importado/extraído sempre visível */}
-                              <div className="font-semibold text-foreground">
-                                {c.client_name ?? "—"}
-                              </div>
-                              <select 
-                                className="bg-background border rounded px-1 py-0.5 max-w-[150px] truncate text-[11px] text-muted-foreground"
-                                value={r.resolved_client_id ?? ""}
-                                disabled={updateRowMut.isPending}
-                                onChange={(e) => {
-                                  const val = e.target.value || null;
-                                  const clientName = clientsQ.data?.find(cl => cl.id === val)?.name ?? null;
-                                  updateRowMut.mutate({
-                                    rowId: r.id,
-                                    updates: { 
-                                      resolved_client_id: val,
-                                      suggestions: {
-                                        ...sugg,
-                                        client: val ? { id: val, name: clientName } : null
-                                      }
-                                    },
-                                    oldValue: r.resolved_client_id,
-                                    newValue: val,
-                                    auditEvent: "MANUAL_CLIENT_CHANGE",
-                                    auditReason: `Alterado cliente para ${clientName ?? "Nenhum"}`
-                                  });
-                                }}
-                              >
-                                <option value="">(Associar da base...)</option>
-                                {(clientsQ.data ?? []).map(cl => (
-                                  <option key={cl.id} value={cl.id}>{cl.name}</option>
-                                ))}
-                              </select>
-                            </div>
-                          )}
-                        </td>
-
-                        <td className="p-2 w-24 truncate">{formatDateBr(c.transaction_date)}</td>
-                        <td className="p-2 w-24 max-w-[96px] truncate" title={c.description ?? ""}>{c.description ?? "—"}</td>
-                        <td className="p-2 text-right">{c.amount != null ? Number(c.amount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—"}</td>
-                        
-                        {/* Tipo / Classificação */}
-                        <td className="p-2">
-                          {isApplied ? (
-                            <Badge variant="outline">{sugg.subtype ?? sugg.type ?? "—"}</Badge>
-                          ) : (
-                            <select
-                              className="bg-background border rounded px-1 py-0.5 text-[11px]"
-                              value={`${sugg.type ?? ""}:${sugg.subtype ?? ""}`}
-                              disabled={updateRowMut.isPending}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                const [type, subtype] = val.split(":");
-                                updateRowMut.mutate({
-                                  rowId: r.id,
-                                  updates: {
-                                    suggestions: {
-                                      ...sugg,
-                                      type,
-                                      subtype
-                                    }
-                                  },
-                                  oldValue: `${sugg.type ?? ""}:${sugg.subtype ?? ""}`,
-                                  newValue: val,
-                                  auditEvent: "MANUAL_CLASSIFICATION_CHANGE",
-                                  auditReason: `Alterada classificação para ${type} / ${subtype}`
-                                });
-                              }}
-                            >
-                              <option value="INCOME:RECEITA">Receita</option>
-                              <option value="INCOME:APORTE">Aporte</option>
-                              <option value="EXPENSE:DESPESA_EMPRESA">Despesa Empresa</option>
-                              <option value="EXPENSE:DESPESA_PESSOAL">Despesa Pessoal</option>
-                            </select>
-                          )}
-                        </td>
-                        
-                        <td className="p-2 text-center">{r.confidence}</td>
-                        <td className="p-2">
-                          <Badge variant={r.status === "applied" ? "default" : r.status === "skipped" ? "secondary" : r.status === "LINE_FAILED" ? "destructive" : r.status === "LINE_REVIEW" ? "outline" : "secondary"}>
-                            {r.status === "applied" ? <CheckCircle2 className="h-3 w-3 mr-1 inline" /> : <AlertCircle className="h-3 w-3 mr-1 inline" />}
-                            {r.status}
-                          </Badge>
-                          {r.possible_duplicate && <Badge variant="destructive" className="ml-1">DUP</Badge>}
-                        </td>
-                        <td className="p-2 flex gap-1 justify-end">
-                          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setAuditRowId(r.id)}>Auditoria</Button>
-                          {!isApplied && r.status !== "LINE_FAILED" && (
-                            <>
-                              {isSkipped ? (
-                                <Button 
-                                  size="sm" 
-                                  variant="outline" 
-                                  className="h-7 text-xs flex items-center gap-1"
-                                  onClick={() => updateRowMut.mutate({
-                                    rowId: r.id,
-                                    updates: { status: "LINE_REVIEW" },
-                                    oldValue: "skipped",
-                                    newValue: "LINE_REVIEW",
-                                    auditEvent: "ROW_RESTORED",
-                                    auditReason: "Usuário reverteu a recusa da linha manualmente"
-                                  })}
-                                  disabled={updateRowMut.isPending}
-                                >
-                                  <Undo2 className="h-3 w-3" /> Restaurar
-                                </Button>
-                              ) : (
-                                <Button 
-                                  size="sm" 
-                                  variant="ghost" 
-                                  className="h-7 text-destructive text-xs flex items-center gap-1 hover:bg-destructive/10 hover:text-destructive"
-                                  onClick={() => updateRowMut.mutate({
-                                    rowId: r.id,
-                                    updates: { status: "skipped" },
-                                    oldValue: r.status,
-                                    newValue: "skipped",
-                                    auditEvent: "ROW_SKIPPED",
-                                    auditReason: "Usuário recusou a linha manualmente"
-                                  })}
-                                  disabled={updateRowMut.isPending}
-                                >
-                                  <XCircle className="h-3 w-3" /> Recusar
-                                </Button>
-                              )}
-                              
-                              {!isSkipped && (
-                                <Button 
-                                  size="sm" 
-                                  className="h-7" 
-                                  onClick={() => applyMut.mutate(r.id)} 
-                                  disabled={applyMut.isPending}
-                                >
-                                  Aplicar
-                                </Button>
-                              )}
-                            </>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {rowsQ.data && rowsQ.data.length === 0 && (
-                    <tr><td colSpan={10} className="p-4 text-center text-muted-foreground">Sem linhas. Aguardando processamento ou arquivo vazio.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
+            </Card>
+          );
+        })}
+        {(!importsQ.data || importsQ.data.length === 0) && (
+          <div className="text-xs text-muted-foreground p-4 bg-card border rounded text-center">Nenhuma importação ainda.</div>
+        )}
       </div>
 
       <Sheet open={!!auditRowId} onOpenChange={(o) => !o && setAuditRowId(null)}>
