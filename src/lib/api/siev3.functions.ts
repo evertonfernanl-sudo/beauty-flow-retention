@@ -37,10 +37,10 @@ export const registerImportV3 = createServerFn({ method: "POST" })
         source: data.source,
         storagePath: data.storagePath,
       });
-      return { success: true, importId: imp.id, csvText: result.csvText, error: undefined as string | undefined } as const;
+      return { success: true, importId: imp.id, csvText: result.csvText ?? null, error: null };
     } catch (e: any) {
       console.error("Erro na execução da pipeline V3:", e);
-      return { success: false, importId: undefined, csvText: undefined as string | undefined, error: e.message ?? String(e) } as const;
+      return { success: false, importId: null, csvText: null, error: e.message ?? String(e) };
     }
   });
 
