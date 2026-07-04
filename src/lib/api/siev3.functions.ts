@@ -117,3 +117,31 @@ export const updateRowV3 = createServerFn({ method: "POST" })
     return { success: true } as const;
   });
 
+export const getImportsDebug = createServerFn({ method: "GET" })
+  .handler(async () => {
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data: imports, error: impErr } = await supabaseAdmin
+        .from("v3_imports")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(10);
+      
+      const { data: audit, error: auditErr } = await supabaseAdmin
+        .from("v3_audit_log")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(20);
+      
+      return { 
+        success: true, 
+        imports: imports ?? [], 
+        impErr: impErr?.message || null, 
+        audit: audit ?? [], 
+        auditErr: auditErr?.message || null 
+      };
+    } catch (e: any) {
+      return { success: false, error: e.message || String(e) };
+    }
+  });
+
