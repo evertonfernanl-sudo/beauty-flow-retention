@@ -1079,7 +1079,7 @@ export async function runPipeline(
       console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: downloadStorage\nRows: 0\nTime: ${downloadTime} ms\nStatus: ERROR\nError: ${dl.error?.message ?? "Dados vazios"}`);
       throw new Error(`Falha no download: ${dl.error?.message}`);
     }
-    const buf = new Uint8Array(await dl.data.arrayBuffer());
+    const buf = new Uint8Array(Buffer.from(await dl.data.arrayBuffer()));
     file_hash = await sha256Hex(buf);
     const downloadTime = Date.now() - startDownload;
     console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: downloadStorage\nRows: 0\nTime: ${downloadTime} ms\nStatus: OK`);
