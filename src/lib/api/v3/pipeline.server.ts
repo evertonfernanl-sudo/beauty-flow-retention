@@ -528,7 +528,7 @@ function parseBrNumber(s: string): number | null {
   const t = String(s).trim();
   if (!t) return null;
   // Detecta sinal
-  const negative = /^-|-$|\(.+\)/.test(t) || /\bD\b/i.test(t.trim().slice(-3));
+  const negative = /^-|-$|\(.+\)/.test(t) || /\bD\b/i.test(t.trim().slice(-3)) || /[Dd]$/.test(t.trim());
   const cleaned = t.replace(/[^\d,.\-]/g, "").replace(/^-/, "").replace(/-$/, "");
   if (!cleaned) return null;
   const commas = (cleaned.match(/,/g) ?? []).length;
@@ -773,6 +773,30 @@ export function classify(c: CanonicalRow): ClassificationResult {
     if (!direction) direction = "EXPENSE";
     confidence += 10;
     reasons.push("indicador D/C = D (+10)");
+  }
+
+  // Acréscimo de Regras solicitadas pelo Usuário (Pix Enviado/Recebido, sinais e letras D/C)
+  const descLower = desc.toLowerCase();
+  if (/\b(pix enviado|envio|transferencia enviada|transferência enviada|ted enviada|doc enviado|pagamento)\b/i.test(descLower)) {
+    direction = "EXPENSE";
+    confidence += 50;
+    reasons.push("descrição indica envio de dinheiro (despesa) (+50)");
+  } else if (/\b(pix recebido|recebimento|recebido|transferencia recebida|transferência recebida|ted recebida|doc recebido|deposito|depósito)\b/i.test(descLower)) {
+    direction = "INCOME";
+    confidence += 50;
+    reasons.push("descrição indica recebimento de dinheiro (receita) (+50)");
+  }
+
+  if (c.amount != null) {
+    if (c.amount < 0) {
+      direction = "EXPENSE";
+      confidence += 30;
+      reasons.push("valor negativo ou sufixo D detectado (despesa) (+30)");
+    } else if (c.amount > 0) {
+      direction = "INCOME";
+      confidence += 30;
+      reasons.push("valor positivo ou sufixo C detectado (receita) (+30)");
+    }
   }
 
   // Fallback de descrição para direção
