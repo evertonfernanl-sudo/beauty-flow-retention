@@ -102,8 +102,10 @@ export function parseXlsx(buffer: Uint8Array): RawTable {
 // - Agrupa itens por Y (mesma linha visual) e ordena por X (colunas).
 // - Se a página tiver texto insuficiente, marca imagePages para fallback OCR (Cap. 24.5–24.6).
 export async function parsePdf(buffer: Uint8Array): Promise<RawTable> {
+  const cleanBuffer = new Uint8Array(buffer.length);
+  cleanBuffer.set(buffer);
   const unpdf: any = await import("unpdf");
-  const pdf = await unpdf.getDocumentProxy(buffer);
+  const pdf = await unpdf.getDocumentProxy(cleanBuffer);
   const perPage: Array<Array<Array<{ text: string; x: number }>>> = [];
   const imagePages: number[] = [];
   let totalCellsEst = 0, totalCellsGot = 0;
@@ -1079,7 +1081,10 @@ export async function runPipeline(
       console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: downloadStorage\nRows: 0\nTime: ${downloadTime} ms\nStatus: ERROR\nError: ${dl.error?.message ?? "Dados vazios"}`);
       throw new Error(`Falha no download: ${dl.error?.message}`);
     }
-    const buf = new Uint8Array(Buffer.from(await dl.data.arrayBuffer()));
+    const arrayBuffer = await dl.data.arrayBuffer();
+    const rawBuf = new Uint8Array(arrayBuffer);
+    const buf = new Uint8Array(rawBuf.length);
+    buf.set(rawBuf);
     file_hash = await sha256Hex(buf);
     const downloadTime = Date.now() - startDownload;
     console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: downloadStorage\nRows: 0\nTime: ${downloadTime} ms\nStatus: OK`);
@@ -1148,8 +1153,10 @@ export async function runPipeline(
           stage: "OCR_EXECUTION", event: "OCR_START",
           reason: "Iniciando processo de conversão estrutural de PDF Imagem para CSV via Gemini",
         });
+        const cleanBuf = new Uint8Array(buf.length);
+        cleanBuf.set(buf);
         const { convertPdfBufferToCsvRaw } = await import("../worker.server");
-        ocrCsvText = await convertPdfBufferToCsvRaw(buf, args.storagePath.split("/").pop() || "extrato.pdf");
+        ocrCsvText = await convertPdfBufferToCsvRaw(cleanBuf, args.storagePath.split("/").pop() || "extrato.pdf");
 
         const duration = Date.now() - startTime;
 
