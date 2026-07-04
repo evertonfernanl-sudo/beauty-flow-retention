@@ -49,7 +49,43 @@ export const applyRowV3 = createServerFn({ method: "POST" })
   .inputValidator((i) => z.object({ rowId: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     const { applyRow } = await import("@/lib/api/v3/pipeline.server");
-    return await applyRow(context.supabase as any, { rowId: data.rowId });
+    const result = await applyRow(context.supabase as any, { rowId: data.rowId });
+
+    if (result && result.ok) {
+      try {
+        const { data: row, error: rowErr } = await context.supabase
+          .from("v3_import_rows")
+          .select("company_id, import_id, canonical, suggestions, applied_result, resolved_client_id, resolved_service_id")
+          .eq("id", data.rowId)
+          .single();
+
+        if (!rowErr && row) {
+          const { projectV3RowToBusiness } = await import("@/application/business-projection/orchestrator");
+          const projCtx = {
+            companyId: row.company_id,
+            importId: row.import_id,
+            rowId: data.rowId,
+            canonicalData: row.canonical as any,
+            suggestions: row.suggestions as any,
+            appliedResult: {
+              transactionId: (row.applied_result as any)?.transaction_id,
+              clientId: row.resolved_client_id,
+              serviceId: row.resolved_service_id,
+              appliedAt: (row.applied_result as any)?.applied_at || new Date().toISOString(),
+            }
+          };
+
+          // Executa a projeção de negócios de forma assíncrona pós-persistência (com isolamento transacional)
+          projectV3RowToBusiness(context.supabase as any, projCtx).catch(err => {
+            console.error("[applyRowV3 BACKGROUND PROJECTION ERROR]:", err);
+          });
+        }
+      } catch (err) {
+        console.error("[applyRowV3 PROJECTION DISPATCH ERROR]:", err);
+      }
+    }
+
+    return result;
   });
 
 export const deleteImportV3 = createServerFn({ method: "POST" })
