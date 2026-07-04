@@ -327,10 +327,10 @@ function ImportV3Page() {
                       />
                     </th>
                     <th className="p-2 text-left">#</th>
+                    <th className="p-2 text-left">Cliente</th>
                     <th className="p-2 text-left">Data</th>
                     <th className="p-2 text-left">Descrição</th>
                     <th className="p-2 text-right">Valor</th>
-                    <th className="p-2 text-left">Cliente</th>
                     <th className="p-2 text-left">Tipo</th>
                     <th className="p-2 text-center">Conf.</th>
                     <th className="p-2 text-left">Status</th>
@@ -352,19 +352,16 @@ function ImportV3Page() {
                               type="checkbox"
                               checked={selectedRowIds.includes(r.id)}
                               onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedRowIds(prev => [...prev, r.id]);
-                                } else {
-                                  setSelectedRowIds(prev => prev.filter(id => id !== r.id));
-                                }
+                                  if (e.target.checked) {
+                                    setSelectedRowIds(prev => [...prev, r.id]);
+                                  } else {
+                                    setSelectedRowIds(prev => prev.filter(id => id !== r.id));
+                                  }
                               }}
                             />
                           )}
                         </td>
                         <td className="p-2">{r.row_index}</td>
-                        <td className="p-2">{c.transaction_date ?? "—"}</td>
-                        <td className="p-2 max-w-[260px] truncate" title={c.description ?? ""}>{c.description ?? "—"}</td>
-                        <td className="p-2 text-right">{c.amount != null ? Number(c.amount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—"}</td>
                         
                         {/* Cliente */}
                         <td className="p-2">
@@ -407,6 +404,10 @@ function ImportV3Page() {
                             </div>
                           )}
                         </td>
+
+                        <td className="p-2">{c.transaction_date ?? "—"}</td>
+                        <td className="p-2 max-w-[260px] truncate" title={c.description ?? ""}>{c.description ?? "—"}</td>
+                        <td className="p-2 text-right">{c.amount != null ? Number(c.amount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—"}</td>
                         
                         {/* Tipo / Classificação */}
                         <td className="p-2">

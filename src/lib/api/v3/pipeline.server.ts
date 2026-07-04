@@ -1480,6 +1480,71 @@ export async function applyRow(sb: SB, args: { rowId: string }): Promise<{ ok: b
   const subtype = sugg.subtype ?? (type === "INCOME" ? "RECEITA" : "DESPESA_EMPRESA");
   const isPersonal = subtype === "DESPESA_PESSOAL";
 
+  // --- RECONCILIAÇÃO E CADASTRO DE CLIENTE (Item de Lançamento) ---
+  let clientId = row.resolved_client_id;
+  if (!clientId && canonical.client_name) {
+    const cleanName = canonical.client_name.trim();
+    // 1. Buscar na base de clientes cadastrados por nome
+    const { data: existingClient } = await sb
+      .from("clients")
+      .select("id")
+      .eq("company_id", row.company_id)
+      .ilike("name", cleanName)
+      .limit(1)
+      .maybeSingle();
+
+    if (existingClient) {
+      clientId = existingClient.id;
+    } else {
+      // 2. Não localizou na base -> criar cadastro do cliente
+      const { data: newClient, error: createClientErr } = await sb
+        .from("clients")
+        .insert({
+          company_id: row.company_id,
+          name: cleanName,
+        })
+        .select("id")
+        .single();
+      
+      if (createClientErr || !newClient) {
+        throw new Error(`Falha ao cadastrar cliente: ${createClientErr?.message}`);
+      }
+      clientId = newClient.id;
+    }
+  }
+
+  // --- GERAR ATENDIMENTO (SÓ SE TIVER CLIENTE) ---
+  if (clientId) {
+    const startOfDay = `${canonical.transaction_date}T00:00:00.000Z`;
+    const endOfDay = `${canonical.transaction_date}T23:59:59.999Z`;
+
+    // Evitar agendamento duplicado para o mesmo dia e preço
+    const { data: dupApp } = await sb
+      .from("appointments")
+      .select("id")
+      .eq("company_id", row.company_id)
+      .eq("client_id", clientId)
+      .eq("price", amount)
+      .gte("start_datetime", startOfDay)
+      .lte("start_datetime", endOfDay)
+      .limit(1);
+
+    if (!dupApp || dupApp.length === 0) {
+      const { error: appErr } = await sb.from("appointments").insert({
+        company_id: row.company_id,
+        client_id: clientId,
+        price: amount,
+        start_datetime: `${canonical.transaction_date}T09:00:00.000Z`,
+        end_datetime: `${canonical.transaction_date}T10:00:00.000Z`,
+        status: "concluded",
+      } as any);
+      if (appErr) {
+        console.error("[APPLY V3] Erro ao criar agendamento/atendimento:", appErr.message);
+      }
+    }
+  }
+
+  // --- LANÇAR NA TABELA FINANCEIRA (CAIXA) ---
   const { data: tx, error: txErr } = await sb.from("v3_financial_transactions").insert({
     company_id: row.company_id,
     v3_row_id: row.id,
@@ -1488,7 +1553,7 @@ export async function applyRow(sb: SB, args: { rowId: string }): Promise<{ ok: b
     description: canonical.description ?? "(sem descrição)",
     amount,
     transaction_date: canonical.transaction_date,
-    client_id: row.resolved_client_id,
+    client_id: clientId,
     service_id: row.resolved_service_id,
     is_personal: isPersonal,
     revenue_type: subtype === "APORTE" ? "APORTE" : null,
@@ -1500,6 +1565,7 @@ export async function applyRow(sb: SB, args: { rowId: string }): Promise<{ ok: b
   await sb.from("v3_import_rows").update({
     status: "applied",
     applied_result: { transaction_id: tx.id, applied_at: new Date().toISOString() },
+    resolved_client_id: clientId,
   } as any).eq("id", row.id);
 
   await auditLog(sb, {
