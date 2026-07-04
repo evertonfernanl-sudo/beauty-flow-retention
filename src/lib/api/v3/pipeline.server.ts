@@ -1108,22 +1108,32 @@ export async function runPipeline(
       console.log(`[SIE V3] PDF Imagem/Escaneado detectado (file_hash: ${file_hash}). Iniciando OCR Fallback...`);
       
       // 1. Verificar cache determinístico
-      const { data: cached } = await (sb as any)
-        .from("v3_ocr_cache")
-        .select("ocr_text")
-        .eq("file_hash", file_hash!)
-        .maybeSingle();
-
       let ocrCsvText = "";
-      if (cached?.ocr_text) {
-        console.log(`[SIE V3] Cache localizado para o arquivo. Carregando dados...`);
-        ocrCsvText = cached.ocr_text;
+      try {
+        const { data: cached, error: cacheReadErr } = await (sb as any)
+          .from("v3_ocr_cache")
+          .select("ocr_text")
+          .eq("file_hash", file_hash!)
+          .maybeSingle();
         
-        await auditLog(sb, {
-          importId: args.importId, companyId: args.companyId,
-          stage: "OCR_EXECUTION", event: "OCR_CACHE_HIT",
-          reason: "Representação obtida do cache de hashes determinístico",
-        });
+        if (cacheReadErr) {
+          console.warn("[SIE V3] Erro ao consultar cache de OCR:", cacheReadErr.message);
+        } else if (cached?.ocr_text) {
+          console.log(`[SIE V3] Cache localizado para o arquivo. Carregando dados...`);
+          ocrCsvText = cached.ocr_text;
+          
+          await auditLog(sb, {
+            importId: args.importId, companyId: args.companyId,
+            stage: "OCR_EXECUTION", event: "OCR_CACHE_HIT",
+            reason: "Representação obtida do cache de hashes determinístico",
+          });
+        }
+      } catch (cacheErr: any) {
+        console.warn("[SIE V3] Exceção ao consultar cache de OCR:", cacheErr.message || cacheErr);
+      }
+
+      if (ocrCsvText) {
+        // Cache localizado, pula processamento da IA
       } else {
         const apiKey = process.env.LOVABLE_API_KEY;
         if (!apiKey) {
@@ -1164,12 +1174,16 @@ export async function runPipeline(
         const duration = Date.now() - startTime;
 
         // Salvar em cache
-        const { error: cacheErr } = await (sb as any).from("v3_ocr_cache").insert({
-          file_hash: file_hash!,
-          ocr_text: ocrCsvText,
-        });
-        if (cacheErr) {
-          console.error("[SIE V3] Erro ao gravar no cache de OCR:", cacheErr.message);
+        try {
+          const { error: cacheErr } = await (sb as any).from("v3_ocr_cache").insert({
+            file_hash: file_hash!,
+            ocr_text: ocrCsvText,
+          });
+          if (cacheErr) {
+            console.warn("[SIE V3] Erro ao gravar no cache de OCR:", cacheErr.message);
+          }
+        } catch (cacheWriteErr: any) {
+          console.warn("[SIE V3] Exceção ao gravar no cache de OCR:", cacheWriteErr.message || cacheWriteErr);
         }
 
         // Audit Log
@@ -1196,7 +1210,7 @@ export async function runPipeline(
           stage: "OCR_EXECUTION", event: "OCR_REVIEW",
           reason: lastError,
         });
-        return { rowsInserted: 0, finalState: "REVIEW" };
+        return { rowsInserted: 0, finalState: "REVIEW", csvText };
       }
     } else {
       // PDF Nativo ou outros formatos — Cap. 37 — HEADER_FAILED interrompe se falhou
@@ -1209,7 +1223,7 @@ export async function runPipeline(
           input: { headers_seen: raw.headers, sample: raw.rows.slice(0, 3) } as any,
           reason: lastError,
         });
-        return { rowsInserted: 0, finalState: "FAILED" };
+        return { rowsInserted: 0, finalState: "FAILED", csvText };
       }
     }
 
@@ -1226,7 +1240,7 @@ export async function runPipeline(
         stage: "conversion", event: "OCR_REVIEW",
         reason: lastError,
       });
-      return { rowsInserted: 0, finalState: "REVIEW" };
+      return { rowsInserted: 0, finalState: "REVIEW", csvText };
     }
 
     // 3) Mapeamento
