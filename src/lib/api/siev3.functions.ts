@@ -13,22 +13,23 @@ export const registerImportV3 = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i) => RegisterInput.parse(i))
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
-    const { data: profile } = await supabase
-      .from("profiles").select("company_id").eq("id", userId).maybeSingle();
-    if (!profile?.company_id) throw new Error("Empresa não encontrada");
-    const { data: imp, error } = await supabase.from("v3_imports").insert({
-      company_id: profile.company_id,
-      source: data.source,
-      filename: data.filename,
-      storage_path: data.storagePath,
-      size_bytes: data.size,
-      status: "uploaded",
-      created_by: userId,
-    }).select("id").single();
-    if (error) throw new Error(error.message);
-    console.log(`\n[PHASE 0 LOG] IMPORT ${imp.id}\nStage: registerImportV3\nRows: 0\nTime: 0 ms\nStatus: OK`);
     try {
+      const { supabase, userId } = context;
+      const { data: profile } = await supabase
+        .from("profiles").select("company_id").eq("id", userId).maybeSingle();
+      if (!profile?.company_id) throw new Error("Empresa não encontrada");
+      const { data: imp, error } = await supabase.from("v3_imports").insert({
+        company_id: profile.company_id,
+        source: data.source,
+        filename: data.filename,
+        storage_path: data.storagePath,
+        size_bytes: data.size,
+        status: "uploaded",
+        created_by: userId,
+      }).select("id").single();
+      if (error) throw new Error(error.message);
+      console.log(`\n[PHASE 0 LOG] IMPORT ${imp.id}\nStage: registerImportV3\nRows: 0\nTime: 0 ms\nStatus: OK`);
+      
       const { runPipeline } = await import("@/lib/api/v3/pipeline.server");
       const result = await runPipeline(supabase as any, {
         importId: imp.id,
@@ -39,7 +40,7 @@ export const registerImportV3 = createServerFn({ method: "POST" })
       return { success: true, importId: imp.id, csvText: result.csvText, error: undefined as string | undefined } as const;
     } catch (e: any) {
       console.error("Erro na execução da pipeline V3:", e);
-      return { success: false, importId: imp.id, csvText: undefined as string | undefined, error: e.message ?? String(e) } as const;
+      return { success: false, importId: undefined, csvText: undefined as string | undefined, error: e.message ?? String(e) } as const;
     }
   });
 
