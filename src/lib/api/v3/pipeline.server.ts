@@ -104,7 +104,7 @@ export function parseXlsx(buffer: Uint8Array): RawTable {
 export async function parsePdf(buffer: Uint8Array): Promise<RawTable> {
   const unpdf: any = await import("unpdf");
   const pdf = await unpdf.getDocumentProxy(buffer);
-  const perPage: string[][][] = [];
+  const perPage: Array<Array<Array<{ text: string; x: number }>>> = [];
   const imagePages: number[] = [];
   let totalCellsEst = 0, totalCellsGot = 0;
 
@@ -148,20 +148,31 @@ export async function parsePdf(buffer: Uint8Array): Promise<RawTable> {
 
     // Colunas por gaps de X: agrupa tokens contíguos com gap < xGap; separa em células.
     const xGap = 8;
-    const matrix: string[][] = [];
+    const matrix: Array<Array<{ text: string; x: number }>> = [];
     for (const line of lines) {
       line.sort((a, b) => a.x - b.x);
-      const cells: string[] = [];
+      const cells: Array<{ text: string; x: number }> = [];
       let buf = "";
+      let startX = -1;
       let lastX = -Infinity;
       for (const t of line) {
-        if (buf === "") { buf = t.str; lastX = t.x + (t.str.length * 3); continue; }
-        if (t.x - lastX > xGap) { cells.push(buf.trim()); buf = t.str; }
-        else { buf += " " + t.str; }
+        if (buf === "") {
+          buf = t.str;
+          startX = t.x;
+          lastX = t.x + (t.str.length * 3);
+          continue;
+        }
+        if (t.x - lastX > xGap) {
+          cells.push({ text: buf.trim(), x: startX });
+          buf = t.str;
+          startX = t.x;
+        } else {
+          buf += " " + t.str;
+        }
         lastX = t.x + (t.str.length * 3);
       }
-      if (buf) cells.push(buf.trim());
-      if (cells.some((c) => c.length > 0)) matrix.push(cells);
+      if (buf) cells.push({ text: buf.trim(), x: startX });
+      if (cells.some((c) => c.text.length > 0)) matrix.push(cells);
     }
 
     const modeCols = mostCommon(matrix.map((r) => r.length));
@@ -170,7 +181,7 @@ export async function parsePdf(buffer: Uint8Array): Promise<RawTable> {
     perPage.push(matrix);
   }
 
-  const merged: string[][] = [];
+  const merged: Array<Array<{ text: string; x: number }>> = [];
   for (const page of perPage) merged.push(...page);
   const confidence = totalCellsEst > 0 ? Math.min(1, totalCellsGot / totalCellsEst) : 0;
 
@@ -187,14 +198,29 @@ export async function parsePdf(buffer: Uint8Array): Promise<RawTable> {
   return table;
 }
 
-function finalizeTable(matrix: string[][], meta: Record<string, unknown>, charset: string): RawTable {
+function finalizeTable(
+  matrix: Array<Array<string | { text: string; x: number }>>,
+  meta: Record<string, unknown>,
+  charset: string
+): RawTable {
   if (matrix.length === 0) return { headers: [], rows: [], meta, charset, headerFailed: true };
+
+  const getCellText = (cell: string | { text: string; x: number }): string => {
+    if (cell == null) return "";
+    if (typeof cell === "string") return cell;
+    return cell.text ?? "";
+  };
+
+  const getCellX = (cell: string | { text: string; x: number }): number => {
+    if (cell == null || typeof cell === "string") return 0;
+    return cell.x ?? 0;
+  };
 
   // Cap. 24.3 — descarta linhas iniciais irrelevantes até achar header com ≥2 cabeçalhos conhecidos
   const IGNORE = /^(extrato|banco|ag[eê]ncia|conta|per[ií]odo|cliente|data|resumo)?\s*[:\-–]?\s*[0-9\/\-\.\s]*$/i;
   let headerIdx = -1;
   for (let i = 0; i < matrix.length; i++) {
-    const cells = matrix[i].map((c) => String(c ?? "").trim()).filter(Boolean);
+    const cells = matrix[i].map((c) => getCellText(c).trim()).filter(Boolean);
     if (cells.length < 2) continue;
     const knownCount = cells.filter((c) => matchesAnyHeader(c)).length;
     if (knownCount >= 2) { headerIdx = i; break; }
@@ -207,7 +233,10 @@ function finalizeTable(matrix: string[][], meta: Record<string, unknown>, charse
     return { headers: [], rows: [], meta, charset, headerFailed: true };
   }
 
-  const rawHeaders = matrix[headerIdx].map((h, i) => String(h ?? `col_${i}`).trim() || `col_${i}`);
+  const rawHeaders = matrix[headerIdx].map((h, i) => String(getCellText(h) ?? `col_${i}`).trim() || `col_${i}`);
+  const headerXs = matrix[headerIdx].map((h) => getCellX(h));
+  const isCoordinateBased = matrix[headerIdx].some(h => typeof h !== "string");
+
   // dedupe cabeçalhos duplicados no arquivo
   const seen = new Map<string, number>();
   const headers = rawHeaders.map((h) => {
@@ -219,10 +248,10 @@ function finalizeTable(matrix: string[][], meta: Record<string, unknown>, charse
   const bodyMatrix = matrix.slice(headerIdx + 1);
   const headerSignature = rawHeaders.map((c) => String(c ?? "").trim().toLowerCase()).filter(Boolean).join("|");
 
-  const filteredBodyMatrix: string[][] = [];
+  const filteredBodyMatrix: Array<Array<string | { text: string; x: number }>> = [];
   for (const row of bodyMatrix) {
     // 1. Filtrar cabeçalho repetido (comum em PDFs multipáginas)
-    const rowSig = row.map((c) => String(c ?? "").trim().toLowerCase()).filter(Boolean).join("|");
+    const rowSig = row.map((c) => String(getCellText(c) ?? "").trim().toLowerCase()).filter(Boolean).join("|");
     if (headerSignature && rowSig === headerSignature) {
       continue;
     }
@@ -230,7 +259,7 @@ function finalizeTable(matrix: string[][], meta: Record<string, unknown>, charse
     // 2. Filtrar resumos e saldos
     const isSummaryOrBalance = row.some((cell) => {
       if (cell == null) return false;
-      const s = String(cell).trim().toLowerCase();
+      const s = String(getCellText(cell)).trim().toLowerCase();
       const hasSummaryKw = SUMMARY_KEYWORDS.some((kw) => s === kw || s.startsWith(kw + " ") || s.startsWith(kw + ":"));
       if (hasSummaryKw) return true;
 
@@ -247,6 +276,37 @@ function finalizeTable(matrix: string[][], meta: Record<string, unknown>, charse
     filteredBodyMatrix.push(row);
   }
 
+  // Alinhar a matriz do corpo com base nos Xs do cabeçalho
+  const alignedBodyMatrix: string[][] = [];
+  for (const row of filteredBodyMatrix) {
+    if (isCoordinateBased) {
+      const alignedRow = new Array(headers.length).fill("");
+      for (const cell of row) {
+        const txt = getCellText(cell);
+        const cx = getCellX(cell);
+        if (!txt) continue;
+        
+        let closestIdx = 0;
+        let minDiff = Infinity;
+        for (let j = 0; j < headerXs.length; j++) {
+          const diff = Math.abs(headerXs[j] - cx);
+          if (diff < minDiff) {
+            minDiff = diff;
+            closestIdx = j;
+          }
+        }
+        if (alignedRow[closestIdx]) {
+          alignedRow[closestIdx] += " " + txt;
+        } else {
+          alignedRow[closestIdx] = txt;
+        }
+      }
+      alignedBodyMatrix.push(alignedRow);
+    } else {
+      alignedBodyMatrix.push(row.map(c => getCellText(c)));
+    }
+  }
+
   // Cap. 24.7 — merge de linhas quebradas: linha sem data válida E sem valor/débito/crédito → concatena em description da anterior
   const dateIdx = headers.findIndex((h) => HEADER_HINTS.transaction_date.some((r) => r.test(h)));
   const valueIdxs = headers.map((h, i) => {
@@ -259,7 +319,7 @@ function finalizeTable(matrix: string[][], meta: Record<string, unknown>, charse
 
   const merged: string[][] = [];
   let lastValidDateCell = "";
-  for (const row of filteredBodyMatrix) {
+  for (const row of alignedBodyMatrix) {
     const dateCell = dateIdx >= 0 ? String(row[dateIdx] ?? "").trim() : "";
     const hasValue = valueIdxs.some((i) => String(row[i] ?? "").trim().length > 0);
     const hasDate = parseDate(dateCell) != null;
@@ -418,7 +478,7 @@ export function buildCanonical(
     if (debit != null && debit !== 0) errors.push("Débito e Crédito ambos preenchidos — Crédito prevaleceu (WARNING)");
     amount = Math.abs(credit);
   } else if (debit != null && debit !== 0) {
-    amount = Math.abs(debit);
+    amount = -Math.abs(debit);
   }
 
   const dateStr = get("transaction_date");
@@ -1065,17 +1125,42 @@ export async function runPipeline(
           reason: "Representação obtida do cache de hashes determinístico",
         });
       } else {
-        console.log(`[SIE V3] Cache não localizado. Iniciando OCR Multimodal via Gemini...`);
-        const startTime = Date.now();
-        
-        await auditLog(sb, {
-          importId: args.importId, companyId: args.companyId,
-          stage: "OCR_EXECUTION", event: "OCR_START",
-          reason: "Extração estrutural inválida; iniciando processamento de imagens",
-        });
+        const apiKey = process.env.LOVABLE_API_KEY;
+        if (!apiKey) {
+          throw new Error("IA indisponível para OCR: LOVABLE_API_KEY ausente no ambiente de produção.");
+        }
 
-        // Executar OCR
-        ocrCsvText = await executePdfOcr(buf, args.storagePath.split("/").pop() || "extrato.pdf");
+        const startTime = Date.now();
+        const unpdf: any = await import("unpdf");
+        const pdfProxy = await unpdf.getDocumentProxy(buf);
+        let hasNativeText = false;
+        for (let i = 1; i <= pdfProxy.numPages; i++) {
+          const page = await pdfProxy.getPage(i);
+          const tc = await page.getTextContent();
+          if (tc.items && tc.items.length > 0) {
+            hasNativeText = true;
+            break;
+          }
+        }
+
+        if (hasNativeText) {
+          console.log(`[SIE V3] Camada de texto nativa detectada no PDF imagem. Iniciando formatação de texto Gemini...`);
+          await auditLog(sb, {
+            importId: args.importId, companyId: args.companyId,
+            stage: "OCR_EXECUTION", event: "OCR_START",
+            reason: "Extração estrutural inválida, mas texto nativo presente; iniciando formatação Gemini de texto",
+          });
+          ocrCsvText = await executeNativePdfFormatter(pdfProxy, apiKey);
+        } else {
+          console.log(`[SIE V3] Sem camada de texto nativa. Iniciando OCR Multimodal via Gemini...`);
+          await auditLog(sb, {
+            importId: args.importId, companyId: args.companyId,
+            stage: "OCR_EXECUTION", event: "OCR_START",
+            reason: "Extração estrutural inválida e sem texto nativo; iniciando processamento de imagens (Gemini OCR)",
+          });
+          ocrCsvText = await executePdfOcr(buf, args.storagePath.split("/").pop() || "extrato.pdf");
+        }
+
         const duration = Date.now() - startTime;
 
         // Salvar em cache
@@ -1092,7 +1177,7 @@ export async function runPipeline(
         await auditLog(sb, {
           importId: args.importId, companyId: args.companyId,
           stage: "OCR_EXECUTION", event: "OCR_SUCCESS",
-          reason: `OCR executado com sucesso. Páginas: ${numPages} | Duração: ${duration}ms`,
+          reason: `OCR/Formatação executado com sucesso. Páginas: ${numPages} | Duração: ${duration}ms`,
         });
       }
 
@@ -1533,4 +1618,108 @@ async function executePdfOcr(buffer: Uint8Array, filename: string): Promise<stri
   }
 
   return ocrCsvAccumulator;
+}
+
+async function executeNativePdfFormatter(pdf: any, apiKey: string): Promise<string> {
+  let nativePagesText: string[] = [];
+  
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    const items = textContent.items as any[];
+    
+    if (items && items.length > 0) {
+      const yThreshold = 5;
+      const rowsMap: { y: number; items: typeof items }[] = [];
+      
+      for (const item of items) {
+        if (!item.str) continue;
+        const y = item.transform ? item.transform[5] : 0;
+        let foundRow = rowsMap.find(r => Math.abs(r.y - y) <= yThreshold);
+        if (foundRow) {
+          foundRow.items.push(item);
+        } else {
+          rowsMap.push({ y, items: [item] });
+        }
+      }
+      
+      rowsMap.sort((a, b) => b.y - a.y);
+      
+      let pageText = "";
+      for (const row of rowsMap) {
+        row.items.sort((a, b) => (a.transform ? a.transform[4] : 0) - (b.transform ? b.transform[4] : 0));
+        
+        let line = "";
+        let lastXEnd = -1;
+        for (const item of row.items) {
+          const x = item.transform ? item.transform[4] : 0;
+          const height = item.height || 10;
+          const itemWidth = item.width || (item.str.length * (height * 0.6));
+          
+          if (lastXEnd === -1) {
+            line = item.str;
+          } else {
+            const spacing = x - lastXEnd;
+            if (spacing > 12) {
+              line += "\t" + item.str;
+            } else {
+              line += (spacing > 2 ? " " : "") + item.str;
+            }
+          }
+          lastXEnd = x + itemWidth;
+        }
+        pageText += line + "\n";
+      }
+      
+      if (pageText.trim()) {
+        nativePagesText.push(pageText);
+      }
+    }
+  }
+  
+  if (nativePagesText.length === 0) return "";
+
+  let nativeCsvAccumulator = "";
+  for (let i = 0; i < nativePagesText.length; i++) {
+    const pageTextContent = nativePagesText[i];
+    console.log(`[SIE V3] Enviando página nativa ${i + 1} para formatação CSV via Gemini...`);
+    
+    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Você é um especialista em estruturação de dados e reconstrução de tabelas. Sua tarefa é converter o texto de extrato bancário fornecido abaixo diretamente no formato CSV. O texto original foi extraído de um PDF nativo e preserva as quebras de linha e colunas (separadas por tabulação '\\t' ou múltiplos espaços). Identifique a estrutura física das tabelas e alinhe corretamente as informações em colunas correspondentes do CSV (como Data, Descrição, Documento, Valor, Saldo, etc.). Certifique-se de que cada registro ocupe uma única linha do CSV com todas as suas respectivas colunas preenchidas. Não resuma, não ignore linhas, não modifique os textos/valores originais e não aplique nenhuma regra de negócio. Retorne APENAS o código do CSV válido, sem blocos de código markdown (como ```csv), sem explicações e sem comentários.\n\nTexto original:\n" + pageTextContent
+              }
+            ]
+          }
+        ]
+      })
+    });
+    
+    if (!aiRes.ok) {
+      const errText = await aiRes.text();
+      throw new Error(`Erro no AI Gateway (${aiRes.status}): ${errText.slice(0, 200)}`);
+    }
+    
+    const aiJson = (await aiRes.json()) as { choices?: { message?: { content?: string } }[] };
+    let pageCsv = aiJson.choices?.[0]?.message?.content ?? "";
+    pageCsv = pageCsv.trim();
+    if (pageCsv.startsWith("```")) {
+      pageCsv = pageCsv.replace(/^```[a-zA-Z]*\n/, "").replace(/\n```$/, "");
+    }
+    if (pageCsv) {
+      nativeCsvAccumulator += pageCsv + "\n";
+    }
+  }
+  return nativeCsvAccumulator;
 }
