@@ -1055,6 +1055,7 @@ export async function runPipeline(
   let total = 0, failed = 0, review = 0;
   let rowsInserted = 0;
   let lastError: string | null = null;
+  let finalState: FinalState = "SUCCESS";
 
   try {
     // Item 2 — schema compatibility
@@ -1367,14 +1368,13 @@ export async function runPipeline(
       throw persistErr;
     }
 
-    return { rowsInserted, finalState: "SUCCESS" /* placeholder; finally recalcula */ };
   } catch (err: any) {
     lastError = err?.message ?? String(err);
     throw err;
   } finally {
     // Item 3 — computeFinalState é SEMPRE executado.
     const startState = Date.now();
-    const finalState = computeFinalState({
+    finalState = computeFinalState({
       terminal,
       ocrConfidence,
       total,
@@ -1408,11 +1408,9 @@ export async function runPipeline(
     } catch {
       // não relança — o erro original (se houver) já é preservado
     }
-
-    // Retorno funcional (apenas quando não houve throw)
-    // eslint-disable-next-line no-unsafe-finally
-    return { rowsInserted, finalState, csvText };
   }
+
+  return { rowsInserted, finalState, csvText };
 }
 
 // ============================================================
