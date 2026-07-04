@@ -21,6 +21,15 @@ export const Route = createFileRoute("/_authenticated/app/import")({
   component: ImportV3Page,
 });
 
+const formatDateBr = (dateStr: string | null | undefined) => {
+  if (!dateStr) return "—";
+  const parts = dateStr.split("-");
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return dateStr;
+};
+
 function ImportV3Page() {
   const profileQ = useCurrentProfile();
   const companyId = (profileQ.data as any)?.company_id ?? profileQ.data?.company?.id ?? null;
@@ -328,8 +337,8 @@ function ImportV3Page() {
                     </th>
                     <th className="p-2 text-left">#</th>
                     <th className="p-2 text-left">Cliente</th>
-                    <th className="p-2 text-left">Data</th>
-                    <th className="p-2 text-left">Descrição</th>
+                    <th className="p-2 text-left w-24">Data</th>
+                    <th className="p-2 text-left w-24">Descrição</th>
                     <th className="p-2 text-right">Valor</th>
                     <th className="p-2 text-left">Tipo</th>
                     <th className="p-2 text-center">Conf.</th>
@@ -405,8 +414,8 @@ function ImportV3Page() {
                           )}
                         </td>
 
-                        <td className="p-2">{c.transaction_date ?? "—"}</td>
-                        <td className="p-2 max-w-[260px] truncate" title={c.description ?? ""}>{c.description ?? "—"}</td>
+                        <td className="p-2 w-24 truncate">{formatDateBr(c.transaction_date)}</td>
+                        <td className="p-2 w-24 max-w-[96px] truncate" title={c.description ?? ""}>{c.description ?? "—"}</td>
                         <td className="p-2 text-right">{c.amount != null ? Number(c.amount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—"}</td>
                         
                         {/* Tipo / Classificação */}
