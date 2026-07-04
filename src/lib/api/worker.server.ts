@@ -1135,7 +1135,7 @@ export async function extractFullTextFromPdfBuffer(buf: Uint8Array, filename: st
     }
     
     try {
-      const resizeImageRGBA = (rgbaData: Uint8ClampedArray, width: number, height: number, maxDim = 950) => {
+      const resizeImageRGBA = (rgbaData: Uint8ClampedArray, width: number, height: number, maxDim = 1500) => {
         if (width <= maxDim && height <= maxDim) {
           return { data: rgbaData, width, height };
         }
@@ -1230,7 +1230,7 @@ export async function extractFullTextFromPdfBuffer(buf: Uint8Array, filename: st
             };
 
             const rgbaImg = convertToRGBA(img);
-            const resizedImg = resizeImageRGBA(rgbaImg.data, rgbaImg.width, rgbaImg.height, 950);
+            const resizedImg = resizeImageRGBA(rgbaImg.data, rgbaImg.width, rgbaImg.height, 1500);
             const bmpBuffer = convertToBMP32(resizedImg.data, resizedImg.width, resizedImg.height);
             
             const base64Bmp = bmpBuffer.toString("base64");
@@ -1440,7 +1440,7 @@ export async function convertPdfBufferToCsvRaw(buf: Uint8Array, filename: string
   }
   
   try {
-    const resizeImageRGBA = (rgbaData: Uint8ClampedArray, width: number, height: number, maxDim = 950) => {
+    const resizeImageRGBA = (rgbaData: Uint8ClampedArray, width: number, height: number, maxDim = 1500) => {
       if (width <= maxDim && height <= maxDim) {
         return { data: rgbaData, width, height };
       }
@@ -1535,7 +1535,7 @@ export async function convertPdfBufferToCsvRaw(buf: Uint8Array, filename: string
           };
 
           const rgbaImg = convertToRGBA(img);
-          const resizedImg = resizeImageRGBA(rgbaImg.data, rgbaImg.width, rgbaImg.height, 950);
+          const resizedImg = resizeImageRGBA(rgbaImg.data, rgbaImg.width, rgbaImg.height, 1500);
           const bmpBuffer = convertToBMP32(resizedImg.data, resizedImg.width, resizedImg.height);
           
           const base64Bmp = bmpBuffer.toString("base64");

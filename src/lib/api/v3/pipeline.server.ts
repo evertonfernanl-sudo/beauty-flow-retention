@@ -1113,8 +1113,9 @@ export async function runPipeline(
     if (isImagePdf) {
       console.log(`[SIE V3] PDF Imagem/Escaneado detectado (file_hash: ${file_hash}). Iniciando OCR Fallback...`);
       
-      // 1. Verificar cache determinístico
+      // 1. Verificar cache determinístico (comentado para garantir execução fresca da IA)
       let ocrCsvText = "";
+      /*
       try {
         const { data: cached, error: cacheReadErr } = await (sb as any)
           .from("v3_ocr_cache")
@@ -1137,6 +1138,7 @@ export async function runPipeline(
       } catch (cacheErr: any) {
         console.warn("[SIE V3] Exceção ao consultar cache de OCR:", cacheErr.message || cacheErr);
       }
+      */
 
       if (ocrCsvText) {
         // Cache localizado, pula processamento da IA
