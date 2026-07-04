@@ -1142,35 +1142,14 @@ export async function runPipeline(
         }
 
         const startTime = Date.now();
-        const unpdf: any = await import("unpdf");
-        const pdfProxy = await unpdf.getDocumentProxy(buf);
-        let hasNativeText = false;
-        for (let i = 1; i <= pdfProxy.numPages; i++) {
-          const page = await pdfProxy.getPage(i);
-          const tc = await page.getTextContent();
-          if (tc.items && tc.items.length > 0) {
-            hasNativeText = true;
-            break;
-          }
-        }
-
-        if (hasNativeText) {
-          console.log(`[SIE V3] Camada de texto nativa detectada no PDF imagem. Iniciando formatação de texto Gemini...`);
-          await auditLog(sb, {
-            importId: args.importId, companyId: args.companyId,
-            stage: "OCR_EXECUTION", event: "OCR_START",
-            reason: "Extração estrutural inválida, mas texto nativo presente; iniciando formatação Gemini de texto",
-          });
-          ocrCsvText = await executeNativePdfFormatter(pdfProxy, apiKey);
-        } else {
-          console.log(`[SIE V3] Sem camada de texto nativa. Iniciando OCR Multimodal via Gemini...`);
-          await auditLog(sb, {
-            importId: args.importId, companyId: args.companyId,
-            stage: "OCR_EXECUTION", event: "OCR_START",
-            reason: "Extração estrutural inválida e sem texto nativo; iniciando processamento de imagens (Gemini OCR)",
-          });
-          ocrCsvText = await executePdfOcr(buf, args.storagePath.split("/").pop() || "extrato.pdf");
-        }
+        console.log(`[SIE V3] Iniciando conversão de PDF para CSV alinhado com a ferramenta clássica...`);
+        await auditLog(sb, {
+          importId: args.importId, companyId: args.companyId,
+          stage: "OCR_EXECUTION", event: "OCR_START",
+          reason: "Iniciando processo de conversão estrutural de PDF Imagem para CSV via Gemini",
+        });
+        const { convertPdfBufferToCsvRaw } = await import("../worker.server");
+        ocrCsvText = await convertPdfBufferToCsvRaw(buf, args.storagePath.split("/").pop() || "extrato.pdf");
 
         const duration = Date.now() - startTime;
 
