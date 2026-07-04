@@ -27,23 +27,20 @@ export const registerImportV3 = createServerFn({ method: "POST" })
       created_by: userId,
     }).select("id").single();
     if (error) throw new Error(error.message);
-    // Executa pipeline em background (assíncrono) para evitar timeouts de requisição HTTP,
-    // permitindo que o frontend com polling (3s) acompanhe o status da importação.
-    (async () => {
-      try {
-        const { runPipeline } = await import("@/lib/api/v3/pipeline.server");
-        await runPipeline(supabase as any, {
-          importId: imp.id,
-          companyId: profile.company_id!,
-          source: data.source,
-          storagePath: data.storagePath,
-        });
-      } catch (e: any) {
-        console.error("Erro em background na execução da pipeline V3:", e);
-      }
-    })();
-
-    return { success: true, importId: imp.id, error: undefined as string | undefined } as const;
+    console.log(`\n[PHASE 0 LOG] IMPORT ${imp.id}\nStage: registerImportV3\nRows: 0\nTime: 0 ms\nStatus: OK`);
+    try {
+      const { runPipeline } = await import("@/lib/api/v3/pipeline.server");
+      await runPipeline(supabase as any, {
+        importId: imp.id,
+        companyId: profile.company_id!,
+        source: data.source,
+        storagePath: data.storagePath,
+      });
+      return { success: true, importId: imp.id, error: undefined as string | undefined } as const;
+    } catch (e: any) {
+      console.error("Erro na execução da pipeline V3:", e);
+      return { success: false, importId: imp.id, error: e.message ?? String(e) } as const;
+    }
   });
 
 export const applyRowV3 = createServerFn({ method: "POST" })

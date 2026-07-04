@@ -283,20 +283,7 @@ function finalizeTable(matrix: string[][], meta: Record<string, unknown>, charse
   }
 
   const rows: RawRow[] = merged
-    .filter((r) => {
-      // Se não identificamos data ou valor nos cabeçalhos nesta fase preliminar,
-      // preservamos todas as linhas não vazias.
-      if (dateIdx < 0 || valueIdxs.length === 0) {
-        return r.some((c) => String(c ?? "").trim() !== "");
-      }
-
-      const dateCell = String(r[dateIdx] ?? "").trim();
-      const hasValue = valueIdxs.some((i) => String(r[i] ?? "").trim().length > 0);
-      const hasDate = parseDate(dateCell) != null;
-
-      // Preserva linhas que possuam data OU valor, evitando perda silenciosa.
-      return hasDate || hasValue;
-    })
+    .filter((r) => r.some((c) => String(c ?? "").trim() !== ""))
     .map((r) => {
       const obj: RawRow = {};
       headers.forEach((h, i) => { obj[h] = String(r[i] ?? "").trim(); });
@@ -1011,17 +998,29 @@ export async function runPipeline(
     }
 
     // 1) Download + hash
+    const startDownload = Date.now();
     const dl = await sb.storage.from("imports").download(args.storagePath);
-    if (dl.error || !dl.data) throw new Error(`Falha no download: ${dl.error?.message}`);
+    if (dl.error || !dl.data) {
+      const downloadTime = Date.now() - startDownload;
+      console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: downloadStorage\nRows: 0\nTime: ${downloadTime} ms\nStatus: ERROR\nError: ${dl.error?.message ?? "Dados vazios"}`);
+      throw new Error(`Falha no download: ${dl.error?.message}`);
+    }
     const buf = new Uint8Array(await dl.data.arrayBuffer());
     file_hash = await sha256Hex(buf);
+    const downloadTime = Date.now() - startDownload;
+    console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: downloadStorage\nRows: 0\nTime: ${downloadTime} ms\nStatus: OK`);
 
     // 2) Conversão
+    const startParse = Date.now();
     let raw: RawTable;
     if (args.source === "csv") raw = parseCsv(buf);
     else if (args.source === "xlsx") raw = parseXlsx(buf);
     else if (args.source === "pdf") raw = await parsePdf(buf);
     else throw new Error(`Fonte não suportada na V3: ${args.source}`);
+
+    const parseTime = Date.now() - startParse;
+    console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: parse_${args.source}\nRows: ${raw.rows.length}\nTime: ${parseTime} ms\nStatus: OK`);
+    console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: finalizeTable\nRows: ${raw.rows.length}\nTime: 0 ms\nStatus: OK`);
 
     charset = raw.charset ?? "utf-8";
     ocrConfidence = raw.ocrConfidence;
@@ -1128,7 +1127,10 @@ export async function runPipeline(
     }
 
     // 3) Mapeamento
+    const startMap = Date.now();
     const { map, reasons: mapReasons, extraConcat } = mapHeaders(raw.headers);
+    const mapTime = Date.now() - startMap;
+    console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: mapHeaders\nRows: ${raw.rows.length}\nTime: ${mapTime} ms\nStatus: OK`);
     await auditLog(sb, {
       importId: args.importId, companyId: args.companyId,
       stage: "mapper", event: "MAP_HEADERS",
@@ -1141,6 +1143,7 @@ export async function runPipeline(
     if (missing.length > 0) {
       terminal = "MAP_FAILED";
       lastError = `Mapeamento incompleto — campos obrigatórios ausentes: ${missing.join(", ")}. Cabeçalhos vistos: ${raw.headers.join(", ")}`;
+      console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: mapHeaders\nRows: ${raw.rows.length}\nTime: ${mapTime} ms\nStatus: ERROR\nError: ${lastError}`);
       await auditLog(sb, {
         importId: args.importId, companyId: args.companyId,
         stage: "mapper", event: "MAP_FAILED",
@@ -1151,7 +1154,12 @@ export async function runPipeline(
     }
 
     // 4-8) Por linha: canonical → guard → resolução → dedup
+    const startCanonical = Date.now();
     const built = raw.rows.map((r) => buildCanonical(r, map, extraConcat));
+    const canonicalTime = Date.now() - startCanonical;
+    console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: buildCanonical\nRows: ${built.length}\nTime: ${canonicalTime} ms\nStatus: OK`);
+
+    const startResolve = Date.now();
     const rowsToInsert: any[] = [];
 
     for (let i = 0; i < built.length; i++) {
@@ -1210,10 +1218,13 @@ export async function runPipeline(
         });
       }
     }
+    const resolveTime = Date.now() - startResolve;
+    console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: resolveRow\nRows: ${rowsToInsert.length}\nTime: ${resolveTime} ms\nStatus: OK`);
 
     total = rowsToInsert.length;
 
     // Item 1 — persistência atômica: se qualquer chunk falhar, remove tudo desta importação.
+    const startPersist = Date.now();
     try {
       for (let i = 0; i < rowsToInsert.length; i += 200) {
         const chunk = rowsToInsert.slice(i, i + 200);
@@ -1221,7 +1232,11 @@ export async function runPipeline(
         if (error) throw new Error(`Falha ao persistir linhas: ${error.message}`);
       }
       rowsInserted = rowsToInsert.length;
+      const persistTime = Date.now() - startPersist;
+      console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: persistRows\nRows: ${rowsInserted}\nTime: ${persistTime} ms\nStatus: OK`);
     } catch (persistErr: any) {
+      const persistTime = Date.now() - startPersist;
+      console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: persistRows\nRows: 0\nTime: ${persistTime} ms\nStatus: ERROR\nError: ${persistErr.message || String(persistErr)}`);
       // Rollback determinístico: apaga qualquer linha desta importação (parcial ou não).
       await sb.from("v3_import_rows").delete().eq("import_id", args.importId);
       lastError = persistErr.message ?? String(persistErr);
@@ -1241,6 +1256,7 @@ export async function runPipeline(
     throw err;
   } finally {
     // Item 3 — computeFinalState é SEMPRE executado.
+    const startState = Date.now();
     const finalState = computeFinalState({
       terminal,
       ocrConfidence,
@@ -1248,6 +1264,8 @@ export async function runPipeline(
       failed,
       review,
     });
+    const stateTime = Date.now() - startState;
+    console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: computeFinalState\nRows: ${total}\nTime: ${stateTime} ms\nStatus: ${finalState}`);
 
     try {
       await sb.from("v3_imports").update({
