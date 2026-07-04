@@ -30,16 +30,16 @@ export const registerImportV3 = createServerFn({ method: "POST" })
     console.log(`\n[PHASE 0 LOG] IMPORT ${imp.id}\nStage: registerImportV3\nRows: 0\nTime: 0 ms\nStatus: OK`);
     try {
       const { runPipeline } = await import("@/lib/api/v3/pipeline.server");
-      await runPipeline(supabase as any, {
+      const result = await runPipeline(supabase as any, {
         importId: imp.id,
         companyId: profile.company_id!,
         source: data.source,
         storagePath: data.storagePath,
       });
-      return { success: true, importId: imp.id, error: undefined as string | undefined } as const;
+      return { success: true, importId: imp.id, csvText: result.csvText, error: undefined as string | undefined } as const;
     } catch (e: any) {
       console.error("Erro na execução da pipeline V3:", e);
-      return { success: false, importId: imp.id, error: e.message ?? String(e) } as const;
+      return { success: false, importId: imp.id, csvText: undefined as string | undefined, error: e.message ?? String(e) } as const;
     }
   });
 

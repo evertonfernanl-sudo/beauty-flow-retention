@@ -199,8 +199,22 @@ function ImportV3Page() {
       const { error: upErr } = await supabase.storage.from("imports").upload(path, file, { upsert: false });
       if (upErr) throw upErr;
       const res = await registerImportV3({ data: { filename: file.name, storagePath: path, size: file.size, source } });
-      if (res && "success" in res && !res.success) toast.error(res.error || "Falha no pipeline V3");
-      else toast.success("Pipeline V3 executado — revisar linhas.");
+      if (res && "success" in res && !res.success) {
+        toast.error(res.error || "Falha no pipeline V3");
+      } else {
+        toast.success("Pipeline V3 executado — revisar linhas.");
+        if (res && "csvText" in res && res.csvText) {
+          const blob = new Blob([res.csvText], { type: "text/csv;charset=utf-8;" });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.setAttribute("download", file.name.replace(/\.[a-zA-Z0-9]+$/i, ".csv"));
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          toast.success("Arquivo CSV exportado com sucesso.");
+        }
+      }
       if (res?.importId) setSelected(res.importId);
       qc.invalidateQueries({ queryKey: ["v3-imports"] });
     } catch (e: any) { toast.error(e.message); }

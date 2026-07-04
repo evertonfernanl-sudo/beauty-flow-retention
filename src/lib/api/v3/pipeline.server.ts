@@ -968,13 +968,26 @@ async function checkSchemaCompatibility(sb: SB): Promise<{ ok: boolean; detail?:
   }
 }
 
+function rawTableToCsv(raw: RawTable): string {
+  const headerLine = raw.headers.join(";");
+  const rowLines = raw.rows.map((row) => 
+    raw.headers.map((h) => {
+      const val = row[h] ?? "";
+      const escaped = String(val).replace(/"/g, '""');
+      return `"${escaped}"`;
+    }).join(";")
+  );
+  return [headerLine, ...rowLines].join("\n");
+}
+
 export async function runPipeline(
   sb: SB,
   args: { importId: string; companyId: string; source: "csv" | "xlsx" | "pdf" | "ofx" | "manual_text"; storagePath: string },
-): Promise<{ rowsInserted: number; finalState: FinalState }> {
+): Promise<{ rowsInserted: number; finalState: FinalState; csvText?: string }> {
   await sb.from("v3_imports").update({ status: "parsing" }).eq("id", args.importId);
 
   // Estado agregado para o cálculo final via finally (Item 3)
+  let csvText: string | undefined;
   let terminal: TerminalReason = null;
   let file_hash: string | undefined;
   let charset: string | undefined;
@@ -1088,6 +1101,7 @@ export async function runPipeline(
       const matrix = (parsed.data ?? []).filter((r) => Array.isArray(r) && r.some((c) => String(c ?? "").trim() !== ""));
       raw = finalizeTable(matrix, { source: "pdf_ocr" }, "utf-8");
       ocrConfidence = 1.0; // Definido como 100% de confiança operacional
+      csvText = ocrCsvText;
 
       if (raw.headerFailed || raw.rows.length === 0) {
         terminal = "OCR_REVIEW";
@@ -1112,6 +1126,10 @@ export async function runPipeline(
         });
         return { rowsInserted: 0, finalState: "FAILED" };
       }
+    }
+
+    if (args.source === "pdf" && !isImagePdf) {
+      csvText = rawTableToCsv(raw);
     }
 
     // Cap. 37 — OCR_REVIEW por confiança
@@ -1294,7 +1312,7 @@ export async function runPipeline(
 
     // Retorno funcional (apenas quando não houve throw)
     // eslint-disable-next-line no-unsafe-finally
-    return { rowsInserted, finalState };
+    return { rowsInserted, finalState, csvText };
   }
 }
 
