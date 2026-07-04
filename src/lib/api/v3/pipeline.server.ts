@@ -225,7 +225,7 @@ function finalizeTable(
     const knownCount = cells.filter((c) => matchesAnyHeader(c)).length;
     if (knownCount >= 2) { headerIdx = i; break; }
     // Só continua ignorando se linha parece filler (poucas colunas ou match do IGNORE)
-    if (cells.length >= 4 && knownCount === 0) break; // linha grande sem headers conhecidos → falha
+    if (cells.length >= 4 && knownCount === 0 && meta?.source !== "pdf_ocr") break; // linha grande sem headers conhecidos → falha
     if (!cells.every((c) => IGNORE.test(c))) continue;
   }
 
