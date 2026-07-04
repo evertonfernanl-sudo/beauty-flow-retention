@@ -767,54 +767,67 @@ export function classify(c: CanonicalRow): ClassificationResult {
     }
   }
 
-  // Regra 11.2 — direção estrutural
+  let expenseScore = 0;
+  let incomeScore = 0;
+
+  // 1. Direção estrutural de colunas
   if (c.credit_amount != null && c.credit_amount !== 0 && (c.debit_amount == null || c.debit_amount === 0)) {
-    direction = "INCOME";
-    confidence += 40;
+    incomeScore += 40;
     reasons.push("coluna Crédito preenchida (+40)");
   } else if (c.debit_amount != null && c.debit_amount !== 0 && (c.credit_amount == null || c.credit_amount === 0)) {
-    direction = "EXPENSE";
-    confidence += 40;
+    expenseScore += 40;
     reasons.push("coluna Débito preenchida (+40)");
-  } else if (c.amount != null) {
-    if (c.amount > 0) { direction = "INCOME"; confidence += 20; reasons.push("valor positivo (+20)"); }
-    else if (c.amount < 0) { direction = "EXPENSE"; confidence += 20; reasons.push("valor negativo (+20)"); }
   }
 
-  // Indicador D/C
+  // 2. Direção estrutural por sinal básico do valor
+  if (c.amount != null) {
+    if (c.amount > 0) {
+      incomeScore += 20;
+      reasons.push("valor positivo (+20)");
+    } else if (c.amount < 0) {
+      expenseScore += 20;
+      reasons.push("valor negativo (+20)");
+    }
+  }
+
+  // 3. Indicador D/C na coluna de Tipo
   const mt = (c.movement_type ?? "").trim().toUpperCase();
   if (["C", "CR", "CREDITO", "CRÉDITO"].includes(mt)) {
-    if (!direction) direction = "INCOME";
-    confidence += 10;
+    incomeScore += 10;
     reasons.push("indicador D/C = C (+10)");
   } else if (["D", "DB", "DEB", "DEBITO", "DÉBITO"].includes(mt)) {
-    if (!direction) direction = "EXPENSE";
-    confidence += 10;
+    expenseScore += 10;
     reasons.push("indicador D/C = D (+10)");
   }
 
-  // Acréscimo de Regras solicitadas pelo Usuário (Pix Enviado/Recebido, sinais e letras D/C)
+  // 4. Termos explícitos na descrição (Pix Enviado/Recebido, etc.)
   const descLower = desc.toLowerCase();
   if (/\b(pix enviado|envio|transferencia enviada|transferência enviada|ted enviada|doc enviado|pagamento)\b/i.test(descLower)) {
-    direction = "EXPENSE";
-    confidence += 50;
-    reasons.push("descrição indica envio de dinheiro (despesa) (+50)");
+    expenseScore += 60;
+    reasons.push("descrição indica envio de dinheiro (despesa) (+60)");
   } else if (/\b(pix recebido|recebimento|recebido|transferencia recebida|transferência recebida|ted recebida|doc recebido|deposito|depósito)\b/i.test(descLower)) {
-    direction = "INCOME";
-    confidence += 50;
-    reasons.push("descrição indica recebimento de dinheiro (receita) (+50)");
+    incomeScore += 60;
+    reasons.push("descrição indica recebimento de dinheiro (receita) (+60)");
   }
 
+  // 5. Sinal negativo/positivo ou sufixo D/C no campo de valor
   if (c.amount != null) {
     if (c.amount < 0) {
-      direction = "EXPENSE";
-      confidence += 30;
-      reasons.push("valor negativo ou sufixo D detectado (despesa) (+30)");
+      expenseScore += 30;
+      reasons.push("sufixo D ou sinal negativo no valor (despesa) (+30)");
     } else if (c.amount > 0) {
-      direction = "INCOME";
-      confidence += 30;
-      reasons.push("valor positivo ou sufixo C detectado (receita) (+30)");
+      incomeScore += 30;
+      reasons.push("sufixo C ou sinal positivo no valor (receita) (+30)");
     }
+  }
+
+  // Determinação da direção com base no somatório
+  if (expenseScore > incomeScore) {
+    direction = "EXPENSE";
+    confidence = expenseScore;
+  } else if (incomeScore > expenseScore) {
+    direction = "INCOME";
+    confidence = incomeScore;
   }
 
   // Fallback de descrição para direção
