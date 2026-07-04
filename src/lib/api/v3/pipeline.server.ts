@@ -16,7 +16,9 @@ const PROTECTED_FIELDS = [
 ] as const;
 
 const SUMMARY_KEYWORDS = [
-  "saldo do dia", "saldo anterior", "saldo inicial", "saldo final",
+  "saldo do dia", "saldo dia", "saldo anterior", "saldo inicial", "saldo final",
+  "saldo c/a", "saldo c.a", "saldo c/c", "saldo após operação", "saldo apos operacao",
+  "saldo após transação", "saldo apos transacao", "saldo",
   "total", "totais", "total de creditos", "total de créditos",
   "total de debitos", "total de débitos", "total geral", "resumo", "resumo do periodo", "resumo do período"
 ];
@@ -265,7 +267,7 @@ function finalizeTable(
       const hasSummaryKw = SUMMARY_KEYWORDS.some((kw) => s === kw || s.startsWith(kw + " ") || s.startsWith(kw + ":"));
       if (hasSummaryKw) return true;
 
-      const hasBalancePattern = /\b(saldo anterior|saldo atual|saldo do dia|saldo disponível|saldo em conta|saldos diários|saldo final|saldo c\/c|saldo d\/c|saldo de transações|resumo do dia|total de débitos|total de créditos|total de saídas|total de entradas|saldo consolidado|limite contratado|limite cheque especial|resumo do período|resumo do periodo)\b/i.test(s);
+      const hasBalancePattern = /\b(saldo|saldo anterior|saldo atual|saldo do dia|saldo dia|saldo disponível|saldo em conta|saldos diários|saldo final|saldo c\/c|saldo c\/a|saldo c\.a|saldo d\/c|saldo de transações|resumo do dia|total de débitos|total de créditos|total de saídas|total de entradas|saldo consolidado|limite contratado|limite cheque especial|resumo do período|resumo do periodo|saldo após operação|saldo apos operacao|saldo após transação|saldo apos transacao)\b/i.test(s);
       if (hasBalancePattern) return true;
 
       return false;
