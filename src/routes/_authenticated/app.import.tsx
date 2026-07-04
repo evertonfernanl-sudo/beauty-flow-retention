@@ -371,9 +371,13 @@ function ImportV3Page() {
                           {isApplied ? (
                             <span>{sugg.client?.name ?? c.client_name ?? "—"}</span>
                           ) : (
-                            <div className="flex flex-col gap-0.5">
+                            <div className="flex flex-col gap-1">
+                              {/* Nome do cliente importado/extraído sempre visível */}
+                              <div className="font-semibold text-foreground">
+                                {c.client_name ?? "—"}
+                              </div>
                               <select 
-                                className="bg-background border rounded px-1 py-0.5 max-w-[150px] truncate text-[11px]"
+                                className="bg-background border rounded px-1 py-0.5 max-w-[150px] truncate text-[11px] text-muted-foreground"
                                 value={r.resolved_client_id ?? ""}
                                 disabled={updateRowMut.isPending}
                                 onChange={(e) => {
@@ -395,14 +399,11 @@ function ImportV3Page() {
                                   });
                                 }}
                               >
-                                <option value="">(Nenhum)</option>
+                                <option value="">(Associar da base...)</option>
                                 {(clientsQ.data ?? []).map(cl => (
                                   <option key={cl.id} value={cl.id}>{cl.name}</option>
                                 ))}
                               </select>
-                              {sugg.client_from_description && !r.resolved_client_id && (
-                                <span className="text-[10px] text-muted-foreground">Sugerido: {sugg.client_from_description}</span>
-                              )}
                             </div>
                           )}
                         </td>

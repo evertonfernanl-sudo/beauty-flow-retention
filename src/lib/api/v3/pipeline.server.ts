@@ -616,26 +616,44 @@ function extractExtra(raw: RawRow, map: FieldMap, extraConcat?: { cols: [string,
 // Extração de cliente da descrição (Cap. 10)
 // ============================================================
 
-const BANK_KEYWORDS = ["PIX", "TED", "DOC", "TRANSFERENCIA", "TRANSFERÊNCIA", "PAGAMENTO", "RECEBIDO", "ENVIADO", "CPF", "CNPJ", "AGENCIA", "AGÊNCIA", "CONTA", "BANCO", "BOLETO", "COMPRA", "DEBITO", "CRÉDITO", "DÉBITO", "CREDITO", "SAQUE"];
+const BANK_KEYWORDS = ["PIX", "TED", "DOC", "TRANSFERENCIA", "TRANSFERÊNCIA", "PAGAMENTO", "RECEBIDO", "ENVIADO", "CPF", "CNPJ", "AGENCIA", "AGÊNCIA", "CONTA", "BANCO", "BOLETO", "COMPRA", "DEBITO", "CRÉDITO", "DÉBITO", "CREDITO", "SAQUE", "FORNECEDOR", "RECEBIMENTO"];
 
 export function extractClientFromDescription(desc: string | null): string | null {
   if (!desc) return null;
   const t = desc.trim();
-  // Palavras-chave de destino
+  
+  // 1. Padrões com prefixos comuns
   const patterns = [
-    /(?:PARA|A FAVOR DE|BENEFICIARIO|BENEFICIÁRIO|DESTINO[:\s]|RECEBEDOR)[:\s]+([A-ZÁÀÂÃÄÉÊÍÓÔÕÚÜÇ][A-ZÁÀÂÃÄÉÊÍÓÔÕÚÜÇ\s]+?)(?:\s+CPF|\s+CNPJ|\s+AG|\s+CONTA|\s+BANCO|$)/i,
-    /(?:DE|RECEBIDA DE|RECEBIDO DE)[:\s]+([A-ZÁÀÂÃÄÉÊÍÓÔÕÚÜÇ][A-ZÁÀÂÃÄÉÊÍÓÔÕÚÜÇ\s]+?)(?:\s+CPF|\s+CNPJ|\s+AG|\s+CONTA|\s+BANCO|$)/i,
+    /(?:PARA|A FAVOR DE|BENEFICIARIO|BENEFICIÁRIO|DESTINO|RECEBEDOR|DES)[:\s]+([A-ZÁÀÂÃÄÉÊÍÓÔÕÚÜÇ][A-ZÁÀÂÃÄÉÊÍÓÔÕÚÜÇ\s\.\&\/\-]+?)(?:\s+CPF|\s+CNPJ|\s+AG|\s+CONTA|\s+BANCO|\s+\d{2}\/\d{2}|$)/i,
+    /(?:DE|RECEBIDA DE|RECEBIDO DE|REM)[:\s]+([A-ZÁÀÂÃÄÉÊÍÓÔÕÚÜÇ][A-ZÁÀÂÃÄÉÊÍÓÔÕÚÜÇ\s\.\&\/\-]+?)(?:\s+CPF|\s+CNPJ|\s+AG|\s+CONTA|\s+BANCO|\s+\d{2}\/\d{2}|$)/i,
+    /(?:COBRANCA|COBRANÇA)\s+([A-ZÁÀÂÃÄÉÊÍÓÔÕÚÜÇ][A-ZÁÀÂÃÄÉÊÍÓÔÕÚÜÇ\s\.\&\/\-]+?)(?:\s+CPF|\s+CNPJ|\s+AG|\s+CONTA|\s+BANCO|$)/i,
   ];
   for (const re of patterns) {
     const m = t.match(re);
     if (m && m[1]) {
-      const name = m[1].trim().replace(/\s+/g, " ");
-      if (name.split(/\s+/).length >= 2 && !BANK_KEYWORDS.includes(name.split(/\s+/)[0].toUpperCase())) return name;
+      let name = m[1].trim().replace(/\s+/g, " ");
+      // Remove data do final se sobrar (ex: "05/05" ou "16/05")
+      name = name.replace(/\s+\d{2}\/\d{2}$/, "").replace(/\s+\d{4}$/, "").trim();
+      if (name.split(/\s+/).length >= 1 && !BANK_KEYWORDS.includes(name.split(/\s+/)[0].toUpperCase())) {
+        return name;
+      }
     }
   }
-  // Fallback: sequência de tokens maiúsculos/acentuados
-  const tokens = t.split(/\s+/).filter((tok) => /^[A-ZÁÀÂÃÄÉÊÍÓÔÕÚÜÇ][A-ZÁÀÂÃÄÉÊÍÓÔÕÚÜÇ']+$/.test(tok) && !BANK_KEYWORDS.includes(tok.toUpperCase()));
-  if (tokens.length >= 2) return tokens.slice(0, 4).join(" ");
+
+  // 2. Casos especiais de Banco (ex: "TRANSF SALDO C/SAL PICC BCO:237 AGE:00460 CTA:0101317-3")
+  if (t.includes("C/SAL PICC") || t.includes("TRANSF SALDO")) {
+    const match = t.match(/(C\/SAL PICC.*)$/i);
+    if (match) return match[1].trim();
+  }
+
+  // 3. Fallback de sequência de tokens maiúsculos
+  const tokens = t.split(/\s+/).filter((tok) => {
+    const cleanTok = tok.replace(/[^A-ZÁÀÂÃÄÉÊÍÓÔÕÚÜÇ]/gi, "");
+    return cleanTok.length >= 2 && !BANK_KEYWORDS.includes(cleanTok.toUpperCase());
+  });
+  if (tokens.length >= 2) {
+    return tokens.slice(0, 4).join(" ");
+  }
   return null;
 }
 
@@ -861,6 +879,7 @@ export async function resolveRow(
   if (!clientName) {
     clientName = extractClientFromDescription(canonical.description);
     if (clientName) {
+      canonical.client_name = clientName;
       suggestions.client_from_description = clientName;
       reasons.push(`nome extraído da descrição via regex: ${clientName}`);
     }
