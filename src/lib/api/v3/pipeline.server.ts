@@ -135,16 +135,16 @@ export async function parsePdf(buffer: Uint8Array): Promise<RawTable> {
     // Agrupa por linha (Y). Tolerância = mediana da altura de fonte estimada.
     const yTol = 3.0;
     const sorted = [...items].sort((a, b) => b.y - a.y || a.x - b.x);
-    const lines: Array<Array<{ str: string; x: number }>> = [];
+    const lines: Array<Array<{ str: string; x: number; w: number }>> = [];
     let currentY: number | null = null;
-    let current: Array<{ str: string; x: number }> = [];
+    let current: Array<{ str: string; x: number; w: number }> = [];
     for (const it of sorted) {
       if (currentY == null || Math.abs(currentY - it.y) <= yTol) {
-        current.push({ str: it.str, x: it.x });
+        current.push({ str: it.str, x: it.x, w: it.w });
         currentY = currentY == null ? it.y : (currentY + it.y) / 2;
       } else {
         lines.push(current);
-        current = [{ str: it.str, x: it.x }];
+        current = [{ str: it.str, x: it.x, w: it.w }];
         currentY = it.y;
       }
     }
@@ -163,7 +163,7 @@ export async function parsePdf(buffer: Uint8Array): Promise<RawTable> {
         if (buf === "") {
           buf = t.str;
           startX = t.x;
-          lastX = t.x + (t.str.length * 3);
+          lastX = t.x + (t.w || t.str.length * 6);
           continue;
         }
         if (t.x - lastX > xGap) {
@@ -173,7 +173,7 @@ export async function parsePdf(buffer: Uint8Array): Promise<RawTable> {
         } else {
           buf += " " + t.str;
         }
-        lastX = t.x + (t.str.length * 3);
+        lastX = t.x + (t.w || t.str.length * 6);
       }
       if (buf) cells.push({ text: buf.trim(), x: startX });
       if (cells.some((c) => c.text.length > 0)) matrix.push(cells);
@@ -1182,7 +1182,11 @@ export async function runPipeline(
     charset = raw.charset ?? "utf-8";
     ocrConfidence = raw.ocrConfidence;
 
-    const isImagePdf = args.source === "pdf";
+    const isImagePdf = args.source === "pdf" && (
+      raw.headerFailed ||
+      raw.rows.length === 0 ||
+      raw.rows.reduce((sum, r) => sum + Object.values(r).join("").length, 0) < 50
+    );
 
     if (isImagePdf) {
       console.log(`[SIE V3] PDF Imagem/Escaneado detectado (file_hash: ${file_hash}). Iniciando OCR Fallback...`);
