@@ -329,7 +329,20 @@ function AgendaPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("financial_transactions")
-        .select("*")
+        .select(`
+          *,
+          appointments (
+            id,
+            clients (
+              id,
+              name
+            )
+          ),
+          providers (
+            id,
+            name
+          )
+        `)
         .eq("company_id", companyId!)
         .eq("type", "EXPENSE")
         .gte("transaction_date", toISODate(expensesRange.from))
@@ -347,7 +360,20 @@ function AgendaPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("financial_transactions")
-        .select("*")
+        .select(`
+          *,
+          appointments (
+            id,
+            clients (
+              id,
+              name
+            )
+          ),
+          providers (
+            id,
+            name
+          )
+        `)
         .eq("company_id", companyId!)
         .eq("type", "INCOME")
         .gte("transaction_date", toISODate(incomeRange.from))
@@ -1030,58 +1056,33 @@ function TransactionList({
   return (
     <>
       <ul className="divide-y">
-        {rows.map((t: any) => (
-          <li
-            key={t.id}
-            className="py-3 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3"
-          >
-            <span
-              className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${
-                t.type === "INCOME"
-                  ? "bg-success/15 text-success"
-                  : "bg-destructive/15 text-destructive"
-              }`}
+        {rows.map((t: any) => {
+          let personName = "";
+          if (t.type === "INCOME") {
+            personName = t.appointments?.clients?.name || t.description || t.category || "Cliente";
+          } else {
+            personName = t.providers?.name || t.description || t.category || "Fornecedor";
+          }
+
+          return (
+            <li
+              key={t.id}
+              className="py-3 grid grid-cols-[100px_1fr_120px] items-center gap-3 text-sm"
             >
-              {t.type === "INCOME" ? (
-                <ArrowUp className="h-4 w-4" />
-              ) : (
-                <ArrowDown className="h-4 w-4" />
-              )}
-            </span>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <p className="text-sm font-medium truncate">{t.description || t.category}</p>
-                {t.is_personal && (
-                  <Badge variant="outline" className="text-[10px] py-0 px-1 border-amber-500/40 bg-amber-500/5 text-amber-600 dark:text-amber-400">
-                    Pessoal
-                  </Badge>
-                )}
-                {t.revenue_type === "aporte" && (
-                  <Badge variant="outline" className="text-[10px] py-0 px-1 border-blue-500/40 bg-blue-500/5 text-blue-600 dark:text-blue-400">
-                    Aporte
-                  </Badge>
-                )}
-                {t.status === "PENDING" && (
-                  <Badge variant="outline" className="text-[10px] py-0 px-1 border-destructive/40 bg-destructive/5 text-destructive">
-                    Não Pago
-                  </Badge>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground truncate">
+              <span className="text-muted-foreground">
                 {new Date(t.transaction_date + "T00:00:00").toLocaleDateString("pt-BR")}
-                {" · "}
-                {t.category}
-                {t.account_source ? ` · ${t.account_source}` : ""}
-                {t.payment_method ? ` · ${t.payment_method}` : ""}
-              </p>
-            </div>
-            <p
-              className={`text-sm font-semibold ${t.type === "INCOME" ? "text-success" : "text-destructive"}`}
-            >
-              {t.type === "INCOME" ? "+" : "−"} {formatBRL(Number(t.amount))}
-            </p>
-          </li>
-        ))}
+              </span>
+              <span className="font-medium truncate" title={personName}>
+                {personName}
+              </span>
+              <span
+                className={`text-right font-semibold ${t.type === "INCOME" ? "text-success" : "text-destructive"}`}
+              >
+                {t.type === "INCOME" ? "+" : "−"} {formatBRL(Number(t.amount))}
+              </span>
+            </li>
+          );
+        })}
       </ul>
       <div className="flex justify-end pt-2 border-t text-sm">
         <span className="text-muted-foreground mr-2">Total:</span>
