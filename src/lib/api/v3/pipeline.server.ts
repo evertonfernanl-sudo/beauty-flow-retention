@@ -383,14 +383,14 @@ const SFX = "([\\s\\(\\[\\:\\/\\-].*)?$";
 const HEADER_HINTS: Record<keyof CanonicalRow, RegExp[]> = {
   client_name: [new RegExp(`^(cliente|pagador|favorecido|benefici[aá]rio|recebedor|nome|destino|origem|sacado)${SFX}`, "i")],
   description: [new RegExp(`^(descri[cç][aã]o|hist[oó]rico(\\s*\\/?\\s*complemento)?|complemento|narrativa|evento|opera[cç][aã]o|memo(rando)?|detalhes|lan[cç]amento)${SFX}`, "i")],
-  amount: [new RegExp(`^(valor|montante|amount|vlr|total|valor\\s*movimento)${SFX}`, "i")],
+  amount: [new RegExp(`^(valor|montante|amount|vlr|total|valor\\s*movimento|val)${SFX}`, "i")],
   transaction_date: [new RegExp(`^(data(\\s*(de)?\\s*(lan[cç]amento|movimento|opera[cç][aã]o))?|dt(\\s*lanc)?|date|movimento|lan[cç]amentos?)${SFX}`, "i")],
   balance: [new RegExp(`^(saldo(\\s*(final|atual|dispon[ií]vel))?|balance)${SFX}`, "i")],
   document_number: [new RegExp(`^(docto\\.?|documento|doc\\.?|n[°ºr]?\\.?\\s*(docto|doc|documento)?|nr\\.?\\s*doc(to)?|controle|identificador)${SFX}`, "i")],
   cpf_cnpj: [new RegExp(`^(cpf|cnpj|cpf\\s*\\/?\\s*cnpj|documento\\s*favorecido|inscri[cç][aã]o)${SFX}`, "i")],
   phone: [new RegExp(`^(telefone|celular|phone|tel|whatsapp)${SFX}`, "i")],
-  debit_amount: [new RegExp(`^(d[eé]bito|sa[ií]da|valor\\s*d[eé]bito)${SFX}`, "i")],
-  credit_amount: [new RegExp(`^(cr[eé]dito|entrada|valor\\s*cr[eé]dito|receita)${SFX}`, "i")],
+  debit_amount: [new RegExp(`^(d[eé]bito|sa[ií]da|valor\\s*d[eé]bito|valdb|valdeb)${SFX}`, "i")],
+  credit_amount: [new RegExp(`^(cr[eé]dito|entrada|valor\\s*cr[eé]dito|receita|valcr|valcred)${SFX}`, "i")],
   movement_type: [new RegExp(`^(tipo|natureza|d\\/c|c\\/d|cd|tipo\\s*da\\s*movimenta[cç][aã]o)${SFX}`, "i")],
   raw_extra: [],
 };
