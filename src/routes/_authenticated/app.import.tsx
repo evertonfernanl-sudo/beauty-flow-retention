@@ -473,7 +473,6 @@ function ImportV3Page() {
                                     {r.possible_duplicate && <Badge variant="destructive" className="ml-1">DUP</Badge>}
                                   </td>
                                   <td className="p-2 flex gap-1 justify-end">
-                                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setAuditRowId(r.id)}>Auditoria</Button>
                                     {!isApplied && r.status !== "LINE_FAILED" && (
                                       <>
                                         {isSkipped ? (

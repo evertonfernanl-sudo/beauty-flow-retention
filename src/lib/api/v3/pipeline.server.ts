@@ -1577,37 +1577,6 @@ export async function applyRow(sb: SB, args: { rowId: string }): Promise<{ ok: b
     }
   }
 
-  // --- GERAR ATENDIMENTO (SÓ SE TIVER CLIENTE) ---
-  if (clientId) {
-    const startOfDay = `${canonical.transaction_date}T00:00:00.000Z`;
-    const endOfDay = `${canonical.transaction_date}T23:59:59.999Z`;
-
-    // Evitar agendamento duplicado para o mesmo dia e preço
-    const { data: dupApp } = await sb
-      .from("appointments")
-      .select("id")
-      .eq("company_id", row.company_id)
-      .eq("client_id", clientId)
-      .eq("price", amount)
-      .gte("start_datetime", startOfDay)
-      .lte("start_datetime", endOfDay)
-      .limit(1);
-
-    if (!dupApp || dupApp.length === 0) {
-      const { error: appErr } = await sb.from("appointments").insert({
-        company_id: row.company_id,
-        client_id: clientId,
-        price: amount,
-        start_datetime: `${canonical.transaction_date}T09:00:00.000Z`,
-        end_datetime: `${canonical.transaction_date}T10:00:00.000Z`,
-        status: "COMPLETED",
-      } as any);
-      if (appErr) {
-        console.error("[APPLY V3] Erro ao criar agendamento/atendimento:", appErr.message);
-      }
-    }
-  }
-
   // --- LANÇAR NA TABELA FINANCEIRA (CAIXA) ---
   const { data: tx, error: txErr } = await sb.from("v3_financial_transactions").insert({
     company_id: row.company_id,

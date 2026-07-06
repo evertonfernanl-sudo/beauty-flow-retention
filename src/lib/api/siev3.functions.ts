@@ -75,10 +75,12 @@ export const applyRowV3 = createServerFn({ method: "POST" })
             }
           };
 
-          // Executa a projeção de negócios de forma assíncrona pós-persistência (com isolamento transacional)
-          projectV3RowToBusiness(context.supabase as any, projCtx).catch(err => {
-            console.error("[applyRowV3 BACKGROUND PROJECTION ERROR]:", err);
-          });
+          // Executa a projeção de negócios de forma síncrona/esperada para garantir execução em ambientes serverless
+          try {
+            await projectV3RowToBusiness(context.supabase as any, projCtx);
+          } catch (err) {
+            console.error("[applyRowV3 PROJECTION ERROR]:", err);
+          }
         }
       } catch (err) {
         console.error("[applyRowV3 PROJECTION DISPATCH ERROR]:", err);
