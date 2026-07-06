@@ -1259,7 +1259,7 @@ export async function runPipeline(
       }
 
       // 2. Validação Estrutural pós-OCR (Seção 6)
-      const parsed = Papa.parse<string[]>(ocrCsvText, { skipEmptyLines: true });
+      const parsed = Papa.parse<string[]>(ocrCsvText, { delimiter: ";", skipEmptyLines: true });
       const matrix = (parsed.data ?? []).filter((r) => Array.isArray(r) && r.some((c) => String(c ?? "").trim() !== ""));
       raw = finalizeTable(matrix, { source: "pdf_ocr" }, "utf-8");
       ocrConfidence = 1.0; // Definido como 100% de confiança operacional
