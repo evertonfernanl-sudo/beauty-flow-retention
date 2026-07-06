@@ -882,6 +882,7 @@ export async function resolveRow(
   sb: SB,
   companyId: string,
   canonical: CanonicalRow,
+  bankName?: string,
 ): Promise<{
   suggestions: Record<string, unknown>;
   reasons: string[];
@@ -916,6 +917,13 @@ export async function resolveRow(
       suggestions.client_from_description = clientName;
       reasons.push(`nome extraído da descrição via regex: ${clientName}`);
     }
+  }
+
+  // Se ainda assim não foi identificado nenhum cliente na linha nem na descrição, associa ao Banco do Extrato
+  if (!clientName && bankName) {
+    clientName = bankName;
+    canonical.client_name = bankName;
+    reasons.push(`cliente atribuído ao banco emissor: ${bankName}`);
   }
 
   // Resolução: CPF → telefone → documento → nome
@@ -1343,13 +1351,35 @@ export async function runPipeline(
     const canonicalTime = Date.now() - startCanonical;
     console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: buildCanonical\nRows: ${built.length}\nTime: ${canonicalTime} ms\nStatus: OK`);
 
+    const filename = args.storagePath.split("/").pop() || "extrato.pdf";
+    const sampleText = csvText || raw.headers.join(" ") + " " + raw.rows.slice(0, 5).map(r => Object.values(r).join(" ")).join(" ");
+    const bankName = inferBankNameV3(filename, sampleText);
+
     const startResolve = Date.now();
     const rowsToInsert: any[] = [];
+
+    const isZeroOrEmpty = (val: string | null | undefined): boolean => {
+      if (val == null) return true;
+      const s = String(val).trim();
+      if (!s || s === "-" || s === "0" || s === "0,00" || s === "0.00") return true;
+      const n = parseBrNumber(s);
+      return n === 0;
+    };
 
     for (let i = 0; i < built.length; i++) {
       const { canonical: rawCan, snapshot, errors } = built[i];
       const guard = assertionGuard(rawCan, snapshot, map);
       const canonical = guard.canonical;
+
+      // 1. Filtrar/Desconsiderar operações com valores zerados ou vazios (ex: summaries, headers repetidos, filler lines)
+      const amountRaw = map.amount ? snapshot[map.amount] : "";
+      const debitRaw = map.debit_amount ? snapshot[map.debit_amount] : "";
+      const creditRaw = map.credit_amount ? snapshot[map.credit_amount] : "";
+
+      if (isZeroOrEmpty(amountRaw) && isZeroOrEmpty(debitRaw) && isZeroOrEmpty(creditRaw)) {
+        console.log(`[SIE V3] Ignorando linha index ${i} devido a valores zerados/vazios:`, canonical.description);
+        continue;
+      }
 
       let status: LineStatus = "OK";
       const rowReasons: string[] = [...errors];
@@ -1357,7 +1387,7 @@ export async function runPipeline(
 
       let resolution: any = null;
       if (status !== "LINE_FAILED") {
-        resolution = await resolveRow(sb, args.companyId, canonical);
+        resolution = await resolveRow(sb, args.companyId, canonical, bankName);
         if (resolution.needsReview) status = "LINE_REVIEW";
         rowReasons.push(...resolution.reasons);
       }
@@ -1866,4 +1896,19 @@ async function executeNativePdfFormatter(pdf: any, apiKey: string): Promise<stri
     }
   }
   return nativeCsvAccumulator;
+}
+
+export function inferBankNameV3(filename?: string | null, sampleText?: string | null): string {
+  const f = (filename || "").toLowerCase();
+  const s = (sampleText || "").toLowerCase();
+  if (f.includes("itau") || s.includes("itau") || s.includes("itaú")) return "Itaú";
+  if (f.includes("bradesco") || s.includes("bradesco")) return "Bradesco";
+  if (f.includes("santander") || s.includes("santander")) return "Santander";
+  if (f.includes("brasil") || f.includes("bb") || s.includes("bb") || s.includes("brasil") || s.includes("banco do brasil")) return "Banco do Brasil";
+  if (f.includes("nubank") || s.includes("nubank") || s.includes("nu pagamentos") || s.includes("nu pagamento")) return "Nubank";
+  if (f.includes("inter") || s.includes("inter") || s.includes("banco inter")) return "Banco Inter";
+  if (f.includes("caixa") || s.includes("caixa econ") || s.includes("cef") || s.includes("caixa")) return "Caixa Econômica";
+  if (f.includes("sicredi") || s.includes("sicredi")) return "Sicredi";
+  if (f.includes("sicoob") || s.includes("sicoob")) return "Sicoob";
+  return "Banco Importado";
 }
