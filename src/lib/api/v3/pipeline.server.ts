@@ -1590,7 +1590,7 @@ async function executePdfOcr(buffer: Uint8Array, filename: string): Promise<stri
     throw new PipelineError("IA indisponível para OCR: LOVABLE_API_KEY ausente no ambiente de produção.", "OCR");
   }
 
-  const resizeImageRGBA = (rgbaData: Uint8ClampedArray, width: number, height: number, maxDim = 950) => {
+  const resizeImageRGBA = (rgbaData: Uint8ClampedArray, width: number, height: number, maxDim = 1500) => {
     if (width <= maxDim && height <= maxDim) {
       return { data: rgbaData, width, height };
     }
@@ -1687,7 +1687,7 @@ async function executePdfOcr(buffer: Uint8Array, filename: string): Promise<stri
         };
 
         const rgbaImg = convertToRGBA(img);
-        const resizedImg = resizeImageRGBA(rgbaImg.data, rgbaImg.width, rgbaImg.height, 950);
+        const resizedImg = resizeImageRGBA(rgbaImg.data, rgbaImg.width, rgbaImg.height, 1500);
         const bmpBuffer = convertToBMP32(resizedImg.data, resizedImg.width, resizedImg.height);
         const base64Bmp = bmpBuffer.toString("base64");
         const dataUrl = `data:image/bmp;base64,${base64Bmp}`;
@@ -1707,7 +1707,7 @@ async function executePdfOcr(buffer: Uint8Array, filename: string): Promise<stri
                 content: [
                   {
                     type: "text",
-                    text: "Você é um analisador de documentos especialista em reconstruir tabelas. Sua tarefa é transcrever todo o conteúdo visível nesta imagem de extrato bancário diretamente no formato CSV. Não faça qualquer tipo de interpretação de dados, não resuma, não limpe e não aplique regras de negócio. Apenas identifique a estrutura física (tabelas, linhas e colunas) existente na imagem e monte um CSV correspondente. Se a imagem contiver textos fora de tabelas, represente-os como linhas de uma única célula no CSV. Retorne APENAS o código do CSV válido, sem blocos de código markdown (como ```csv), sem explicações e sem comentários."
+                    text: "Você é um analisador de documentos especialista em reconstruir tabelas. Sua tarefa é transcrever todo o conteúdo visível nesta imagem de extrato bancário diretamente no formato CSV. Mantenha fidelidade absoluta a TODOS os caracteres e dígitos, especialmente os centavos de todos os valores financeiros (ex: se o valor for 9,62 ou 9,70, mantenha exatamente os centavos 9,62 ou 9,70 no CSV; NUNCA arredonde valores nem remova/altere centavos). Não faça qualquer tipo de interpretação de dados, não resuma, não limpe e não aplique regras de negócio. Apenas identifique a estrutura física (tabelas, linhas e colunas) existente na imagem e monte um CSV correspondente. Se a imagem contiver textos fora de tabelas, represente-os como linhas de uma única célula no CSV. Retorne APENAS o código do CSV válido, sem blocos de código markdown (como ```csv), sem explicações e sem comentários."
                   },
                   {
                     type: "image_url",
@@ -1822,7 +1822,7 @@ async function executeNativePdfFormatter(pdf: any, apiKey: string): Promise<stri
             content: [
               {
                 type: "text",
-                text: "Você é um especialista em estruturação de dados e reconstrução de tabelas. Sua tarefa é converter o texto de extrato bancário fornecido abaixo diretamente no formato CSV. O texto original foi extraído de um PDF nativo e preserva as quebras de linha e colunas (separadas por tabulação '\\t' ou múltiplos espaços). Identifique a estrutura física das tabelas e alinhe corretamente as informações em colunas correspondentes do CSV (como Data, Descrição, Documento, Valor, Saldo, etc.). Certifique-se de que cada registro ocupe uma única linha do CSV com todas as suas respectivas colunas preenchidas. Não resuma, não ignore linhas, não modifique os textos/valores originais e não aplique nenhuma regra de negócio. Retorne APENAS o código do CSV válido, sem blocos de código markdown (como ```csv), sem explicações e sem comentários.\n\nTexto original:\n" + pageTextContent
+                text: "Você é um especialista em estruturação de dados e reconstrução de tabelas. Sua tarefa é converter o texto de extrato bancário fornecido abaixo diretamente no formato CSV. O texto original foi extraído de um PDF nativo e preserva as quebras de linha e colunas (separadas por tabulação '\\t' ou múltiplos espaços). Identifique a estrutura física das tabelas e alinhe corretamente as informações em colunas correspondentes do CSV (como Data, Descrição, Documento, Valor, Saldo, etc.). Mantenha fidelidade absoluta a TODOS os caracteres e dígitos, especialmente os centavos de todos os valores financeiros (ex: se o valor for 9,62 ou 9,70, mantenha exatamente os centavos 9,62 ou 9,70 no CSV; NUNCA arredonde valores nem remova/altere centavos). Certifique-se de que cada registro ocupe uma única linha do CSV com todas as suas respectivas colunas preenchidas. Não resuma, não ignore linhas, não modifique os textos/valores originais e não aplique nenhuma regra de negócio. Retorne APENAS o código do CSV válido, sem blocos de código markdown (como ```csv), sem explicações e sem comentários.\n\nTexto original:\n" + pageTextContent
               }
             ]
           }
