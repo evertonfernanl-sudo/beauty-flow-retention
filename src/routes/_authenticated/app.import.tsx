@@ -466,9 +466,17 @@ function ImportV3Page() {
                                   
                                   <td className="p-2 text-center">{r.confidence}</td>
                                   <td className="p-2">
-                                    <Badge variant={r.status === "applied" ? "default" : r.status === "skipped" ? "secondary" : r.status === "LINE_FAILED" ? "destructive" : r.status === "LINE_REVIEW" ? "outline" : "secondary"}>
+                                    <Badge variant={
+                                      r.status === "applied" ? "default" : 
+                                      r.status === "skipped" ? "secondary" : 
+                                      r.status === "LINE_FAILED" ? "destructive" : 
+                                      "outline"
+                                    }>
                                       {r.status === "applied" ? <CheckCircle2 className="h-3 w-3 mr-1 inline" /> : <AlertCircle className="h-3 w-3 mr-1 inline" />}
-                                      {r.status}
+                                      {r.status === "applied" ? "Aplicado" : 
+                                       r.status === "skipped" ? "Ignorado" : 
+                                       r.status === "LINE_FAILED" ? "Falha" : 
+                                       "Pendente"}
                                     </Badge>
                                     {r.possible_duplicate && <Badge variant="destructive" className="ml-1">DUP</Badge>}
                                   </td>
