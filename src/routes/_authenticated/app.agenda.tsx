@@ -39,6 +39,8 @@ import {
   TrendingUp,
   Wallet,
   Trash2,
+  Receipt,
+  Share2,
 } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -1845,6 +1847,65 @@ function EditAppointment({
   const [professionalId, setProfessionalId] = useState<string>(a.professional_id ?? "");
   const [price, setPrice] = useState<string>(String(a.price));
 
+  const [billText, setBillText] = useState("");
+  const [loadingBill, setLoadingBill] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setBillText("");
+    }
+  }, [open]);
+
+  async function handleGenerateBill() {
+    if (!a.client_id) {
+      toast.error("Cliente não identificado neste agendamento.");
+      return;
+    }
+    setLoadingBill(true);
+    try {
+      const startOfDay = `${date}T00:00:00.000Z`;
+      const endOfDay = `${date}T23:59:59.999Z`;
+
+      const { data: dayApps, error } = await supabase
+        .from("appointments")
+        .select("price, services(name)")
+        .eq("client_id", a.client_id)
+        .eq("company_id", a.company_id)
+        .gte("start_datetime", startOfDay)
+        .lte("start_datetime", endOfDay)
+        .neq("status", "CANCELLED");
+
+      if (error) throw error;
+
+      const formattedDate = new Date(`${date}T12:00:00`).toLocaleDateString("pt-BR");
+      const clientName = a.clients?.name || "Cliente";
+      let text = `Olá, ${clientName}! Segue o descritivo dos seus serviços de hoje (${formattedDate}):\n\n`;
+
+      let total = 0;
+      if (dayApps && dayApps.length > 0) {
+        dayApps.forEach((item: any) => {
+          const svcName = item.services?.name || "Serviço";
+          const priceVal = Number(item.price ?? 0);
+          text += `• ${svcName}: ${formatBRL(priceVal)}\n`;
+          total += priceVal;
+        });
+      } else {
+        const svc = services.find((s) => s.id === serviceId);
+        const svcName = svc?.name || "Serviço";
+        text += `• ${svcName}: ${formatBRL(Number(price))}\n`;
+        total = Number(price);
+      }
+
+      text += `\n*Total: ${formatBRL(total)}*\n\nSe preferir, você pode efetuar o pagamento via PIX.\nMuito obrigado pela preferência!`;
+      setBillText(text);
+      toast.success("Resumo da conta gerado com sucesso!");
+    } catch (err: any) {
+      toast.error("Erro ao gerar conta: " + err.message);
+    } finally {
+      setLoadingBill(false);
+    }
+  }
+
   async function save() {
     const svc = services.find((s) => s.id === serviceId);
     const startDt = new Date(`${date}T${time}:00`);
@@ -1881,7 +1942,7 @@ function EditAppointment({
           <Edit3 className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Editar agendamento</DialogTitle>
         </DialogHeader>
@@ -1938,9 +1999,63 @@ function EditAppointment({
               onChange={(e) => setPrice(e.target.value)}
             />
           </div>
+
+          {billText && (
+            <div className="mt-4 p-4 border border-primary/20 bg-primary/5 rounded-lg space-y-3">
+              <Label className="font-semibold text-xs text-primary uppercase tracking-wider block">Resumo da Conta</Label>
+              <Textarea
+                value={billText}
+                onChange={(e) => setBillText(e.target.value)}
+                rows={7}
+                className="font-mono text-xs leading-relaxed bg-background"
+              />
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 text-xs gap-1.5"
+                  onClick={() => {
+                    navigator.clipboard.writeText(billText);
+                    toast.success("Copiado para a área de transferência!");
+                  }}
+                >
+                  <Check className="h-3.5 w-3.5" /> Copiar Texto
+                </Button>
+                {a.clients?.phone && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="flex-1 text-xs bg-green-600 hover:bg-green-700 text-white gap-1.5"
+                    onClick={() => {
+                      navigator.clipboard.writeText(billText);
+                      const cleanPhone = a.clients.phone.replace(/\D/g, "");
+                      window.open(`https://api.whatsapp.com/send?phone=55${cleanPhone}&text=${encodeURIComponent(billText)}`, "_blank");
+                    }}
+                  >
+                    <Share2 className="h-3.5 w-3.5" /> WhatsApp
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
-        <DialogFooter>
-          <Button onClick={save}>Salvar</Button>
+        <DialogFooter className="flex flex-col sm:flex-row sm:justify-between items-center gap-2 pt-4 border-t">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleGenerateBill}
+            disabled={loadingBill}
+            className="w-full sm:w-auto gap-2 border-primary/45 text-primary hover:bg-primary/5 mr-auto"
+          >
+            <Receipt className="h-4 w-4" /> {loadingBill ? "Gerando..." : "Gerar Conta do Dia"}
+          </Button>
+          <div className="flex gap-2 w-full sm:w-auto justify-end">
+            <Button variant="outline" type="button" onClick={() => setOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={save}>Salvar</Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
