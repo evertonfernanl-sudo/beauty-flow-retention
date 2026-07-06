@@ -442,6 +442,26 @@ export function mapHeaders(headers: string[]): { map: FieldMap; reasons: string[
       }
     }
   }
+  // Salvaguarda explícita para abreviações comuns de valor
+  for (const h of headers) {
+    if (used.has(h)) continue;
+    const clean = h.trim().toLowerCase();
+    if (clean === "valcr" || clean === "valcred") {
+      map.credit_amount = h;
+      used.add(h);
+      reasons.push(`credit_amount=${h} (salvaguarda explícita valcr)`);
+    } else if (clean === "valdb" || clean === "valdeb") {
+      map.debit_amount = h;
+      used.add(h);
+      reasons.push(`debit_amount=${h} (salvaguarda explícita valdb)`);
+    } else if (clean === "val" || clean === "valor" || clean === "vlr") {
+      if (!map.amount) {
+        map.amount = h;
+        used.add(h);
+        reasons.push(`amount=${h} (salvaguarda explícita val/valor/vlr)`);
+      }
+    }
+  }
 
   return { map, reasons, extraConcat };
 }
