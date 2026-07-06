@@ -1536,7 +1536,7 @@ export async function applyRow(sb: SB, args: { rowId: string }): Promise<{ ok: b
         price: amount,
         start_datetime: `${canonical.transaction_date}T09:00:00.000Z`,
         end_datetime: `${canonical.transaction_date}T10:00:00.000Z`,
-        status: "concluded",
+        status: "COMPLETED",
       } as any);
       if (appErr) {
         console.error("[APPLY V3] Erro ao criar agendamento/atendimento:", appErr.message);
