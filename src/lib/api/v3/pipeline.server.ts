@@ -463,6 +463,20 @@ export function mapHeaders(headers: string[]): { map: FieldMap; reasons: string[
     }
   }
 
+  // Se apenas uma coluna de valor específica foi mapeada (debit_amount ou credit_amount),
+  // e nenhuma coluna geral de amount foi mapeada, ela deve ser tratada como amount (preservando o sinal)
+  if (!map.amount) {
+    if (map.credit_amount && !map.debit_amount) {
+      map.amount = map.credit_amount;
+      reasons.push(`re-mapeamento: credit_amount (${map.credit_amount}) promovido a amount pois não há coluna de débito correspondente`);
+      delete map.credit_amount;
+    } else if (map.debit_amount && !map.credit_amount) {
+      map.amount = map.debit_amount;
+      reasons.push(`re-mapeamento: debit_amount (${map.debit_amount}) promovido a amount pois não há coluna de crédito correspondente`);
+      delete map.debit_amount;
+    }
+  }
+
   return { map, reasons, extraConcat };
 }
 
