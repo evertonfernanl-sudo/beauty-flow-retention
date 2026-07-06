@@ -1182,11 +1182,7 @@ export async function runPipeline(
     charset = raw.charset ?? "utf-8";
     ocrConfidence = raw.ocrConfidence;
 
-    const isImagePdf = args.source === "pdf" && (
-      raw.headerFailed ||
-      raw.rows.length === 0 ||
-      raw.rows.reduce((sum, r) => sum + Object.values(r).join("").length, 0) < 50
-    );
+    const isImagePdf = args.source === "pdf";
 
     if (isImagePdf) {
       console.log(`[SIE V3] PDF Imagem/Escaneado detectado (file_hash: ${file_hash}). Iniciando OCR Fallback...`);
