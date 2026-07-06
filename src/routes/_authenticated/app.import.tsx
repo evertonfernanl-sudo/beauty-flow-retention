@@ -21,6 +21,7 @@ export const Route = createFileRoute("/_authenticated/app/import")({
   component: ImportV3Page,
 });
 
+// Layout com ordenação de colunas e formatação de valores preservada
 const formatDateBr = (dateStr: string | null | undefined) => {
   if (!dateStr) return "—";
   const parts = dateStr.split("-");
