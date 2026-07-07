@@ -1057,11 +1057,24 @@ function TransactionList({
     <>
       <ul className="divide-y">
         {rows.map((t: any) => {
+          // Resolve appointments and clients safely handling both object and array formats
+          const appt = t.appointments;
+          const apptObj = Array.isArray(appt) ? appt[0] : appt;
+          const client = apptObj?.clients;
+          const clientObj = Array.isArray(client) ? client[0] : client;
+          const clientName = clientObj?.name;
+
+          const prov = t.providers;
+          const provObj = Array.isArray(prov) ? prov[0] : prov;
+          const providerName = provObj?.name;
+
           let personName = "";
           if (t.type === "INCOME") {
-            personName = t.appointments?.clients?.name || t.description || t.category || "Cliente";
+            personName = clientName || t.description || t.category || "Cliente";
           } else {
-            personName = t.providers?.name || t.description || t.category || "Fornecedor";
+            // Se for despesa, prioriza o nome do cliente se houver vínculo com atendimento,
+            // senão usa o nome do fornecedor, caindo por fim na descrição/categoria.
+            personName = clientName || providerName || t.description || t.category || "Fornecedor";
           }
 
           return (
