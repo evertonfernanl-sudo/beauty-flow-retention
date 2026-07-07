@@ -6,7 +6,8 @@ import * as XLSX from "xlsx";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { detectHeader, mapHeaders, matchCell, isSummaryOrBalanceRow } from "./headers";
-import { enrichRow, detectDirection, extractDate, extractClient, detectTransactionPattern, normalizeDescription } from "./enrichment";
+import { enrichRow, detectDirection, extractDate, extractClient, detectTransactionPattern, normalizeDescription, type TransactionPatternKey } from "./enrichment";
+import { SUBTYPE_KEYWORDS } from "./enrichment/aliases";
 
 type SB = SupabaseClient<Database>;
 
