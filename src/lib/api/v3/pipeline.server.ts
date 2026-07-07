@@ -5,6 +5,7 @@ import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
+import { detectHeader, mapHeaders, matchCell, isSummaryOrBalanceRow } from "./headers";
 
 type SB = SupabaseClient<Database>;
 
@@ -220,20 +221,12 @@ function finalizeTable(
     return cell.x ?? 0;
   };
 
-  // Cap. 24.3 — descarta linhas iniciais irrelevantes até achar header com ≥2 cabeçalhos conhecidos
-  const IGNORE = /^(extrato|banco|ag[eê]ncia|conta|per[ií]odo|cliente|data|resumo)?\s*[:\-–]?\s*[0-9\/\-\.\s]*$/i;
-  let headerIdx = -1;
-  for (let i = 0; i < matrix.length; i++) {
-    const cells = matrix[i].map((c) => getCellText(c).trim()).filter(Boolean);
-    if (cells.length < 2) continue;
-    const knownCount = cells.filter((c) => matchesAnyHeader(c)).length;
-    if (knownCount >= 2) { headerIdx = i; break; }
-    // Só continua ignorando se linha parece filler (poucas colunas ou match do IGNORE)
-    if (cells.length >= 4 && knownCount === 0 && meta?.source !== "pdf_ocr") break; // linha grande sem headers conhecidos → falha
-    if (!cells.every((c) => IGNORE.test(c))) continue;
-  }
+  // Busca do cabeçalho delegando para o novo módulo encapsulado 10/10 da V3
+  const stringMatrix = matrix.map((row) => row.map((c) => getCellText(c)));
+  const detection = detectHeader(stringMatrix, meta?.source as string);
+  const headerIdx = detection.headerIndex;
 
-  if (headerIdx < 0) {
+  if (headerIdx < 0 || detection.headerFailed) {
     return { headers: [], rows: [], meta, charset, headerFailed: true };
   }
 
@@ -260,19 +253,8 @@ function finalizeTable(
       continue;
     }
 
-    // 2. Filtrar resumos e saldos
-    const isSummaryOrBalance = row.some((cell) => {
-      if (cell == null) return false;
-      const s = String(getCellText(cell)).trim().toLowerCase();
-      const hasSummaryKw = SUMMARY_KEYWORDS.some((kw) => s === kw || s.startsWith(kw + " ") || s.startsWith(kw + ":"));
-      if (hasSummaryKw) return true;
-
-      const hasBalancePattern = /\b(saldo|saldo anterior|saldo atual|saldo do dia|saldo dia|saldo disponível|saldo em conta|saldos diários|saldo final|saldo c\/c|saldo c\/a|saldo c\.a|saldo d\/c|saldo de transações|resumo do dia|total de débitos|total de créditos|total de saídas|total de entradas|saldo consolidado|limite contratado|limite cheque especial|resumo do período|resumo do periodo|saldo após operação|saldo apos operacao|saldo após transação|saldo apos transacao)\b/i.test(s);
-      if (hasBalancePattern) return true;
-
-      return false;
-    });
-
+    // 2. Filtrar resumos e saldos usando a biblioteca isolada da V3
+    const isSummaryOrBalance = isSummaryOrBalanceRow(row.map((c) => getCellText(c)));
     if (isSummaryOrBalance) {
       continue;
     }
@@ -312,14 +294,13 @@ function finalizeTable(
   }
 
   // Cap. 24.7 — merge de linhas quebradas: linha sem data válida E sem valor/débito/crédito → concatena em description da anterior
-  const dateIdx = headers.findIndex((h) => HEADER_HINTS.transaction_date.some((r) => r.test(h)));
+  const dateIdx = headers.findIndex((h) => matchCell(h)?.field === "transaction_date");
   const valueIdxs = headers.map((h, i) => {
-    if (HEADER_HINTS.amount.some((r) => r.test(h))) return i;
-    if (HEADER_HINTS.debit_amount.some((r) => r.test(h))) return i;
-    if (HEADER_HINTS.credit_amount.some((r) => r.test(h))) return i;
+    const field = matchCell(h)?.field;
+    if (field === "amount" || field === "debit_amount" || field === "credit_amount") return i;
     return -1;
   }).filter((i) => i >= 0);
-  const descIdx = headers.findIndex((h) => HEADER_HINTS.description.some((r) => r.test(h)));
+  const descIdx = headers.findIndex((h) => matchCell(h)?.field === "description");
 
   const merged: string[][] = [];
   let lastValidDateCell = "";
@@ -365,38 +346,9 @@ function mostCommon(arr: number[]): number {
   return best;
 }
 
-function matchesAnyHeader(cell: string): boolean {
-  for (const field of Object.keys(HEADER_HINTS) as (keyof CanonicalRow)[]) {
-    if (field === "raw_extra") continue;
-    if (HEADER_HINTS[field].some((r) => r.test(cell))) return true;
-  }
-  return false;
-}
-
-// ============================================================
-// Camada 3 — Mapeamento
-// ============================================================
-
-// Regexes tolerantes a sufixos comuns (ex.: "(R$)", " brl", ":") — Cap. 24.5 / 9
-// Todos casam a raiz da palavra e permitem qualquer sufixo não-alfabético.
-const SFX = "([\\s\\(\\[\\:\\/\\-].*)?$";
-const HEADER_HINTS: Record<keyof CanonicalRow, RegExp[]> = {
-  client_name: [new RegExp(`^(cliente|pagador|favorecido|benefici[aá]rio|recebedor|nome|destino|origem|sacado)${SFX}`, "i")],
-  description: [new RegExp(`^(descri[cç][aã]o|hist[oó]rico(\\s*\\/?\\s*complemento)?|complemento|narrativa|evento|opera[cç][aã]o|memo(rando)?|detalhes|lan[cç]amento)${SFX}`, "i")],
-  amount: [new RegExp(`^(valor|montante|amount|vlr|total|valor\\s*movimento|val)${SFX}`, "i")],
-  transaction_date: [new RegExp(`^(data(\\s*(de)?\\s*(lan[cç]amento|movimento|opera[cç][aã]o))?|dt(\\s*lanc)?|date|movimento|lan[cç]amentos?)${SFX}`, "i")],
-  balance: [new RegExp(`^(saldo(\\s*(final|atual|dispon[ií]vel))?|balance)${SFX}`, "i")],
-  document_number: [new RegExp(`^(docto\\.?|documento|doc\\.?|n[°ºr]?\\.?\\s*(docto|doc|documento)?|nr\\.?\\s*doc(to)?|controle|identificador)${SFX}`, "i")],
-  cpf_cnpj: [new RegExp(`^(cpf|cnpj|cpf\\s*\\/?\\s*cnpj|documento\\s*favorecido|inscri[cç][aã]o)${SFX}`, "i")],
-  phone: [new RegExp(`^(telefone|celular|phone|tel|whatsapp)${SFX}`, "i")],
-  debit_amount: [new RegExp(`^(d[eé]bito|sa[ií]da|valor\\s*d[eé]bito|valdb|valdeb)${SFX}`, "i")],
-  credit_amount: [new RegExp(`^(cr[eé]dito|entrada|valor\\s*cr[eé]dito|receita|valcr|valcred)${SFX}`, "i")],
-  movement_type: [new RegExp(`^(tipo|natureza|d\\/c|c\\/d|cd|tipo\\s*da\\s*movimenta[cç][aã]o)${SFX}`, "i")],
-  raw_extra: [],
-};
+// matchesAnyHeader, HEADER_HINTS e mapHeaders originais foram removidos e encapsulados no módulo headers/
 
 // Campos obrigatórios para prosseguir ao Modelo Canônico (Cap. 9 + Item 7)
-// amount pode vir de amount OU debit_amount OU credit_amount.
 const REQUIRED_FIELDS: (keyof CanonicalRow)[] = ["transaction_date", "description"];
 function hasAnyAmountMapping(map: FieldMap): boolean {
   return !!(map.amount || map.debit_amount || map.credit_amount);
@@ -406,81 +358,6 @@ function missingRequiredFields(map: FieldMap): string[] {
   if (!hasAnyAmountMapping(map)) missing.push("amount|debit_amount|credit_amount");
   return missing;
 }
-
-const HISTORICO_RE = /^(hist[oó]rico)$/i;
-const COMPLEMENTO_RE = /^(complemento)$/i;
-
-export function mapHeaders(headers: string[]): { map: FieldMap; reasons: string[]; extraConcat?: { field: keyof CanonicalRow; cols: [string, string] } } {
-  const map: FieldMap = {};
-  const used = new Set<string>();
-  const reasons: string[] = [];
-
-  // Concatenação especial Histórico + Complemento
-  const histIdx = headers.findIndex((h) => HISTORICO_RE.test(h));
-  const compIdx = headers.findIndex((h) => COMPLEMENTO_RE.test(h));
-  let extraConcat: { field: keyof CanonicalRow; cols: [string, string] } | undefined;
-  if (histIdx >= 0 && compIdx >= 0) {
-    map.description = headers[histIdx];
-    used.add(headers[histIdx]);
-    used.add(headers[compIdx]);
-    extraConcat = { field: "description", cols: [headers[histIdx], headers[compIdx]] };
-    reasons.push(`description=${headers[histIdx]} + ${headers[compIdx]} (concatenados com " - ")`);
-  }
-
-  for (const field of Object.keys(HEADER_HINTS) as (keyof CanonicalRow)[]) {
-    if (field === "raw_extra") continue;
-    if (map[field]) continue;
-    // Coluna mais à esquerda vence
-    for (let i = 0; i < headers.length; i++) {
-      const h = headers[i];
-      if (used.has(h)) continue;
-      if (HEADER_HINTS[field].some((r) => r.test(h))) {
-        map[field] = h;
-        used.add(h);
-        reasons.push(`${field}=${h} (coluna mais à esquerda prevaleceu)`);
-        break;
-      }
-    }
-  }
-  // Salvaguarda explícita para abreviações comuns de valor
-  for (const h of headers) {
-    if (used.has(h)) continue;
-    const clean = h.trim().toLowerCase();
-    if (clean === "valcr" || clean === "valcred") {
-      map.credit_amount = h;
-      used.add(h);
-      reasons.push(`credit_amount=${h} (salvaguarda explícita valcr)`);
-    } else if (clean === "valdb" || clean === "valdeb") {
-      map.debit_amount = h;
-      used.add(h);
-      reasons.push(`debit_amount=${h} (salvaguarda explícita valdb)`);
-    } else if (clean === "val" || clean === "valor" || clean === "vlr") {
-      if (!map.amount) {
-        map.amount = h;
-        used.add(h);
-        reasons.push(`amount=${h} (salvaguarda explícita val/valor/vlr)`);
-      }
-    }
-  }
-
-  // Se apenas uma coluna de valor específica foi mapeada (debit_amount ou credit_amount),
-  // e nenhuma coluna geral de amount foi mapeada, ela deve ser tratada como amount (preservando o sinal)
-  if (!map.amount) {
-    if (map.credit_amount && !map.debit_amount) {
-      map.amount = map.credit_amount;
-      reasons.push(`re-mapeamento: credit_amount (${map.credit_amount}) promovido a amount pois não há coluna de débito correspondente`);
-      delete map.credit_amount;
-    } else if (map.debit_amount && !map.credit_amount) {
-      map.amount = map.debit_amount;
-      reasons.push(`re-mapeamento: debit_amount (${map.debit_amount}) promovido a amount pois não há coluna de crédito correspondente`);
-      delete map.debit_amount;
-    }
-  }
-
-  return { map, reasons, extraConcat };
-}
-
-// ============================================================
 // Camada 4 — Modelo Canônico + Snapshot bruto
 // ============================================================
 
