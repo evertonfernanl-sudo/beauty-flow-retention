@@ -587,26 +587,9 @@ export function classify(c: CanonicalRow): ClassificationResult {
     reasons.push(`direção definida de forma determinística: ${detectedDir}`);
   }
 
-  // Regra especial de transação bancária / investimento / tarifa
-  const special = matchSpecialTransaction(desc);
-  if (special) {
-    if (special === "TARIFA") {
-      return { direction: "EXPENSE", subtype: "DESPESA_EMPRESA", confidence: 100, reasons: ["tarifa bancária automática (+100)"] };
-    }
-    if (special === "APLICACAO") {
-      return { direction: "EXPENSE", subtype: "DESPESA_EMPRESA", confidence: 100, reasons: ["aplicação financeira automática (+100)"] };
-    }
-    if (special === "RESGATE") {
-      return { direction: "INCOME", subtype: "RECEITA", confidence: 100, reasons: ["resgate de investimento automático (+100)"] };
-    }
-    if (special === "JUROS") {
-      return { direction: "INCOME", subtype: "RECEITA", confidence: 100, reasons: ["juros/rendimento automático (+100)"] };
-    }
-    if (special === "INTERNA") {
-      const dir = c.amount != null && c.amount > 0 ? "INCOME" : "EXPENSE";
-      return { direction: dir, subtype: dir === "INCOME" ? "RECEITA" : "DESPESA_EMPRESA", confidence: 100, reasons: ["movimentação interna (+100)"] };
-    }
-  }
+  // Regra especial de transação bancária / investimento / tarifa (derivada do padrão determinístico)
+  const special = specialFromPattern(pat, c);
+  if (special) return special;
 
   // Se não foi definido deterministicamente, cai no cálculo clássico por score/probabilístico
   if (!direction) {
@@ -643,17 +626,7 @@ export function classify(c: CanonicalRow): ClassificationResult {
       reasons.push("indicador D/C = D (+10)");
     }
 
-    // 4. Termos explícitos na descrição (Pix Enviado/Recebido, etc.)
-    const descLower = desc.toLowerCase();
-    if (/\b(pix enviado|envio|transferencia enviada|transferência enviada|ted enviada|doc enviado|pagamento)\b/i.test(descLower)) {
-      expenseScore += 60;
-      reasons.push("descrição indica envio de dinheiro (despesa) (+60)");
-    } else if (/\b(pix recebido|recebimento|recebido|transferencia recebida|transferência recebida|ted recebida|doc recebido|deposito|depósito)\b/i.test(descLower)) {
-      incomeScore += 60;
-      reasons.push("descrição indica recebimento de dinheiro (receita) (+60)");
-    }
-
-    // 5. Sinal negativo/positivo ou sufixo D/C no campo de valor
+    // 4. Sinal negativo/positivo ou sufixo D/C no campo de valor
     if (c.amount != null) {
       if (c.amount < 0) {
         expenseScore += 30;
@@ -672,35 +645,23 @@ export function classify(c: CanonicalRow): ClassificationResult {
       direction = "INCOME";
       confidence = incomeScore;
     }
-
-    // Fallback de descrição para direção
-    if (!direction && desc) {
-      if (isExpenseDescription(desc)) {
-        direction = "EXPENSE";
-        confidence += 15;
-        reasons.push("descrição típica de despesa (+15)");
-      } else {
-        direction = "INCOME";
-        confidence += 10;
-        reasons.push("descrição típica de receita (+10)");
-      }
-    }
   }
 
-  // Keyword forte (Subtype determination)
+  // Keyword forte (Subtype determination) — centralizada em SUBTYPE_KEYWORDS/aliases.
   let subtype: ClassificationResult["subtype"] = null;
   if (direction === "INCOME") {
-    if (APORTE_KW.test(desc)) { subtype = "APORTE"; confidence += 30; reasons.push("keyword aporte (+30)"); }
-    else if (STRONG_INCOME_KW.test(desc)) { subtype = "RECEITA"; confidence += 30; reasons.push("keyword receita forte (+30)"); }
+    if (SUBTYPE_KEYWORDS.APORTE.test(desc)) { subtype = "APORTE"; confidence += 30; reasons.push("keyword aporte (+30)"); }
+    else if (SUBTYPE_KEYWORDS.STRONG_INCOME.test(desc)) { subtype = "RECEITA"; confidence += 30; reasons.push("keyword receita forte (+30)"); }
     else { subtype = "RECEITA"; }
   } else if (direction === "EXPENSE") {
-    if (PESSOAL_KW.test(desc)) { subtype = "DESPESA_PESSOAL"; confidence += 30; reasons.push("keyword pessoal (+30)"); }
-    else if (STRONG_EXPENSE_KW.test(desc)) { subtype = "DESPESA_EMPRESA"; confidence += 30; reasons.push("keyword despesa empresa (+30)"); }
+    if (SUBTYPE_KEYWORDS.PESSOAL.test(desc)) { subtype = "DESPESA_PESSOAL"; confidence += 30; reasons.push("keyword pessoal (+30)"); }
+    else if (SUBTYPE_KEYWORDS.STRONG_EXPENSE.test(desc)) { subtype = "DESPESA_EMPRESA"; confidence += 30; reasons.push("keyword despesa empresa (+30)"); }
     else { subtype = "DESPESA_EMPRESA"; }
   }
 
   return { direction, subtype, confidence: Math.min(100, confidence), reasons };
 }
+
 
 export async function resolveRow(
   sb: SB,
