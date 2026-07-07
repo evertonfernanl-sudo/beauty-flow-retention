@@ -536,77 +536,34 @@ function extractExtra(raw: RawRow, map: FieldMap, extraConcat?: { cols: [string,
 // Camada 5 — Resolução (só metadados)
 // ============================================================
 
-const STRONG_INCOME_KW = /(PIX\s+RECEBIDO|TED\s+RECEBIDA|CREDITO\s+CLIENTE|PAGAMENTO\s+RECEBIDO|VENDA)/i;
-const STRONG_EXPENSE_KW = /(PIX\s+ENVIADO|TED\s+ENVIADA|FORNECEDOR|BOLETO\s+PAGO|ALUGUEL|ENERGIA|INTERNET|IMPOSTO)/i;
-const APORTE_KW = /(TRANSFER[EÊ]NCIA\s+CONTA\s+PESSOAL|APORTE|INTEGRALIZA|EMPR[EÉ]STIMO|RESGATE\s+APLICA)/i;
-const PESSOAL_KW = /(MERCADO|FARMACIA|FARMÁCIA|RESTAURANTE|CINEMA|IFOOD|UBER|LAZER|PESSOAL)/i;
-
-function matchSpecialTransaction(desc: string | null | undefined): "APLICACAO" | "RESGATE" | "INTERNA" | "TARIFA" | "JUROS" | null {
-  if (!desc) return null;
-  const s = desc.toLowerCase().trim();
-
-  const aplicacaoKeywords = [
-    "aplicacao", "aplicação", "dinheiro aplicado", "guardar na caixinha",
-    "guardar dinheiro", "investimento automatico", "investimento automático",
-    "transferencia para cofrinho", "transferência para cofrinho",
-    "transferencia para investimento", "transferência para investimento",
-    "mover para reserva", "saldo aplicado", "aplicacao poupanca", "aplicação poupança",
-    "aplicacao investimento", "aplicação investimento", "debit investment",
-    "investment deposit", "funds allocation", "cash allocation", "aplicacao cdb",
-    "aplicação cdb", "aplicacao rdb", "aplicação rdb", "aplicacao fundos", "aplicação fundos",
-    "aplicacao renda fixa", "aplicação renda fixa"
-  ];
-  if (aplicacaoKeywords.some(kw => s.includes(kw))) {
-    return "APLICACAO";
+// Mapeamento determinístico de padrão (Transaction Pattern Library) → subtipo especial.
+// Substitui a antiga função matchSpecialTransaction e o regex isExpenseDescription,
+// que duplicavam a lógica já concentrada em aliases.ts / transactionPatternLibrary.
+function specialFromPattern(
+  pattern: TransactionPatternKey,
+  c: CanonicalRow,
+): ClassificationResult | null {
+  if (!pattern) return null;
+  if (pattern === "SYSTEM_FEE") {
+    return { direction: "EXPENSE", subtype: "DESPESA_EMPRESA", confidence: 100, reasons: ["tarifa bancária automática (+100)"] };
   }
-
-  const resgateKeywords = [
-    "resgate", "dinheiro retirado", "retirado da caixinha", "retirada do cofrinho",
-    "retirada caixinha", "transferencia da reserva", "transferência da reserva",
-    "resgate automatico", "resgate automático", "resgate rdb", "resgate cdb",
-    "resgate caixinha"
-  ];
-  if (resgateKeywords.some(kw => s.includes(kw))) {
-    return "RESGATE";
+  if (pattern === "SYSTEM_RDB_APPLICATION") {
+    return { direction: "EXPENSE", subtype: "DESPESA_EMPRESA", confidence: 100, reasons: ["aplicação financeira automática (+100)"] };
   }
-
-  const internaKeywords = [
-    "transferencia entre contas", "transferência entre contas",
-    "movimentacao interna", "movimentação interna",
-    "transferencia interna", "transferência interna",
-    "mesmo titular", "transf entre contas", "transf. entre contas"
-  ];
-  if (internaKeywords.some(kw => s.includes(kw))) {
-    return "INTERNA";
+  if (pattern === "SYSTEM_RDB_REDEMPTION" || pattern === "SYSTEM_LOAN_REDEMPTION") {
+    return { direction: "INCOME", subtype: "RECEITA", confidence: 100, reasons: ["resgate de investimento automático (+100)"] };
   }
-
-  const tarifaKeywords = [
-    "tarifa", "taxa", "mensalidade", "pacote de servicos", "pacote de serviços",
-    "anuidade", "tarifa pix", "tarifa ted", "tarifa doc", "custo de transacao",
-    "custo de transação", "debit fee", "bank fee",
-    "encargos limite de credencargo", "iof s/ utilizacao limite", "iof s/ utilização limite"
-  ];
-  if (tarifaKeywords.some(kw => s.includes(kw))) {
-    return "TARIFA";
+  if (pattern === "SYSTEM_RENDIMENTO") {
+    return { direction: "INCOME", subtype: "RECEITA", confidence: 100, reasons: ["juros/rendimento automático (+100)"] };
   }
-
-  const jurosKeywords = [
-    "juros", "rendimento", "remuneracao", "remuneração", "juros sobre capital"
-  ];
-  if (jurosKeywords.some(kw => s.includes(kw))) {
-    return "JUROS";
+  if (pattern === "SYSTEM_INTERNAL_TRANSFER") {
+    const dir = c.amount != null && c.amount > 0 ? "INCOME" : "EXPENSE";
+    return { direction: dir, subtype: dir === "INCOME" ? "RECEITA" : "DESPESA_EMPRESA", confidence: 100, reasons: ["movimentação interna (+100)"] };
   }
-
   return null;
 }
 
-function isExpenseDescription(desc: string | null | undefined): boolean {
-  if (!desc) return false;
-  const normalized = desc.trim().toLowerCase();
-  return /^(pix\s+enviado|pix\s+para|transfer[êe]ncia\s+enviada|tarifa|compra|saque|pagamento\s+de\s+boleto|pagamento|juros|tributo|imposto|despesa)/i.test(
-    normalized,
-  );
-}
+
 export type ClassificationResult = {
   direction: "INCOME" | "EXPENSE" | null;
   subtype: "RECEITA" | "APORTE" | "DESPESA_EMPRESA" | "DESPESA_PESSOAL" | null;
