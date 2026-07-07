@@ -13,6 +13,7 @@ import {
 } from "./aliases";
 
 export type TransactionPatternKey =
+  | "SYSTEM_INTERNAL_TRANSFER"
   | "SYSTEM_FEE"
   | "SYSTEM_CREDIT_IN_ACCOUNT"
   | "SYSTEM_LOAN_REDEMPTION"
