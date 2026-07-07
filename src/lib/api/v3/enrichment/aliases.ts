@@ -43,11 +43,20 @@ export const CLIENT_PREFIXES = [
 
 // Patterns for transactionPatternLibrary
 export const SYSTEM_PATTERNS = [
-  { key: "SYSTEM_FEE", regex: /\b(tarifa|taxa|mensalidade|anuidade|bank\s+fee|debit\s+fee|iof|tributo|imposto)\b/i },
+  { key: "SYSTEM_INTERNAL_TRANSFER", regex: /\b(transferencia\s+entre\s+contas|transfer[êe]ncia\s+entre\s+contas|movimentacao\s+interna|movimenta[çc][ãa]o\s+interna|transferencia\s+interna|transfer[êe]ncia\s+interna|mesmo\s+titular|transf\s+entre\s+contas|transf\.\s+entre\s+contas|transferencia\s+conta\s+pessoal|transfer[êe]ncia\s+conta\s+pessoal)\b/i },
+  { key: "SYSTEM_FEE", regex: /\b(tarifa|taxa|mensalidade|anuidade|bank\s+fee|debit\s+fee|iof|tributo|imposto|pacote\s+de\s+servi[çc]os|encargos\s+limite|iof\s+s\/\s+utiliza[çc][ãa]o)\b/i },
   { key: "SYSTEM_CREDIT_IN_ACCOUNT", regex: /\b(credito\s+em\s+conta|crédito\s+em\s+conta|valor\s+adicionado\s+para\s+pix|valor\s+adicionado)\b/i },
   { key: "SYSTEM_LOAN_REDEMPTION", regex: /\b(resgate\s+de\s+emprestimo|resgate\s+de\s+empréstimo)\b/i },
   { key: "SYSTEM_LOAN", regex: /\b(emprestimo|empréstimo)\b/i },
 ];
+
+// Subtype classification keywords (business layer, not enrichment)
+export const SUBTYPE_KEYWORDS = {
+  STRONG_INCOME: /(PIX\s+RECEBIDO|TED\s+RECEBIDA|CREDITO\s+CLIENTE|PAGAMENTO\s+RECEBIDO|VENDA)/i,
+  STRONG_EXPENSE: /(PIX\s+ENVIADO|TED\s+ENVIADA|FORNECEDOR|BOLETO\s+PAGO|ALUGUEL|ENERGIA|INTERNET|IMPOSTO)/i,
+  APORTE: /(TRANSFER[EÊ]NCIA\s+CONTA\s+PESSOAL|APORTE|INTEGRALIZA|EMPR[EÉ]STIMO|RESGATE\s+APLICA)/i,
+  PESSOAL: /(MERCADO|FARMACIA|FARMÁCIA|RESTAURANTE|CINEMA|IFOOD|UBER|LAZER|PESSOAL)/i,
+};
 
 export const INVESTMENT_PATTERNS = [
   { key: "SYSTEM_RDB_REDEMPTION", regex: /\b(resgate\s+rdb|resgate\s+cdb|resgate\s+investimento|resgate\s+automat)\b/i },
