@@ -365,7 +365,7 @@ function missingRequiredFields(map: FieldMap): string[] {
 export function buildCanonical(
   raw: RawRow,
   map: FieldMap,
-  extraConcat?: { field: keyof CanonicalRow; cols: [string, string] },
+  extraConcat?: { field: string; cols: [string, string] },
   bankName?: string,
 ): { canonical: CanonicalRow; snapshot: Record<string, string>; errors: string[] } {
   const snapshot: Record<string, string> = { ...raw };
