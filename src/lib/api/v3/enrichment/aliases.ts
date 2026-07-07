@@ -36,6 +36,9 @@ export const BLACKLIST_CLIENT_WORDS = [
 ];
 
 export const REGEX_PATTERNS = [
+  /(?:transfer[êe]ncia\s+recebida\s+pelo\s+pix|transfer[êe]ncia\s+recebida\s+de|transfer[êe]ncia\s+recebida)\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i,
+  /(?:transfer[êe]ncia\s+enviada\s+pelo\s+pix|transfer[êe]ncia\s+enviada\s+para|transfer[êe]ncia\s+enviada)\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i,
+  /(?:pagamento\s+de\s+boleto\s+efetuado|pagamento\s+de\s+boleto|pagamento\s+efetuado)\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i,
   /p[ixle\s]+(?:qr\s+code\s+)?(?:estatic[o]?|dinamic[o]?)?.*?(?:des|rem)\s*:?\s*-?\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i,
   /(?:p[ixle\s]+recebido\s+de|p[ixle\s]+de|transferência\s+recebida\s+de|recebido\s+de|p[ixle\s]+recebido|ted\s+recebida|credito\s+p[ixle\s]+|transf\s+recebida|transferencia|ted|doc)\s*:?\s*-?\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i,
   /(?:p[ixle\s]+enviado\s+des\s*:|p[ixle\s]+enviado\s+para|p[ixle\s]+para|p[ixle\s]+enviado)\s*([A-Za-zÀ-ÿ\s'\.\-]{4,60})/i,

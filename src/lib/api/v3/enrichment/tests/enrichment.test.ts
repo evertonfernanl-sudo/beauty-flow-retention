@@ -39,6 +39,14 @@ describe("SIE V3 Semantic Enrichment Test Suite", () => {
     
     const name3 = extractClient("Compra no débito - Supermercado Pão de Açúcar");
     expect(name3).toBe("Supermercado Pão de Açúcar");
+
+    // Novos casos específicos
+    expect(extractClient("Resgate RDB")).toBeNull();
+    expect(extractClient("Aplicação RDB")).toBeNull();
+    expect(extractClient("Crédito em conta")).toBeNull();
+    expect(extractClient("Valor adicionado para Pix no Crédito")).toBeNull();
+    expect(extractClient("Pagamento de boleto efetuado CETA CENTRO DE ESTUDOS TECNICOS ALVORA")).toBe("CETA CENTRO DE ESTUDOS TECNICOS ALVORA");
+    expect(extractClient("Transferência enviada pelo Pix SHPP BRASIL INSTITUICAO DE PAG - 38.372.267 /0001-82")).toBe("SHPP BRASIL INSTITUICAO DE PAG");
   });
 
   test("Cenário 2: Interpretação de datas no formato textual brasileiro", () => {
