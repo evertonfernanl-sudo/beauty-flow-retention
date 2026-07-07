@@ -6,7 +6,7 @@ import * as XLSX from "xlsx";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { detectHeader, mapHeaders, matchCell, isSummaryOrBalanceRow } from "./headers";
-import { enrichRow, detectDirection, extractDate, extractClient } from "./enrichment";
+import { enrichRow, detectDirection, extractDate, extractClient, detectTransactionPattern, normalizeDescription } from "./enrichment";
 
 type SB = SupabaseClient<Database>;
 
@@ -620,7 +620,9 @@ export function classify(c: CanonicalRow): ClassificationResult {
   const desc = c.description ?? "";
 
   // 1. Decidir direção de forma determinística por prioridades
-  const detectedDir = detectDirection(c);
+  const norm = normalizeDescription(c.description);
+  const pat = detectTransactionPattern(norm);
+  const detectedDir = detectDirection(c, pat);
   if (detectedDir) {
     direction = detectedDir;
     confidence = 100;
@@ -775,7 +777,9 @@ export async function resolveRow(
   // Cliente da descrição se não veio
   let clientName = canonical.client_name;
   if (!clientName) {
-    clientName = extractClient(canonical.description);
+    const norm = normalizeDescription(canonical.description);
+    const pat = detectTransactionPattern(norm);
+    clientName = extractClient(canonical.description, pat);
     if (clientName) {
       canonical.client_name = clientName;
       suggestions.client_from_description = clientName;

@@ -1,35 +1,61 @@
 import type { CanonicalRow } from "../pipeline.server";
-import { EXPENSE_KEYWORDS, INCOME_KEYWORDS } from "./aliases";
+import { TransactionPatternKey } from "./transactionPatternLibrary";
 
-export function detectDirection(c: CanonicalRow): "INCOME" | "EXPENSE" | null {
-  const desc = (c.description ?? "").toLowerCase();
-
-  // 1. Descrição indica despesa (aliases)
-  if (EXPENSE_KEYWORDS.some(kw => desc.includes(kw))) {
+export function detectDirection(
+  c: CanonicalRow,
+  pattern: TransactionPatternKey
+): "INCOME" | "EXPENSE" | null {
+  // 1. Coluna Débito
+  if (c.debit_amount != null && c.debit_amount > 0) {
     return "EXPENSE";
   }
 
-  // 2. Descrição indica receita (aliases)
-  if (INCOME_KEYWORDS.some(kw => desc.includes(kw))) {
+  // 2. Coluna Crédito
+  if (c.credit_amount != null && c.credit_amount > 0) {
     return "INCOME";
   }
 
-  // 3. Coluna Débito preenchida e não zerada
-  if (c.debit_amount != null && c.debit_amount !== 0) {
-    return "EXPENSE";
+  // 3 e 4. Mapeamento baseado no padrão identificado
+  if (pattern) {
+    const expensePatterns = [
+      "PIX_SENT",
+      "SYSTEM_RDB_APPLICATION",
+      "SYSTEM_LOAN",
+      "SYSTEM_FEE",
+      "TED_SENT",
+      "DOC_SENT",
+      "BOLETO_PAYMENT",
+      "CARD_SHOPPING",
+      "CARD_PAYMENT",
+      "TRANSFER_SENT",
+      "WITHDRAWAL"
+    ];
+    if (expensePatterns.includes(pattern)) {
+      return "EXPENSE";
+    }
+
+    const incomePatterns = [
+      "PIX_RECEIVED",
+      "SYSTEM_RDB_REDEMPTION",
+      "SYSTEM_CREDIT_IN_ACCOUNT",
+      "SYSTEM_LOAN_REDEMPTION",
+      "SYSTEM_RENDIMENTO",
+      "TED_RECEIVED",
+      "DOC_RECEIVED",
+      "TRANSFER_RECEIVED",
+      "DEPOSIT"
+    ];
+    if (incomePatterns.includes(pattern)) {
+      return "INCOME";
+    }
   }
 
-  // 4. Coluna Crédito preenchida e não zerada
-  if (c.credit_amount != null && c.credit_amount !== 0) {
-    return "INCOME";
-  }
-
-  // 5. Valor com sinal negativo
+  // 5. Sinal de amount negativo
   if (c.amount != null && c.amount < 0) {
     return "EXPENSE";
   }
 
-  // 6. Valor com sinal positivo
+  // 6. Sinal de amount positivo
   if (c.amount != null && c.amount > 0) {
     return "INCOME";
   }

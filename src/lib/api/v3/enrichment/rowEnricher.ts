@@ -1,45 +1,49 @@
 import type { CanonicalRow } from "../pipeline.server";
 import { normalizeDescription } from "./descriptionNormalizer";
+import { detectTransactionPattern } from "./transactionPatternLibrary";
 import { extractClient } from "./clientExtractor";
 import { extractDate } from "./dateExtractor";
-import { detectOperationType } from "./operationDetector";
+import { detectOperation } from "./operationDetector";
+import { detectDirection } from "./directionDetector";
+import { validateCanonicalConsistency } from "./consistencyValidator";
 
 export function enrichRow(c: CanonicalRow, bankName?: string): CanonicalRow {
-  const enriched = { ...c };
+  let enriched = { ...c };
 
-  // 1. normalizeDescription (se aplica para padronizar espaçamentos/OCR)
+  // 1. Normalizar descrição para análise (descrição original preservada no enriched.description)
   const normalizedDesc = normalizeDescription(enriched.description);
-  if (normalizedDesc) {
-    enriched.description = normalizedDesc;
-  }
 
-  // 2. extractClient (apenas se cliente estiver vazio/nulo)
+  // 2. Identificar padrão estrutural
+  const pattern = detectTransactionPattern(normalizedDesc);
+
+  // 3. Extrair cliente (apenas se estiver vazio)
   if (enriched.client_name == null || enriched.client_name === "") {
-    const extracted = extractClient(enriched.description);
-    if (extracted) {
-      enriched.client_name = extracted;
+    const client = extractClient(enriched.description, pattern);
+    if (client) {
+      enriched.client_name = client;
     }
   }
 
-  // 3. extractDate (apenas se data estiver vazia/nula)
+  // 4. Extrair data (apenas se estiver vazia)
   if (enriched.transaction_date == null || enriched.transaction_date === "") {
     if (c.transaction_date) {
       enriched.transaction_date = extractDate(c.transaction_date);
     }
   }
 
-  // 4. detectOperation (apenas se tipo de movimentação estiver vazio/nulo)
+  // 5. Detectar tipo de operação (apenas se estiver vazio)
   if (enriched.movement_type == null || enriched.movement_type === "") {
-    const opType = detectOperationType(enriched.description);
-    if (opType) {
-      enriched.movement_type = opType;
+    const op = detectOperation(enriched.description, pattern);
+    if (op) {
+      enriched.movement_type = op;
     }
   }
 
-  // Fallback de cliente: associa ao Banco do Extrato se continuar sem cliente
-  if ((enriched.client_name == null || enriched.client_name === "") && bankName) {
-    enriched.client_name = bankName;
-  }
+  // 6. Detectar direção (sempre computado para alimentar o classificador)
+  // O consistencyValidator e classify cuidarão de manter a coerência final.
+  
+  // 7. Validar consistência da CanonicalRow inteira (aplica correções finais)
+  enriched = validateCanonicalConsistency(enriched, pattern, bankName);
 
   return enriched;
 }

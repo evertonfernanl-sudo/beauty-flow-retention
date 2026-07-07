@@ -1,4 +1,22 @@
-export function detectOperationType(desc: string | null | undefined): string | null {
+import { TransactionPatternKey } from "./transactionPatternLibrary";
+
+export function detectOperation(
+  desc: string | null | undefined,
+  pattern: TransactionPatternKey
+): string | null {
+  if (pattern) {
+    if (pattern.startsWith("PIX_")) return "PIX";
+    if (pattern.startsWith("TED_")) return "TRANSFER";
+    if (pattern.startsWith("DOC_")) return "TRANSFER";
+    if (pattern.startsWith("TRANSFER_")) return "TRANSFER";
+    if (pattern.startsWith("CARD_")) return "CARD";
+    if (pattern === "BOLETO_PAYMENT") return "BOLETO";
+    if (pattern === "WITHDRAWAL") return "CASH";
+    if (pattern === "DEPOSIT") return "CASH";
+    if (pattern.startsWith("SYSTEM_")) return "SYSTEM";
+  }
+
+  // Fallback para aliases
   if (!desc) return null;
   const s = desc.toLowerCase();
   if (/\bpix\b/i.test(s)) return "PIX";

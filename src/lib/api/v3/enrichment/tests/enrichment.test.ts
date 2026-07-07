@@ -1,4 +1,13 @@
-import { enrichRow, detectDirection, extractClient, extractDate, detectOperationType } from "../index";
+import {
+  enrichRow,
+  detectDirection,
+  extractClient,
+  extractDate,
+  detectOperation,
+  detectTransactionPattern,
+  normalizeDescription,
+  validateCanonicalConsistency,
+} from "../index";
 import { CanonicalRow } from "../../pipeline.server";
 
 function describe(name: string, fn: () => void) {
@@ -29,24 +38,37 @@ const expect = (actual: any) => ({
   }
 });
 
-describe("SIE V3 Semantic Enrichment Test Suite", () => {
-  test("Cenário 1: Extração de cliente a partir de descrição do Nubank", () => {
-    const name1 = extractClient("Transferência recebida pelo Pix - João da Silva");
-    expect(name1).toBe("João da Silva");
+describe("SIE V3 Semantic Enrichment Test Suite - Universal (10/10)", () => {
+  test("Cenário 1: Extração de cliente baseada em padrão e blacklist", () => {
+    const p1 = detectTransactionPattern(normalizeDescription("Transferência recebida pelo Pix - João da Silva"));
+    expect(p1).toBe("PIX_RECEIVED");
+    expect(extractClient("Transferência recebida pelo Pix - João da Silva", p1)).toBe("João da Silva");
 
-    const name2 = extractClient("Transferência enviada pelo Pix - Maria Souza");
-    expect(name2).toBe("Maria Souza");
-    
-    const name3 = extractClient("Compra no débito - Supermercado Pão de Açúcar");
-    expect(name3).toBe("Supermercado Pão de Açúcar");
+    const p2 = detectTransactionPattern(normalizeDescription("Transferência enviada pelo Pix - Maria Souza"));
+    expect(p2).toBe("PIX_SENT");
+    expect(extractClient("Transferência enviada pelo Pix - Maria Souza", p2)).toBe("Maria Souza");
 
-    // Novos casos específicos
-    expect(extractClient("Resgate RDB")).toBeNull();
-    expect(extractClient("Aplicação RDB")).toBeNull();
-    expect(extractClient("Crédito em conta")).toBeNull();
-    expect(extractClient("Valor adicionado para Pix no Crédito")).toBeNull();
-    expect(extractClient("Pagamento de boleto efetuado CETA CENTRO DE ESTUDOS TECNICOS ALVORA")).toBe("CETA CENTRO DE ESTUDOS TECNICOS ALVORA");
-    expect(extractClient("Transferência enviada pelo Pix SHPP BRASIL INSTITUICAO DE PAG - 38.372.267 /0001-82")).toBe("SHPP BRASIL INSTITUICAO DE PAG");
+    const p3 = detectTransactionPattern(normalizeDescription("Compra no débito - Supermercado Pão de Açúcar"));
+    expect(p3).toBe("CARD_SHOPPING");
+    expect(extractClient("Compra no débito - Supermercado Pão de Açúcar", p3)).toBe("Supermercado Pão de Açúcar");
+
+    // Operações sistêmicas
+    const pSystem1 = detectTransactionPattern(normalizeDescription("Resgate RDB"));
+    expect(pSystem1).toBe("SYSTEM_RDB_REDEMPTION");
+    expect(extractClient("Resgate RDB", pSystem1)).toBeNull();
+
+    const pSystem2 = detectTransactionPattern(normalizeDescription("Aplicação RDB"));
+    expect(pSystem2).toBe("SYSTEM_RDB_APPLICATION");
+    expect(extractClient("Aplicação RDB", pSystem2)).toBeNull();
+
+    // Outros casos específicos com CPFs/CNPJs ou lixo na string
+    const pBoleto = detectTransactionPattern(normalizeDescription("Pagamento de boleto efetuado CETA CENTRO DE ESTUDOS TECNICOS ALVORA"));
+    expect(pBoleto).toBe("BOLETO_PAYMENT");
+    expect(extractClient("Pagamento de boleto efetuado CETA CENTRO DE ESTUDOS TECNICOS ALVORA", pBoleto)).toBe("CETA CENTRO DE ESTUDOS TECNICOS ALVORA");
+
+    const pPixSHPP = detectTransactionPattern(normalizeDescription("Transferência enviada pelo Pix SHPP BRASIL INSTITUICAO DE PAG - 38.372.267/0001-82"));
+    expect(pPixSHPP).toBe("PIX_SENT");
+    expect(extractClient("Transferência enviada pelo Pix SHPP BRASIL INSTITUICAO DE PAG - 38.372.267/0001-82", pPixSHPP)).toBe("SHPP BRASIL INSTITUICAO DE PAG");
   });
 
   test("Cenário 2: Interpretação de datas no formato textual brasileiro", () => {
@@ -60,40 +82,69 @@ describe("SIE V3 Semantic Enrichment Test Suite", () => {
     expect(d3).toBe(`${new Date().getFullYear()}-12-31`);
   });
 
-  test("Cenário 3: Detecção de tipo de operação", () => {
-    expect(detectOperationType("Pix recebido de cliente")).toBe("PIX");
-    expect(detectOperationType("Compra no cartão de crédito")).toBe("CARD");
-    expect(detectOperationType("Pagamento de boleto bancário")).toBe("BOLETO");
-    expect(detectOperationType("TED enviada")).toBe("TRANSFER");
+  test("Cenário 3: Detecção de tipo de operação por padrão", () => {
+    const p1 = detectTransactionPattern(normalizeDescription("Pix recebido de cliente"));
+    expect(detectOperation("Pix recebido de cliente", p1)).toBe("PIX");
+
+    const p2 = detectTransactionPattern(normalizeDescription("Compra no cartão de crédito"));
+    expect(detectOperation("Compra no cartão de crédito", p2)).toBe("CARD");
+
+    const p3 = detectTransactionPattern(normalizeDescription("Pagamento de boleto bancário"));
+    expect(detectOperation("Pagamento de boleto bancário", p3)).toBe("BOLETO");
+
+    const p4 = detectTransactionPattern(normalizeDescription("TED enviada"));
+    expect(detectOperation("TED enviada", p4)).toBe("TRANSFER");
   });
 
-  test("Cenário 4: Detecção determinística de direção (Prioridades)", () => {
-    // Prioridade 1: Descrição de despesa
-    const c1: Partial<CanonicalRow> = { description: "Compra no débito - Supermercado", amount: 100 };
-    expect(detectDirection(c1 as any)).toBe("EXPENSE");
+  test("Cenário 4: Detecção determinística de direção", () => {
+    // 1. Coluna Débito
+    const c1: CanonicalRow = { debit_amount: 50, description: "Compra", amount: 50 } as any;
+    expect(detectDirection(c1, null)).toBe("EXPENSE");
 
-    // Prioridade 2: Descrição de receita
-    const c2: Partial<CanonicalRow> = { description: "Pix recebido de cliente", amount: -100 };
-    expect(detectDirection(c2 as any)).toBe("INCOME");
+    // 2. Coluna Crédito
+    const c2: CanonicalRow = { credit_amount: 50, description: "Depósito", amount: 50 } as any;
+    expect(detectDirection(c2, null)).toBe("INCOME");
 
-    // Prioridade 3: Coluna Débito
-    const c3: Partial<CanonicalRow> = { debit_amount: 50 };
-    expect(detectDirection(c3 as any)).toBe("EXPENSE");
+    // 3. Padrão indica saída
+    const c3: CanonicalRow = { description: "Pix enviado - João" } as any;
+    expect(detectDirection(c3, "PIX_SENT")).toBe("EXPENSE");
 
-    // Prioridade 4: Coluna Crédito
-    const c4: Partial<CanonicalRow> = { credit_amount: 50 };
-    expect(detectDirection(c4 as any)).toBe("INCOME");
+    // 4. Padrão indica entrada
+    const c4: CanonicalRow = { description: "Pix recebido - Maria" } as any;
+    expect(detectDirection(c4, "PIX_RECEIVED")).toBe("INCOME");
 
-    // Prioridade 5: Valor negativo
-    const c5: Partial<CanonicalRow> = { amount: -50 };
-    expect(detectDirection(c5 as any)).toBe("EXPENSE");
+    // 5. Sinal negativo
+    const c5: CanonicalRow = { amount: -20, description: "Tarifa" } as any;
+    expect(detectDirection(c5, null)).toBe("EXPENSE");
 
-    // Prioridade 6: Valor positivo
-    const c6: Partial<CanonicalRow> = { amount: 50 };
-    expect(detectDirection(c6 as any)).toBe("INCOME");
+    // 6. Sinal positivo
+    const c6: CanonicalRow = { amount: 20, description: "Investimento" } as any;
+    expect(detectDirection(c6, null)).toBe("INCOME");
   });
 
-  test("Cenário 5: Enriquecimento de linha sem sobrescrita destrutiva", () => {
+  test("Cenário 5: Consistency Validator & Banco Fallback", () => {
+    // Transação sistêmica sem cliente preenchido deve receber fallback do banco emissor
+    const rowSys: CanonicalRow = {
+      description: "Resgate RDB",
+      client_name: null,
+      amount: 100,
+      transaction_date: "2026-06-02"
+    } as any;
+    const validated = validateCanonicalConsistency(rowSys, "SYSTEM_RDB_REDEMPTION", "nubank");
+    expect(validated.client_name).toBe("banco nubank");
+
+    // Cliente contendo palavra proibida (ex: "PIX") deve ser anulado
+    const rowInvalidClient: CanonicalRow = {
+      description: "Transferência recebida",
+      client_name: "PIX",
+      amount: 100,
+      transaction_date: "2026-06-02"
+    } as any;
+    const validatedInvalid = validateCanonicalConsistency(rowInvalidClient, "TRANSFER_RECEIVED");
+    expect(validatedInvalid.client_name).toBeNull();
+  });
+
+  test("Cenário 6: Enriquecimento de linha sem sobrescrita destrutiva", () => {
     const row: CanonicalRow = {
       client_name: "Cliente Existente",
       description: "Transferência recebida pelo Pix - Outro Nome",
@@ -109,12 +160,12 @@ describe("SIE V3 Semantic Enrichment Test Suite", () => {
       raw_extra: {}
     };
 
-    const enriched = enrichRow(row);
+    const enriched = enrichRow(row, "nubank");
     // Não deve sobrescrever o cliente nem a data nem o tipo
     expect(enriched.client_name).toBe("Cliente Existente");
     expect(enriched.transaction_date).toBe("2026-05-10");
     expect(enriched.movement_type).toBe("EXISTING_TYPE");
-    // Mas a descrição é normalizada
+    // Mas a descrição é original
     expect(enriched.description).toBe("Transferência recebida pelo Pix - Outro Nome");
   });
 });

@@ -1,4 +1,4 @@
-import { MONTH_MAP } from "./aliases";
+import { MONTHS } from "./aliases";
 
 export function extractDate(s: string | null | undefined): string | null {
   if (!s) return null;
@@ -13,11 +13,12 @@ export function extractDate(s: string | null | undefined): string | null {
     }
   }
 
-  // Suporte a mês textual (ex: "01 JAN" ou "15 MAR 2026")
-  const textMonthMatch = t.match(/^(\d{1,2})[\s\-./]+([a-zA-Z]{3,4})(?:[\s\-./]+(\d{2,4}))?$/i);
+  // Suporte a mês textual (ex: "01 JAN" ou "15 MAR 2026" ou "15 de Março de 2026")
+  const cleanTextDate = t.replace(/\bde\b/gi, "").replace(/\s+/g, " ").trim();
+  const textMonthMatch = cleanTextDate.match(/^(\d{1,2})[\s\-./]+([a-zA-Z]{3,10})(?:[\s\-./]+(\d{2,4}))?$/i);
   if (textMonthMatch) {
     const [, dd, monthName, yy] = textMonthMatch;
-    const mm = MONTH_MAP[monthName.toLowerCase().substring(0, 3)];
+    const mm = MONTHS[monthName.toLowerCase().substring(0, 3)];
     if (mm) {
       const year = yy ? (yy.length === 2 ? `20${yy}` : yy) : String(new Date().getFullYear());
       return `${year}-${mm}-${dd.padStart(2, "0")}`;

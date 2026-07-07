@@ -1,83 +1,61 @@
-import { BLACKLIST_CLIENT_WORDS, REGEX_PATTERNS } from "./aliases";
+import { CLIENT_BLACKLIST, CLIENT_PREFIXES, BANK_NAMES } from "./aliases";
+import { TransactionPatternKey, isSystemPattern } from "./transactionPatternLibrary";
 
-function isSystemTransaction(desc: string): boolean {
-  const clean = desc.toLowerCase().trim();
-  const systemKeywords = [
-    "resgate",
-    "aplicacao",
-    "aplicação",
-    "rendimento",
-    "juros",
-    "tarifa",
-    "taxa",
-    "imposto",
-    "iof",
-    "tributo",
-    "saldo",
-    "extrato",
-    "emprestimo",
-    "empréstimo",
-    "credito em conta",
-    "crédito em conta",
-    "valor adicionado"
-  ];
-  return systemKeywords.some(kw => clean.includes(kw));
-}
-
-function stripPrefixes(name: string): string {
-  let clean = name.trim();
-  const prefixes = [
-    /^transfer[êe]ncia\s+recebida\s+pelo\s+pix\s*/i,
-    /^transfer[êe]ncia\s+enviada\s+pelo\s+pix\s*/i,
-    /^transfer[êe]ncia\s+recebida\s+de\s*/i,
-    /^transfer[êe]ncia\s+enviada\s+para\s*/i,
-    /^transfer[êe]ncia\s+recebida\s*/i,
-    /^transfer[êe]ncia\s+enviada\s*/i,
-    /^pagamento\s+de\s+boleto\s+efetuado\s*/i,
-    /^pagamento\s+de\s+boleto\s*/i,
-    /^pagamento\s+efetuado\s*/i,
-    /^pix\s+recebido\s+de\s*/i,
-    /^pix\s+enviado\s+para\s*/i,
-    /^pix\s+recebido\s*/i,
-    /^pix\s+enviado\s*/i,
-    /^compra\s+no\s+d[eé]bito\s*/i,
-    /^compra\s+no\s+cr[eé]dito\s*/i,
-    /^compra\s*/i,
-    /^saque\s+de\s*/i,
-    /^saque\s*/i,
-  ];
-  for (const p of prefixes) {
+function stripPrefixes(desc: string): string {
+  let clean = desc.trim();
+  for (const p of CLIENT_PREFIXES) {
     clean = clean.replace(p, "");
   }
   return clean.trim();
 }
 
-export function extractClient(desc: string | null | undefined): string | null {
+function isInvalidClientName(name: string): boolean {
+  const lower = name.toLowerCase().trim();
+  if (!lower) return true;
+
+  // 1. Blacklist check
+  if (CLIENT_BLACKLIST.some(w => lower === w || w.includes(lower))) return true;
+
+  // 2. Banco check
+  if (BANK_NAMES.some(b => lower === b || lower.includes(b))) return true;
+
+  // 3. Agência / Conta / CPF / CNPJ check
+  if (/\b(agencia|agência|conta|cpf|cnpj|bco|age|cta)\b/i.test(lower)) return true;
+  if (/•••\.\d{3}\.\d{3}-••/i.test(lower)) return true;
+
+  // 4. Apenas números ou caracteres especiais
+  if (/^[^a-zA-ZÀ-ÿ]+$/.test(lower)) return true;
+
+  return false;
+}
+
+export function extractClient(
+  desc: string | null | undefined,
+  pattern: TransactionPatternKey
+): string | null {
   if (!desc) return null;
 
-  if (isSystemTransaction(desc)) {
+  // Se for operação sistêmica, não há cliente externo (retorna null para fallback de banco emissor)
+  if (isSystemPattern(pattern)) {
     return null;
   }
 
+  // Normalização de múltiplos espaços
   const clean = desc.replace(/\s+/g, " ").trim();
 
-  const isBlacklisted = (word: string): boolean => {
-    const w = word.toLowerCase().trim();
-    return BLACKLIST_CLIENT_WORDS.some(bl => w === bl || bl.includes(w));
-  };
-
-  // 1) Quebra por "-" se presente (ex: "PIX RECEBIDO - MARIA SILVA" ou "Transferência enviada - JOÃO DA SILVA")
+  // 1) Quebra por "-" se presente (padrão muito comum)
   const parts = clean
     .split("-")
     .map((p) => p.trim())
     .filter(Boolean);
+  
   if (parts.length >= 2) {
     const nameRegex = /^[A-Za-zÀ-ÿ\s'\.\-]+$/;
     for (const part of parts) {
       const strippedPart = stripPrefixes(part);
       if (nameRegex.test(strippedPart)) {
         const words = strippedPart.split(/\s+/).filter((w) => w.length > 1);
-        const validWords = words.filter((w) => !isBlacklisted(w));
+        const validWords = words.filter((w) => !isInvalidClientName(w));
         if (validWords.length >= 2) {
           return strippedPart;
         }
@@ -85,31 +63,27 @@ export function extractClient(desc: string | null | undefined): string | null {
     }
   }
 
-  // 2) Padrões com limites explícitos de nomes
-  for (const re of REGEX_PATTERNS) {
-    const match = clean.match(re);
-    if (match && match[1]) {
-      let candidate = match[1].trim();
-      candidate = candidate.replace(/\s+\d{2}\/\d{2}$/, "").replace(/\s+\d{4}$/, "").trim();
-      const strippedCandidate = stripPrefixes(candidate);
-      const words = strippedCandidate.split(/\s+/).filter((w) => w.length >= 2);
-      const validWords = words.filter((w) => !isBlacklisted(w));
+  // 2) Tenta casar nome limpo após remoção de prefixo da descrição toda
+  const strippedDesc = stripPrefixes(clean);
+  const words = strippedDesc.split(/\s+/);
+  if (words.length >= 2) {
+    const nameRegex = /^[A-Za-zÀ-ÿ\s'\.\-]+$/;
+    if (nameRegex.test(strippedDesc)) {
+      const validWords = words.filter((w) => w.length >= 2 && !isInvalidClientName(w));
       if (validWords.length >= 2) {
-        return strippedCandidate;
+        return strippedDesc;
       }
     }
   }
 
-  // 3) Fallback: se for uma sequência de 2 a 4 palavras capitalizadas
-  const strippedClean = stripPrefixes(clean);
-  const words = strippedClean.split(/\s+/);
-  if (words.length >= 2 && words.length <= 4) {
-    const nameRegex = /^[A-Za-zÀ-ÿ\s'\.\-]+$/;
-    if (nameRegex.test(strippedClean)) {
-      const validWords = words.filter((w) => w.length >= 2 && !isBlacklisted(w));
-      if (validWords.length >= 2) {
-        return strippedClean;
-      }
+  // 3) Se sobrou nome de empresa com números/barras (ex: ASSAI ATACADISTA 06.057.223/0001-71)
+  const docOrBankMatch = clean.match(/^([A-Za-zÀ-ÿ\s'\.\-&]{4,60})(?:\s+-\s+|\s+[\d•\-\.\/]+|$)/);
+  if (docOrBankMatch && docOrBankMatch[1]) {
+    const candidate = stripPrefixes(docOrBankMatch[1]);
+    const words = candidate.split(/\s+/).filter((w) => w.length >= 2);
+    const validWords = words.filter((w) => !isInvalidClientName(w));
+    if (validWords.length >= 2) {
+      return candidate;
     }
   }
 
