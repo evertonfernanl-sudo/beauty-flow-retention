@@ -6,6 +6,7 @@ import * as XLSX from "xlsx";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { detectHeader, mapHeaders, matchCell, isSummaryOrBalanceRow } from "./headers";
+import { enrichRow, detectDirection, extractDate } from "./enrichment";
 
 type SB = SupabaseClient<Database>;
 
@@ -365,6 +366,7 @@ export function buildCanonical(
   raw: RawRow,
   map: FieldMap,
   extraConcat?: { field: keyof CanonicalRow; cols: [string, string] },
+  bankName?: string,
 ): { canonical: CanonicalRow; snapshot: Record<string, string>; errors: string[] } {
   const snapshot: Record<string, string> = { ...raw };
   const errors: string[] = [];
@@ -421,7 +423,9 @@ export function buildCanonical(
     movement_type: nullableTrim(get("movement_type")),
     raw_extra: extractExtra(raw, map, extraConcat),
   };
-  return { canonical, snapshot, errors };
+
+  const enriched = enrichRow(canonical, bankName);
+  return { canonical: enriched, snapshot, errors };
 }
 
 function nullableTrim(s: string): string | null {
@@ -512,7 +516,9 @@ function parseDate(s: string): string | null {
   // ISO YYYY-MM-DD
   const iso = t.match(/^(\d{4})[\-.](\d{1,2})[\-.](\d{1,2})/);
   if (iso) return `${iso[1]}-${iso[2].padStart(2, "0")}-${iso[3].padStart(2, "0")}`;
-  return null;
+
+  // Fallback para meses textuais (Nubank etc.)
+  return extractDate(t);
 }
 
 function extractExtra(raw: RawRow, map: FieldMap, extraConcat?: { cols: [string, string] }): Record<string, string> {
@@ -643,7 +649,6 @@ function isExpenseDescription(desc: string | null | undefined): boolean {
     normalized,
   );
 }
-
 export type ClassificationResult = {
   direction: "INCOME" | "EXPENSE" | null;
   subtype: "RECEITA" | "APORTE" | "DESPESA_EMPRESA" | "DESPESA_PESSOAL" | null;
@@ -656,6 +661,14 @@ export function classify(c: CanonicalRow): ClassificationResult {
   let confidence = 0;
   let direction: "INCOME" | "EXPENSE" | null = null;
   const desc = c.description ?? "";
+
+  // 1. Decidir direção de forma determinística por prioridades
+  const detectedDir = detectDirection(c);
+  if (detectedDir) {
+    direction = detectedDir;
+    confidence = 100;
+    reasons.push(`direção definida de forma determinística: ${detectedDir}`);
+  }
 
   // Regra especial de transação bancária / investimento / tarifa
   const special = matchSpecialTransaction(desc);
@@ -678,83 +691,86 @@ export function classify(c: CanonicalRow): ClassificationResult {
     }
   }
 
-  let expenseScore = 0;
-  let incomeScore = 0;
+  // Se não foi definido deterministicamente, cai no cálculo clássico por score/probabilístico
+  if (!direction) {
+    let expenseScore = 0;
+    let incomeScore = 0;
 
-  // 1. Direção estrutural de colunas
-  if (c.credit_amount != null && c.credit_amount !== 0 && (c.debit_amount == null || c.debit_amount === 0)) {
-    incomeScore += 40;
-    reasons.push("coluna Crédito preenchida (+40)");
-  } else if (c.debit_amount != null && c.debit_amount !== 0 && (c.credit_amount == null || c.credit_amount === 0)) {
-    expenseScore += 40;
-    reasons.push("coluna Débito preenchida (+40)");
-  }
-
-  // 2. Direção estrutural por sinal básico do valor
-  if (c.amount != null) {
-    if (c.amount > 0) {
-      incomeScore += 20;
-      reasons.push("valor positivo (+20)");
-    } else if (c.amount < 0) {
-      expenseScore += 20;
-      reasons.push("valor negativo (+20)");
+    // 1. Direção estrutural de colunas
+    if (c.credit_amount != null && c.credit_amount !== 0 && (c.debit_amount == null || c.debit_amount === 0)) {
+      incomeScore += 40;
+      reasons.push("coluna Crédito preenchida (+40)");
+    } else if (c.debit_amount != null && c.debit_amount !== 0 && (c.credit_amount == null || c.credit_amount === 0)) {
+      expenseScore += 40;
+      reasons.push("coluna Débito preenchida (+40)");
     }
-  }
 
-  // 3. Indicador D/C na coluna de Tipo
-  const mt = (c.movement_type ?? "").trim().toUpperCase();
-  if (["C", "CR", "CREDITO", "CRÉDITO"].includes(mt)) {
-    incomeScore += 10;
-    reasons.push("indicador D/C = C (+10)");
-  } else if (["D", "DB", "DEB", "DEBITO", "DÉBITO"].includes(mt)) {
-    expenseScore += 10;
-    reasons.push("indicador D/C = D (+10)");
-  }
-
-  // 4. Termos explícitos na descrição (Pix Enviado/Recebido, etc.)
-  const descLower = desc.toLowerCase();
-  if (/\b(pix enviado|envio|transferencia enviada|transferência enviada|ted enviada|doc enviado|pagamento)\b/i.test(descLower)) {
-    expenseScore += 60;
-    reasons.push("descrição indica envio de dinheiro (despesa) (+60)");
-  } else if (/\b(pix recebido|recebimento|recebido|transferencia recebida|transferência recebida|ted recebida|doc recebido|deposito|depósito)\b/i.test(descLower)) {
-    incomeScore += 60;
-    reasons.push("descrição indica recebimento de dinheiro (receita) (+60)");
-  }
-
-  // 5. Sinal negativo/positivo ou sufixo D/C no campo de valor
-  if (c.amount != null) {
-    if (c.amount < 0) {
-      expenseScore += 30;
-      reasons.push("sufixo D ou sinal negativo no valor (despesa) (+30)");
-    } else if (c.amount > 0) {
-      incomeScore += 30;
-      reasons.push("sufixo C ou sinal positivo no valor (receita) (+30)");
+    // 2. Direção estrutural por sinal básico do valor
+    if (c.amount != null) {
+      if (c.amount > 0) {
+        incomeScore += 20;
+        reasons.push("valor positivo (+20)");
+      } else if (c.amount < 0) {
+        expenseScore += 20;
+        reasons.push("valor negativo (+20)");
+      }
     }
-  }
 
-  // Determinação da direção com base no somatório
-  if (expenseScore > incomeScore) {
-    direction = "EXPENSE";
-    confidence = expenseScore;
-  } else if (incomeScore > expenseScore) {
-    direction = "INCOME";
-    confidence = incomeScore;
-  }
+    // 3. Indicador D/C na coluna de Tipo
+    const mt = (c.movement_type ?? "").trim().toUpperCase();
+    if (["C", "CR", "CREDITO", "CRÉDITO"].includes(mt)) {
+      incomeScore += 10;
+      reasons.push("indicador D/C = C (+10)");
+    } else if (["D", "DB", "DEB", "DEBITO", "DÉBITO"].includes(mt)) {
+      expenseScore += 10;
+      reasons.push("indicador D/C = D (+10)");
+    }
 
-  // Fallback de descrição para direção
-  if (!direction && desc) {
-    if (isExpenseDescription(desc)) {
+    // 4. Termos explícitos na descrição (Pix Enviado/Recebido, etc.)
+    const descLower = desc.toLowerCase();
+    if (/\b(pix enviado|envio|transferencia enviada|transferência enviada|ted enviada|doc enviado|pagamento)\b/i.test(descLower)) {
+      expenseScore += 60;
+      reasons.push("descrição indica envio de dinheiro (despesa) (+60)");
+    } else if (/\b(pix recebido|recebimento|recebido|transferencia recebida|transferência recebida|ted recebida|doc recebido|deposito|depósito)\b/i.test(descLower)) {
+      incomeScore += 60;
+      reasons.push("descrição indica recebimento de dinheiro (receita) (+60)");
+    }
+
+    // 5. Sinal negativo/positivo ou sufixo D/C no campo de valor
+    if (c.amount != null) {
+      if (c.amount < 0) {
+        expenseScore += 30;
+        reasons.push("sufixo D ou sinal negativo no valor (despesa) (+30)");
+      } else if (c.amount > 0) {
+        incomeScore += 30;
+        reasons.push("sufixo C ou sinal positivo no valor (receita) (+30)");
+      }
+    }
+
+    // Determinação da direção com base no somatório
+    if (expenseScore > incomeScore) {
       direction = "EXPENSE";
-      confidence += 15;
-      reasons.push("descrição típica de despesa (+15)");
-    } else {
+      confidence = expenseScore;
+    } else if (incomeScore > expenseScore) {
       direction = "INCOME";
-      confidence += 10;
-      reasons.push("descrição típica de receita (+10)");
+      confidence = incomeScore;
+    }
+
+    // Fallback de descrição para direção
+    if (!direction && desc) {
+      if (isExpenseDescription(desc)) {
+        direction = "EXPENSE";
+        confidence += 15;
+        reasons.push("descrição típica de despesa (+15)");
+      } else {
+        direction = "INCOME";
+        confidence += 10;
+        reasons.push("descrição típica de receita (+10)");
+      }
     }
   }
 
-  // Keyword forte
+  // Keyword forte (Subtype determination)
   let subtype: ClassificationResult["subtype"] = null;
   if (direction === "INCOME") {
     if (APORTE_KW.test(desc)) { subtype = "APORTE"; confidence += 30; reasons.push("keyword aporte (+30)"); }
@@ -1236,15 +1252,15 @@ export async function runPipeline(
       return { rowsInserted: 0, finalState: "FAILED" };
     }
 
-    // 4-8) Por linha: canonical → guard → resolução → dedup
-    const startCanonical = Date.now();
-    const built = raw.rows.map((r) => buildCanonical(r, map, extraConcat));
-    const canonicalTime = Date.now() - startCanonical;
-    console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: buildCanonical\nRows: ${built.length}\nTime: ${canonicalTime} ms\nStatus: OK`);
-
     const filename = args.storagePath.split("/").pop() || "extrato.pdf";
     const sampleText = csvText || raw.headers.join(" ") + " " + raw.rows.slice(0, 5).map(r => Object.values(r).join(" ")).join(" ");
     const bankName = inferBankNameV3(filename, sampleText);
+
+    // 4-8) Por linha: canonical → guard → resolução → dedup
+    const startCanonical = Date.now();
+    const built = raw.rows.map((r) => buildCanonical(r, map, extraConcat, bankName));
+    const canonicalTime = Date.now() - startCanonical;
+    console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: buildCanonical\nRows: ${built.length}\nTime: ${canonicalTime} ms\nStatus: OK`);
 
     const startResolve = Date.now();
     const rowsToInsert: any[] = [];
