@@ -15,6 +15,14 @@ import {
   deleteImportV3,
   updateRowV3,
 } from "@/lib/api/siev3.functions";
+import {
+  HOMOLOGATION_LABEL,
+  CONFIDENCE_LABEL,
+  toConfidenceLevel,
+  toHomologationStatus,
+  type HomologationStatus,
+  type ConfidenceLevel,
+} from "@/lib/api/v3/ntieb/rules";
 
 export const Route = createFileRoute("/_authenticated/app/import")({
   head: () => ({ meta: [{ title: "Import (SIE V3)" }] }),
