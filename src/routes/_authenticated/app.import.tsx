@@ -258,7 +258,7 @@ function ImportV3Page() {
         <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls,.pdf" className="hidden"
                onChange={(e) => e.target.files?.[0] && onPick(e.target.files[0])} />
         <Badge variant="outline" className="gap-1"><ShieldCheck className="h-3 w-3" /> Determinístico</Badge>
-        <Badge variant="outline">v3.0.0</Badge>
+        <Badge variant="outline">NTIEB v1.0</Badge>
       </Card>
 
       <div className="space-y-4">
