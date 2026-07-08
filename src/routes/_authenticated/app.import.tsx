@@ -284,9 +284,21 @@ function ImportV3Page() {
                 </div>
                 
                 <div className="flex items-center gap-3 justify-between md:justify-end">
-                  <Badge variant={imp.final_state === "FAILED" ? "destructive" : imp.final_state === "SUCCESS" ? "default" : "secondary"}>
-                    {imp.final_state ?? imp.status}
-                  </Badge>
+                  {(() => {
+                    const homologation: HomologationStatus =
+                      (imp.homologation_status as HomologationStatus | null | undefined) ??
+                      (imp.final_state ? toHomologationStatus(imp.final_state as any) : "PENDENTE");
+                    const variant =
+                      homologation === "APROVADA" ? "default" :
+                      homologation === "REJEITADA" ? "destructive" :
+                      homologation === "APROVADA_COM_ALERTAS" ? "secondary" :
+                      "outline";
+                    return (
+                      <Badge variant={variant as any} title={`NTIEB Cap. 64 · finalState=${imp.final_state ?? imp.status}`}>
+                        {HOMOLOGATION_LABEL[homologation]}
+                      </Badge>
+                    );
+                  })()}
                   <span className="text-muted-foreground text-xs">{new Date(imp.created_at).toLocaleString("pt-BR")}</span>
                   
                   <div className="flex items-center gap-1">
