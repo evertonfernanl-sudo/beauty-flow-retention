@@ -673,7 +673,15 @@ export function classify(c: CanonicalRow): ClassificationResult {
     else { subtype = "DESPESA_EMPRESA"; }
   }
 
-  return { direction, subtype, confidence: Math.min(100, confidence), reasons };
+  // NTIEB Cap. 33/34 — cita a regra oficial aplicada quando há pattern identificado
+  const matrix = pat ? PATTERN_TO_MATRIX[pat as string] : undefined;
+  const rule_applied = matrix
+    ? formatRuleApplied(matrix.rule, `${matrix.operation} (Pattern ${pat})`)
+    : direction
+      ? formatRuleApplied("33", `Direção ${direction} por sinal/coluna`)
+      : formatRuleApplied("33", "Classificação indeterminada");
+
+  return { direction, subtype, confidence: Math.min(100, confidence), reasons, rule_applied };
 }
 
 
