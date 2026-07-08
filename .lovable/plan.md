@@ -1,117 +1,84 @@
-# SIE V3 — Ajustes conforme Especificação Final Consolidada
+# Implementação da NTIEB v1.0 na SIE V3
 
-A tela `/app/import` e o pipeline V3 já existem, mas a spec introduz **regras determinísticas rígidas** que não estão implementadas. Este plano aplica todas as correções, preservando o que já funciona.
+A norma foi salva em `docs/ntieb-v1.md` como referência oficial. O pipeline V3 atual já cobre boa parte dos capítulos 1–10 (princípios), 15–17 (operações, descrição, cliente), 23–32 (subclassificação), 33–34 (matriz), parte de 60 (dedup) e 62 (auditoria). O plano abaixo fecha os gaps sem quebrar o que funciona, em 4 fases entregáveis independentes.
 
-## Escopo (o que muda)
+## Mapa: onde estamos vs. NTIEB
 
-### 1. Camada 2 — Conversão (fidelidade absoluta)
+| NTIEB | Já existe | Gap |
+|---|---|---|
+| Cap. 5 — Hierarquia de decisões | Parcial em `classify` | Ordem canônica não é auditável linha a linha |
+| Cap. 7, 13, 16.4 — Blocos multi-linha / continuidade entre páginas | Merge simples em `pipeline.server.ts` | Sem reconstrução por bloco em PDF nativo/OCR |
+| Cap. 14 — Contexto temporal herdado | Não | Data anterior não é propagada quando linha sem data |
+| Cap. 15 — Operações neutras (Saldo Inicial/Final, Total) | Parcial (`isSummaryOrBalanceRow`) | Não gera lançamento mas também não alimenta cap. 55 |
+| Cap. 34 — Matriz oficial | Coberto por Pattern Library | Falta tabela declarativa espelhando cap. 34 exato |
+| Cap. 36, 61 — Confidence score em 5 níveis | `classification_confidence` numérico | Sem mapeamento p/ Muito Alta/Alta/Média/Baixa/Muito Baixa |
+| Cap. 55 — Validação de saldo (SI + R − D = SF) | Não | Requer capturar Saldo Inicial/Final do extrato |
+| Cap. 56–59 — Validações pós-parse (valor, data, cliente, descrição) | Parcial | Sem checagens explícitas rotuladas por regra |
+| Cap. 60 — Duplicidade objetiva | Existe (`possible_duplicate`) | Ok |
+| Cap. 62 — Rastreabilidade (regra aplicada por campo) | `reason` livre | Sem citar `regra_aplicada` (ex.: "17.3", "33.1") |
+| Cap. 64 — Homologação (4 status) | `final_state` com 4 valores | Renomear/mapear para os 4 status oficiais |
+| Cap. 65 — Log obrigatório | Parcial (`v3_imports`) | Faltam: versão NTIEB, tempo, contagem R/D |
 
-- **CSV/XLS — charset determinístico:** tentar UTF-8 → ISO-8859-1 → Windows-1252 nessa ordem fixa; persistir o charset usado; substituir indecifráveis por `�` + WARNING.
-- **OFX:** adicionar parser (hoje só CSV/XLSX/PDF).
-- **PDF multi-página:** reconstruir tabela por página, reidentificar cabeçalho por página, empilhar preservando ordem.
-- **OCR (PDF imagem):** integrar detecção estrutural (coordenadas X/Y); calcular métrica de confiança (células extraídas / células estimadas); se <80% → `OCR_REVIEW` e interrompe.
+## Fases
 
-### 2. Detecção de cabeçalho (Cap. 24.3)
+### Fase 1 — Rastreabilidade e Matriz Oficial (baixo risco, alto valor)
 
-- Descartar linhas iniciais vazias ou contendo apenas "Extrato/Banco/Agência/Conta/números/datas isoladas".
-- Primeira linha com ≥2 cabeçalhos conhecidos = header oficial (removida do dataset).
-- Se nenhuma linha atender → `HEADER_FAILED` → `FAILED`.
+Objetivo: tornar toda decisão auditável citando a regra da NTIEB, sem mudar comportamento.
 
-### 3. Merge de linhas quebradas (Cap. 24.7)
+1. Criar `src/lib/api/v3/ntieb/rules.ts` com:
+   - `OFFICIAL_MATRIX` (cap. 34) — mapa operação → natureza, fonte única da verdade.
+   - `CONFIDENCE_LEVELS` (cap. 36/61) — enum `MUITO_ALTA | ALTA | MEDIA | BAIXA | MUITO_BAIXA` + função `toLevel(score)`.
+   - `HOMOLOGATION_STATUS` (cap. 64) — `APROVADA | APROVADA_COM_ALERTAS | PENDENTE | REJEITADA` + mapeamento a partir do `final_state` atual.
+2. Em `pipeline.server.ts` `classify`/`resolveRow`: além de `reason`, gravar `rule_applied` (ex.: `"NTIEB 33.1"`, `"NTIEB 17.3"`, `"NTIEB 24.PIX"`).
+3. Migração: adicionar em `v3_import_rows`: `rule_applied text`, `confidence_level text`; em `v3_imports`: `homologation_status text`, `ntieb_version text default '1.0'`, `parser_version text`, `processing_ms int`, `income_count int`, `expense_count int`.
+4. UI `app.import.tsx`: mostrar badge de `homologation_status` no topo e `confidence_level` por linha (substitui/complementa o numérico).
 
-- Linha sem `occurred_at` válido nem coluna estrutural → concatenar em `description` da linha anterior.
+### Fase 2 — Contexto Temporal e Blocos Multi-linha (cap. 7, 13, 14, 16.4)
 
-### 4. Camada 3 — Mapeamento
+Objetivo: extratos onde uma linha física ≠ um lançamento passam a ser interpretados corretamente.
 
-- Expandir dicionário conforme Cap. 9 (Favorecido, Beneficiário, Histórico/Complemento, Débito, Crédito, D/C, etc.).
-- **Ambiguidade:** coluna mais à esquerda vence, com `reason` "Coluna mais à esquerda prevaleceu".
-- **Histórico + Complemento:** concatenar com `" - "` na ordem original.
+1. Novo módulo `src/lib/api/v3/blocks/blockAssembler.ts`:
+   - Entrada: linhas brutas ordenadas + índice do header.
+   - Saída: array de "blocos" (grupos de linhas físicas que formam 1 lançamento).
+   - Regras: nova data / nova descrição de operação (cap. 15) / novo valor após bloco fechado abrem bloco; mudança de página nunca fecha.
+2. Contexto temporal herdado (cap. 14): parser mantém `lastDate`; linha sem data válida herda a última.
+3. Concatenação de descrição multi-linha (cap. 16.4) dentro do bloco.
+4. Integrar assembler no fluxo CSV/XLSX/PDF (PDF nativo é onde mais aparece). OFX/XLSX com 1 linha = 1 lançamento continuam funcionando (assembler no-op).
+5. Testes: adicionar fixtures em `enrichment/tests/` cobrindo bloco de 6 linhas do exemplo cap. 13.
 
-### 5. Camada 4 — Modelo Canônico
+### Fase 3 — Validações Financeiras e Homologação (cap. 53–59, 63–64)
 
-- Adicionar campos: `document_number`, `cpf_cnpj`, `debit_amount`, `credit_amount`, `movement_type`.
-- **Derivação de `amount`:** se `débito`/`crédito` preenchidos → `abs()` do que estiver; Crédito prevalece com WARNING se ambos.
-- **Parser de valores determinístico:** grammar parser (1v+1p → BR; 2p → US; 1v → BR); falha → `LINE_FAILED`.
-- **Datas:** DD/MM/YYYY, MM/DD/YYYY, YYYY-MM-DD; OFX/timestamp → converter para `America/Sao_Paulo`, extrair só data; timezone ausente → UTC-3 + WARNING; falha → `LINE_FAILED`.
-- **Snapshot original:** JSON dos valores brutos por linha (antes de trim/conversão).
-- **Hash SHA-256** do arquivo original completo (não por linha).
+1. Capturar `saldo_inicial`, `saldo_final`, `total_entradas`, `total_saidas` das linhas neutras (cap. 15.3) para dentro de `v3_imports`.
+2. Novo `src/lib/api/v3/validation/balanceValidator.ts`:
+   - `SI + ΣReceitas − ΣDespesas ≈ SF` com tolerância R$ 0,01.
+   - Divergência → `homologation_status = APROVADA_COM_ALERTAS` + inconsistência auditada; nunca corrige.
+3. Validators pós-parse por linha: valor (cap. 56), data (cap. 57), cliente (cap. 58), descrição (cap. 59). Cada falha vira `LINE_REVIEW` com `rule_applied` citando o capítulo.
+4. Regra dura (cap. 61): confidence `MUITO_BAIXA` → `LINE_REVIEW` obrigatório.
+5. Mapeamento oficial de `final_state` → `homologation_status`:
+   - `SUCCESS` → APROVADA; `PARTIAL_SUCCESS` c/ alertas → APROVADA_COM_ALERTAS; `REVIEW` → PENDENTE; `FAILED` → REJEITADA.
 
-### 6. Extração de cliente da descrição (Cap. 10)
+### Fase 4 — Refinos de robustez (cap. 12, 32, 43–52)
 
-- Extratores parametrizados por banco (BB, Caixa, Nubank, Itaú, Bradesco, Santander) usando regex com palavras-chave ("PARA", "A FAVOR DE", "BENEFICIÁRIO", "DE", "DESTINO:").
-- Fallback: sequência de tokens maiúsculos/acentuados, descartando termos bancários.
-- Nunca inventar; não encontrado → `NULL`.
+1. Limpeza determinística de ruído administrativo (cap. 12.3): rodapés, telefones, ouvidoria, CPF do titular do extrato.
+2. Operações internas (cap. 32): garantir que `SYSTEM_*` sempre resulte em `client_name = banco emissor` — já parcial em `consistencyValidator`, formalizar contra a matriz.
+3. Log de homologação completo (cap. 65) exposto na UI (drawer de auditoria).
+4. Testes de regressão end-to-end com pelo menos 1 extrato por banco suportado (BB, Caixa, Nubank, Itaú, Bradesco, Santander).
 
-### 7. Camada 5 — Resolução (só metadados)
+## Detalhes técnicos
 
-- **Classificação com tabela de pesos oficial** (Cap. 11.3): Crédito=+40, Débito=+40, keyword forte=+30, sinal=+20, D/C=+10. Limiar <60 → `LINE_REVIEW`.
-- **Direção estrutural** (Cap. 11.2) precede subclassificação Receita/Aporte/Despesa Empresa/Despesa Pessoal.
-- **Deduplicação objetiva:** mesmo `amount` (±0.01) + `client_name` normalizado igual (ou ambos vazios) + `|Δoccurred_at| ≤ 1 dia`, dentro da importação ou últimos 30 dias → `possible_duplicate=true` + IDs conflitantes na auditoria.
-- Resolução de cliente: CPF → telefone → documento → nome exato → similaridade.
+- Nenhuma quebra de contrato público — `siev3.functions.ts` mantém assinatura; novos campos são acréscimos.
+- Todas as migrações seguem GRANT explícito por role, RLS já cobre `v3_*`.
+- Sem novas dependências npm nas Fases 1–3; Fase 4 pode precisar refinar `pdfjs-dist` para coordenadas (opcional).
+- `docs/ntieb-v1.md` fica como fonte de verdade; comentários no código referenciam capítulo/regra.
 
-### 8. Camada 6 — Assertion Guard
+## O que fica fora deste ciclo
 
-- Comparar canonical × snapshot para campos protegidos (Cliente, Descrição, Valor, Data, Documento, CPF/CNPJ, Saldo, Telefone); restaurar automaticamente + auditar; se restauração falhar → `LINE_FAILED`.
+- Reprocessamento retroativo de imports antigos (a norma se aplica apenas a novas importações).
+- OCR estrutural com coordenadas X/Y (cap. 43–46 mais avançados) — mantemos OCR atual, apenas marcamos `MUITO_BAIXA` quando confiança <80%.
+- Editor visual de regras por banco.
 
-### 9. Máquina de Estados de Falhas (Cap. 37) — regra mestra
+## Perguntas antes de iniciar
 
-Estados por linha: `OK | LINE_FAILED | LINE_REVIEW | HEADER_FAILED | OCR_REVIEW`.
-Estado global final decidido **após** processar tudo, na ordem fixa:
-
-1. `HEADER_FAILED` → **FAILED** (interrompe)
-2. `OCR_REVIEW` → **REVIEW** (interrompe)
-3. `LINE_FAILED/total ≥ 10%` → **FAILED**
-4. `LINE_REVIEW > 0` → **REVIEW**
-5. `LINE_FAILED > 0` (<10%) → **PARTIAL_SUCCESS**
-6. senão → **SUCCESS**
-
-Falhas de linha nunca interrompem o pipeline (só HEADER/OCR interrompem).
-
-### 10. Auditoria
-
-- Campo `responsavel` obrigatório: `'Sistema' | 'Usuário' | 'Algoritmo v3.0.0'`.
-- Toda decisão automática com `reason` obrigatório.
-- Append-only (já garantido por policy — reforçar).
-
-### 11. UI `/app/import`
-
-- Ordem original das linhas preservada; reordenar colunas é permitido (cosmético).
-- Colunas originais (readonly) separadas das colunas de sugestão.
-- Badges de status por linha (`OK/REVIEW/FAILED`) e estado global da importação.
-- Drawer de auditoria já existe — adicionar snapshot bruto + hash SHA-256 + charset.
-- **Nunca interromper** durante importação; toda ação humana é pós-processamento.
-
-## Alterações técnicas
-
-### Banco (migração)
-
-- `v3_imports`: adicionar `file_hash text`, `charset text`, `final_state text CHECK (final_state IN ('SUCCESS','PARTIAL_SUCCESS','REVIEW','FAILED'))`, `total_rows int`, `failed_rows int`, `review_rows int`, `ocr_confidence numeric`.
-- `v3_import_rows`: substituir `status` por enum `('OK','LINE_FAILED','LINE_REVIEW')`, adicionar `possible_duplicate boolean`, `duplicate_of uuid[]`, `classification_confidence int`, `reason text`.
-- `v3_audit_log`: adicionar `responsavel text NOT NULL`, `algorithm_version text`.
-
-### Código
-
-- `src/lib/api/v3/pipeline.server.ts` — refatorar completamente:
-  - `parseCsv`/`parseXlsx` → charset determinístico.
-  - `parseOfx` (novo).
-  - `parsePdf` → detecção estrutural + multi-página + merge de linhas quebradas + confiança.
-  - `detectHeader` (novo, com descarte).
-  - `mapHeaders` → prioridade "coluna mais à esquerda" + concatenação Histórico+Complemento.
-  - `buildCanonical` → parser determinístico + datas + derivação de amount + snapshot bruto.
-  - `extractClientFromDescription` (novo, com extratores por banco).
-  - `resolveRow` → tabela de pesos + confiança + dedup objetivo.
-  - `assertionGuard` (novo).
-  - `computeFinalState` (novo — máquina de estados).
-- `src/lib/api/siev3.functions.ts` — expor `final_state`, `stats`.
-- `src/routes/_authenticated/app.import.tsx` — badges de estado, colunas originais vs sugestões separadas, aviso de duplicidade.
-
-## O que fica de fora deste ciclo
-
-- Interface para editar mapeamento por banco (extratores ficam hard-coded para BB/Caixa/Nubank/Itaú/Bradesco/Santander).
-- Integração da tela V3 no lugar da V2 (mantém coexistência).
-
-## Confirmações
-
-1. Posso substituir integralmente o pipeline atual (mantendo a assinatura pública das server functions), certo?
-2. OFX é prioridade agora ou pode ficar para o próximo ciclo? (parser OFX adiciona ~1 arquivo)
-3. OCR estrutural real (com coordenadas) exige biblioteca extra (`pdfjs-dist` com layout ou serviço externo). Confirma que posso incluir `pdfjs-dist` para extração posicional?
+1. Posso começar pela **Fase 1** agora (rastreabilidade + matriz + status de homologação), que é a de menor risco e destrava a auditoria pedida nos cap. 62–66?
+2. As 4 fases devem ser entregues **em sequência num único ciclo**, ou prefere aprovar/revisar a cada fase?
+3. Confirma que posso adicionar as colunas descritas em `v3_imports` e `v3_import_rows` (migração aditiva, sem quebrar dados existentes)?

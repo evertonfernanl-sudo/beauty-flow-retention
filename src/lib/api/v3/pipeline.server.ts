@@ -8,6 +8,14 @@ import type { Database } from "@/integrations/supabase/types";
 import { detectHeader, mapHeaders, matchCell, isSummaryOrBalanceRow } from "./headers";
 import { enrichRow, detectDirection, extractDate, extractClient, detectTransactionPattern, normalizeDescription, type TransactionPatternKey } from "./enrichment";
 import { SUBTYPE_KEYWORDS } from "./enrichment/aliases";
+import {
+  NTIEB_VERSION,
+  PARSER_VERSION,
+  PATTERN_TO_MATRIX,
+  toConfidenceLevel,
+  toHomologationStatus,
+  formatRuleApplied,
+} from "./ntieb/rules";
 
 type SB = SupabaseClient<Database>;
 
@@ -544,21 +552,25 @@ function specialFromPattern(
   c: CanonicalRow,
 ): ClassificationResult | null {
   if (!pattern) return null;
+  const matrix = PATTERN_TO_MATRIX[pattern as string];
+  const ruleApplied = matrix
+    ? formatRuleApplied(matrix.rule, `${matrix.operation} (Pattern ${pattern})`)
+    : formatRuleApplied("15", `Pattern ${pattern}`);
   if (pattern === "SYSTEM_FEE") {
-    return { direction: "EXPENSE", subtype: "DESPESA_EMPRESA", confidence: 100, reasons: ["tarifa bancária automática (+100)"] };
+    return { direction: "EXPENSE", subtype: "DESPESA_EMPRESA", confidence: 100, reasons: ["tarifa bancária automática (+100)"], rule_applied: ruleApplied };
   }
   if (pattern === "SYSTEM_RDB_APPLICATION") {
-    return { direction: "EXPENSE", subtype: "DESPESA_EMPRESA", confidence: 100, reasons: ["aplicação financeira automática (+100)"] };
+    return { direction: "EXPENSE", subtype: "DESPESA_EMPRESA", confidence: 100, reasons: ["aplicação financeira automática (+100)"], rule_applied: ruleApplied };
   }
   if (pattern === "SYSTEM_RDB_REDEMPTION" || pattern === "SYSTEM_LOAN_REDEMPTION") {
-    return { direction: "INCOME", subtype: "RECEITA", confidence: 100, reasons: ["resgate de investimento automático (+100)"] };
+    return { direction: "INCOME", subtype: "RECEITA", confidence: 100, reasons: ["resgate de investimento automático (+100)"], rule_applied: ruleApplied };
   }
   if (pattern === "SYSTEM_RENDIMENTO") {
-    return { direction: "INCOME", subtype: "RECEITA", confidence: 100, reasons: ["juros/rendimento automático (+100)"] };
+    return { direction: "INCOME", subtype: "RECEITA", confidence: 100, reasons: ["juros/rendimento automático (+100)"], rule_applied: ruleApplied };
   }
   if (pattern === "SYSTEM_INTERNAL_TRANSFER") {
     const dir = c.amount != null && c.amount > 0 ? "INCOME" : "EXPENSE";
-    return { direction: dir, subtype: dir === "INCOME" ? "RECEITA" : "DESPESA_EMPRESA", confidence: 100, reasons: ["movimentação interna (+100)"] };
+    return { direction: dir, subtype: dir === "INCOME" ? "RECEITA" : "DESPESA_EMPRESA", confidence: 100, reasons: ["movimentação interna (+100)"], rule_applied: formatRuleApplied("32", "Operação bancária interna") };
   }
   return null;
 }
@@ -569,6 +581,8 @@ export type ClassificationResult = {
   subtype: "RECEITA" | "APORTE" | "DESPESA_EMPRESA" | "DESPESA_PESSOAL" | null;
   confidence: number;
   reasons: string[];
+  // NTIEB Cap. 62 — regra citada por linha para auditoria
+  rule_applied?: string;
 };
 
 export function classify(c: CanonicalRow): ClassificationResult {
@@ -659,7 +673,15 @@ export function classify(c: CanonicalRow): ClassificationResult {
     else { subtype = "DESPESA_EMPRESA"; }
   }
 
-  return { direction, subtype, confidence: Math.min(100, confidence), reasons };
+  // NTIEB Cap. 33/34 — cita a regra oficial aplicada quando há pattern identificado
+  const matrix = pat ? PATTERN_TO_MATRIX[pat as string] : undefined;
+  const rule_applied = matrix
+    ? formatRuleApplied(matrix.rule, `${matrix.operation} (Pattern ${pat})`)
+    : direction
+      ? formatRuleApplied("33", `Direção ${direction} por sinal/coluna`)
+      : formatRuleApplied("33", "Classificação indeterminada");
+
+  return { direction, subtype, confidence: Math.min(100, confidence), reasons, rule_applied };
 }
 
 
@@ -921,6 +943,9 @@ export async function runPipeline(
 ): Promise<{ rowsInserted: number; finalState: FinalState; csvText?: string }> {
   await sb.from("v3_imports").update({ status: "parsing" }).eq("id", args.importId);
 
+  // NTIEB Cap. 65 — Log obrigatório: registra o momento de início para medir processing_ms
+  const pipelineStart = Date.now();
+
   // Estado agregado para o cálculo final via finally (Item 3)
   let csvText: string | undefined;
   let terminal: TerminalReason = null;
@@ -928,6 +953,7 @@ export async function runPipeline(
   let charset: string | undefined;
   let ocrConfidence: number | undefined;
   let total = 0, failed = 0, review = 0;
+  let incomeCount = 0, expenseCount = 0;
   let rowsInserted = 0;
   let lastError: string | null = null;
   let finalState: FinalState = "SUCCESS";
@@ -1186,10 +1212,27 @@ export async function runPipeline(
       if (status === "LINE_FAILED") failed++;
       else if (status === "LINE_REVIEW") review++;
 
+      // NTIEB Cap. 65 — contadores de receita/despesa para o log da importação
+      const dir = resolution?.classification?.direction as "INCOME" | "EXPENSE" | null | undefined;
+      if (dir === "INCOME") incomeCount++;
+      else if (dir === "EXPENSE") expenseCount++;
+
+      // NTIEB Cap. 36/61 — nível de confiança oficial derivado do score
+      const confScore = resolution?.classification?.confidence ?? 0;
+      const confidence_level = toConfidenceLevel(confScore);
+
+      // NTIEB Cap. 62 — regra citada por linha
+      const rule_applied =
+        resolution?.classification?.rule_applied ??
+        (status === "LINE_FAILED"
+          ? formatRuleApplied("54", "Campos obrigatórios ausentes / erro estrutural")
+          : formatRuleApplied("33", "Classificação indeterminada"));
+
       const processing_metadata = {
         parser: args.source, algorithm_version: V3_ALGORITHM_VERSION,
         charset, file_hash, headers: raw.headers, map, meta: raw.meta,
         restored_fields: guard.restored,
+        ntieb_version: NTIEB_VERSION,
       };
 
       rowsToInsert.push({
@@ -1203,8 +1246,10 @@ export async function runPipeline(
         resolved_client_id: resolution?.resolved_client_id ?? null,
         resolved_service_id: resolution?.resolved_service_id ?? null,
         status,
-        confidence: resolution?.classification.confidence ?? 0,
-        classification_confidence: resolution?.classification.confidence ?? null,
+        confidence: confScore,
+        classification_confidence: resolution?.classification?.confidence ?? null,
+        confidence_level,
+        rule_applied,
         possible_duplicate: dup.duplicate,
         duplicate_of: dup.conflicts,
         reason: rowReasons.join(" | ").slice(0, 2000),
@@ -1268,6 +1313,10 @@ export async function runPipeline(
     console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: computeFinalState\nRows: ${total}\nTime: ${stateTime} ms\nStatus: ${finalState}`);
 
     try {
+      // NTIEB Cap. 64 — status oficial de homologação derivado do finalState
+      const homologation_status = toHomologationStatus(finalState);
+      const processing_ms = Date.now() - pipelineStart;
+
       await sb.from("v3_imports").update({
         status: finalState === "FAILED" ? "failed" : finalState === "REVIEW" ? "review" : "done",
         final_state: finalState,
@@ -1279,14 +1328,21 @@ export async function runPipeline(
         review_rows: review,
         last_error: lastError,
         finished_at: new Date().toISOString(),
+        // NTIEB Cap. 64/65 — homologação e log oficial
+        homologation_status,
+        ntieb_version: NTIEB_VERSION,
+        parser_version: PARSER_VERSION,
+        processing_ms,
+        income_count: incomeCount,
+        expense_count: expenseCount,
       } as any).eq("id", args.importId);
 
       await auditLog(sb, {
         importId: args.importId, companyId: args.companyId,
         stage: "state_machine", event: "FINAL_STATE",
-        input: { terminal, total, failed, review, ocrConfidence } as any,
-        output: { finalState } as any,
-        reason: `Estado final Cap. 37: ${finalState}${terminal ? ` (terminal=${terminal})` : ""}`,
+        input: { terminal, total, failed, review, ocrConfidence, incomeCount, expenseCount } as any,
+        output: { finalState, homologation_status } as any,
+        reason: `NTIEB Cap. 37/64: finalState=${finalState}, homologation=${homologation_status}${terminal ? ` (terminal=${terminal})` : ""}`,
       });
     } catch {
       // não relança — o erro original (se houver) já é preservado

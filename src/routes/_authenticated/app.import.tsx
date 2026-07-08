@@ -15,6 +15,14 @@ import {
   deleteImportV3,
   updateRowV3,
 } from "@/lib/api/siev3.functions";
+import {
+  HOMOLOGATION_LABEL,
+  CONFIDENCE_LABEL,
+  toConfidenceLevel,
+  toHomologationStatus,
+  type HomologationStatus,
+  type ConfidenceLevel,
+} from "@/lib/api/v3/ntieb/rules";
 
 export const Route = createFileRoute("/_authenticated/app/import")({
   head: () => ({ meta: [{ title: "Import (SIE V3)" }] }),
@@ -250,7 +258,7 @@ function ImportV3Page() {
         <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls,.pdf" className="hidden"
                onChange={(e) => e.target.files?.[0] && onPick(e.target.files[0])} />
         <Badge variant="outline" className="gap-1"><ShieldCheck className="h-3 w-3" /> Determinístico</Badge>
-        <Badge variant="outline">v3.0.0</Badge>
+        <Badge variant="outline">NTIEB v1.0</Badge>
       </Card>
 
       <div className="space-y-4">
@@ -276,9 +284,21 @@ function ImportV3Page() {
                 </div>
                 
                 <div className="flex items-center gap-3 justify-between md:justify-end">
-                  <Badge variant={imp.final_state === "FAILED" ? "destructive" : imp.final_state === "SUCCESS" ? "default" : "secondary"}>
-                    {imp.final_state ?? imp.status}
-                  </Badge>
+                  {(() => {
+                    const homologation: HomologationStatus =
+                      (imp.homologation_status as HomologationStatus | null | undefined) ??
+                      (imp.final_state ? toHomologationStatus(imp.final_state as any) : "PENDENTE");
+                    const variant =
+                      homologation === "APROVADA" ? "default" :
+                      homologation === "REJEITADA" ? "destructive" :
+                      homologation === "APROVADA_COM_ALERTAS" ? "secondary" :
+                      "outline";
+                    return (
+                      <Badge variant={variant as any} title={`NTIEB Cap. 64 · finalState=${imp.final_state ?? imp.status}`}>
+                        {HOMOLOGATION_LABEL[homologation]}
+                      </Badge>
+                    );
+                  })()}
                   <span className="text-muted-foreground text-xs">{new Date(imp.created_at).toLocaleString("pt-BR")}</span>
                   
                   <div className="flex items-center gap-1">
@@ -464,7 +484,21 @@ function ImportV3Page() {
                                     )}
                                   </td>
                                   
-                                  <td className="p-2 text-center">{r.confidence}</td>
+                                  <td className="p-2 text-center">
+                                    {(() => {
+                                      const level: ConfidenceLevel =
+                                        (r.confidence_level as ConfidenceLevel | null | undefined) ??
+                                        toConfidenceLevel(r.confidence ?? 0);
+                                      return (
+                                        <span title={r.rule_applied ?? undefined} className="inline-flex items-center gap-1">
+                                          <span className="tabular-nums text-muted-foreground">{r.confidence}</span>
+                                          <Badge variant="outline" className="text-[10px] px-1 py-0">
+                                            {CONFIDENCE_LABEL[level]}
+                                          </Badge>
+                                        </span>
+                                      );
+                                    })()}
+                                  </td>
                                   <td className="p-2">
                                     <Badge variant={
                                       r.status === "applied" ? "default" : 
