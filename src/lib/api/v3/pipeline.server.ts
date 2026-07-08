@@ -1313,6 +1313,10 @@ export async function runPipeline(
     console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: computeFinalState\nRows: ${total}\nTime: ${stateTime} ms\nStatus: ${finalState}`);
 
     try {
+      // NTIEB Cap. 64 — status oficial de homologação derivado do finalState
+      const homologation_status = toHomologationStatus(finalState);
+      const processing_ms = Date.now() - pipelineStart;
+
       await sb.from("v3_imports").update({
         status: finalState === "FAILED" ? "failed" : finalState === "REVIEW" ? "review" : "done",
         final_state: finalState,
@@ -1324,14 +1328,21 @@ export async function runPipeline(
         review_rows: review,
         last_error: lastError,
         finished_at: new Date().toISOString(),
+        // NTIEB Cap. 64/65 — homologação e log oficial
+        homologation_status,
+        ntieb_version: NTIEB_VERSION,
+        parser_version: PARSER_VERSION,
+        processing_ms,
+        income_count: incomeCount,
+        expense_count: expenseCount,
       } as any).eq("id", args.importId);
 
       await auditLog(sb, {
         importId: args.importId, companyId: args.companyId,
         stage: "state_machine", event: "FINAL_STATE",
-        input: { terminal, total, failed, review, ocrConfidence } as any,
-        output: { finalState } as any,
-        reason: `Estado final Cap. 37: ${finalState}${terminal ? ` (terminal=${terminal})` : ""}`,
+        input: { terminal, total, failed, review, ocrConfidence, incomeCount, expenseCount } as any,
+        output: { finalState, homologation_status } as any,
+        reason: `NTIEB Cap. 37/64: finalState=${finalState}, homologation=${homologation_status}${terminal ? ` (terminal=${terminal})` : ""}`,
       });
     } catch {
       // não relança — o erro original (se houver) já é preservado
