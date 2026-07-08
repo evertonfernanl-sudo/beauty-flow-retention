@@ -3021,6 +3021,7 @@ export type Database = {
           classification_confidence: number | null
           company_id: string
           confidence: number
+          confidence_level: string | null
           created_at: string
           duplicate_of: string[] | null
           id: string
@@ -3033,6 +3034,7 @@ export type Database = {
           resolved_client_id: string | null
           resolved_service_id: string | null
           row_index: number
+          rule_applied: string | null
           status: string
           suggestions: Json
           updated_at: string
@@ -3043,6 +3045,7 @@ export type Database = {
           classification_confidence?: number | null
           company_id: string
           confidence?: number
+          confidence_level?: string | null
           created_at?: string
           duplicate_of?: string[] | null
           id?: string
@@ -3055,6 +3058,7 @@ export type Database = {
           resolved_client_id?: string | null
           resolved_service_id?: string | null
           row_index: number
+          rule_applied?: string | null
           status?: string
           suggestions?: Json
           updated_at?: string
@@ -3065,6 +3069,7 @@ export type Database = {
           classification_confidence?: number | null
           company_id?: string
           confidence?: number
+          confidence_level?: string | null
           created_at?: string
           duplicate_of?: string[] | null
           id?: string
@@ -3077,6 +3082,7 @@ export type Database = {
           resolved_client_id?: string | null
           resolved_service_id?: string | null
           row_index?: number
+          rule_applied?: string | null
           status?: string
           suggestions?: Json
           updated_at?: string
@@ -3160,14 +3166,20 @@ export type Database = {
           company_id: string
           created_at: string
           created_by: string | null
+          expense_count: number | null
           failed_rows: number | null
           file_hash: string | null
           filename: string
           final_state: string | null
           finished_at: string | null
+          homologation_status: string | null
           id: string
+          income_count: number | null
           last_error: string | null
+          ntieb_version: string | null
           ocr_confidence: number | null
+          parser_version: string | null
+          processing_ms: number | null
           review_rows: number | null
           size_bytes: number
           source: string
@@ -3181,14 +3193,20 @@ export type Database = {
           company_id: string
           created_at?: string
           created_by?: string | null
+          expense_count?: number | null
           failed_rows?: number | null
           file_hash?: string | null
           filename: string
           final_state?: string | null
           finished_at?: string | null
+          homologation_status?: string | null
           id?: string
+          income_count?: number | null
           last_error?: string | null
+          ntieb_version?: string | null
           ocr_confidence?: number | null
+          parser_version?: string | null
+          processing_ms?: number | null
           review_rows?: number | null
           size_bytes?: number
           source: string
@@ -3202,14 +3220,20 @@ export type Database = {
           company_id?: string
           created_at?: string
           created_by?: string | null
+          expense_count?: number | null
           failed_rows?: number | null
           file_hash?: string | null
           filename?: string
           final_state?: string | null
           finished_at?: string | null
+          homologation_status?: string | null
           id?: string
+          income_count?: number | null
           last_error?: string | null
+          ntieb_version?: string | null
           ocr_confidence?: number | null
+          parser_version?: string | null
+          processing_ms?: number | null
           review_rows?: number | null
           size_bytes?: number
           source?: string
