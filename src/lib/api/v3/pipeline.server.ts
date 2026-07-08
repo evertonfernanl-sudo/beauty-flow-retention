@@ -1212,10 +1212,27 @@ export async function runPipeline(
       if (status === "LINE_FAILED") failed++;
       else if (status === "LINE_REVIEW") review++;
 
+      // NTIEB Cap. 65 — contadores de receita/despesa para o log da importação
+      const dir = resolution?.classification?.direction as "INCOME" | "EXPENSE" | null | undefined;
+      if (dir === "INCOME") incomeCount++;
+      else if (dir === "EXPENSE") expenseCount++;
+
+      // NTIEB Cap. 36/61 — nível de confiança oficial derivado do score
+      const confScore = resolution?.classification?.confidence ?? 0;
+      const confidence_level = toConfidenceLevel(confScore);
+
+      // NTIEB Cap. 62 — regra citada por linha
+      const rule_applied =
+        resolution?.classification?.rule_applied ??
+        (status === "LINE_FAILED"
+          ? formatRuleApplied("54", "Campos obrigatórios ausentes / erro estrutural")
+          : formatRuleApplied("33", "Classificação indeterminada"));
+
       const processing_metadata = {
         parser: args.source, algorithm_version: V3_ALGORITHM_VERSION,
         charset, file_hash, headers: raw.headers, map, meta: raw.meta,
         restored_fields: guard.restored,
+        ntieb_version: NTIEB_VERSION,
       };
 
       rowsToInsert.push({
@@ -1229,8 +1246,10 @@ export async function runPipeline(
         resolved_client_id: resolution?.resolved_client_id ?? null,
         resolved_service_id: resolution?.resolved_service_id ?? null,
         status,
-        confidence: resolution?.classification.confidence ?? 0,
-        classification_confidence: resolution?.classification.confidence ?? null,
+        confidence: confScore,
+        classification_confidence: resolution?.classification?.confidence ?? null,
+        confidence_level,
+        rule_applied,
         possible_duplicate: dup.duplicate,
         duplicate_of: dup.conflicts,
         reason: rowReasons.join(" | ").slice(0, 2000),
