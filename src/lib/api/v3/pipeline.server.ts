@@ -8,6 +8,14 @@ import type { Database } from "@/integrations/supabase/types";
 import { detectHeader, mapHeaders, matchCell, isSummaryOrBalanceRow } from "./headers";
 import { enrichRow, detectDirection, extractDate, extractClient, detectTransactionPattern, normalizeDescription, type TransactionPatternKey } from "./enrichment";
 import { SUBTYPE_KEYWORDS } from "./enrichment/aliases";
+import {
+  NTIEB_VERSION,
+  PARSER_VERSION,
+  PATTERN_TO_MATRIX,
+  toConfidenceLevel,
+  toHomologationStatus,
+  formatRuleApplied,
+} from "./ntieb/rules";
 
 type SB = SupabaseClient<Database>;
 
