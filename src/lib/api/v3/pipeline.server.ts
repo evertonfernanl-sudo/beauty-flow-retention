@@ -552,21 +552,25 @@ function specialFromPattern(
   c: CanonicalRow,
 ): ClassificationResult | null {
   if (!pattern) return null;
+  const matrix = PATTERN_TO_MATRIX[pattern as string];
+  const ruleApplied = matrix
+    ? formatRuleApplied(matrix.rule, `${matrix.operation} (Pattern ${pattern})`)
+    : formatRuleApplied("15", `Pattern ${pattern}`);
   if (pattern === "SYSTEM_FEE") {
-    return { direction: "EXPENSE", subtype: "DESPESA_EMPRESA", confidence: 100, reasons: ["tarifa bancária automática (+100)"] };
+    return { direction: "EXPENSE", subtype: "DESPESA_EMPRESA", confidence: 100, reasons: ["tarifa bancária automática (+100)"], rule_applied: ruleApplied };
   }
   if (pattern === "SYSTEM_RDB_APPLICATION") {
-    return { direction: "EXPENSE", subtype: "DESPESA_EMPRESA", confidence: 100, reasons: ["aplicação financeira automática (+100)"] };
+    return { direction: "EXPENSE", subtype: "DESPESA_EMPRESA", confidence: 100, reasons: ["aplicação financeira automática (+100)"], rule_applied: ruleApplied };
   }
   if (pattern === "SYSTEM_RDB_REDEMPTION" || pattern === "SYSTEM_LOAN_REDEMPTION") {
-    return { direction: "INCOME", subtype: "RECEITA", confidence: 100, reasons: ["resgate de investimento automático (+100)"] };
+    return { direction: "INCOME", subtype: "RECEITA", confidence: 100, reasons: ["resgate de investimento automático (+100)"], rule_applied: ruleApplied };
   }
   if (pattern === "SYSTEM_RENDIMENTO") {
-    return { direction: "INCOME", subtype: "RECEITA", confidence: 100, reasons: ["juros/rendimento automático (+100)"] };
+    return { direction: "INCOME", subtype: "RECEITA", confidence: 100, reasons: ["juros/rendimento automático (+100)"], rule_applied: ruleApplied };
   }
   if (pattern === "SYSTEM_INTERNAL_TRANSFER") {
     const dir = c.amount != null && c.amount > 0 ? "INCOME" : "EXPENSE";
-    return { direction: dir, subtype: dir === "INCOME" ? "RECEITA" : "DESPESA_EMPRESA", confidence: 100, reasons: ["movimentação interna (+100)"] };
+    return { direction: dir, subtype: dir === "INCOME" ? "RECEITA" : "DESPESA_EMPRESA", confidence: 100, reasons: ["movimentação interna (+100)"], rule_applied: formatRuleApplied("32", "Operação bancária interna") };
   }
   return null;
 }
@@ -577,6 +581,8 @@ export type ClassificationResult = {
   subtype: "RECEITA" | "APORTE" | "DESPESA_EMPRESA" | "DESPESA_PESSOAL" | null;
   confidence: number;
   reasons: string[];
+  // NTIEB Cap. 62 — regra citada por linha para auditoria
+  rule_applied?: string;
 };
 
 export function classify(c: CanonicalRow): ClassificationResult {
