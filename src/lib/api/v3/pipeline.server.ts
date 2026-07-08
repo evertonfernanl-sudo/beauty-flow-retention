@@ -943,6 +943,9 @@ export async function runPipeline(
 ): Promise<{ rowsInserted: number; finalState: FinalState; csvText?: string }> {
   await sb.from("v3_imports").update({ status: "parsing" }).eq("id", args.importId);
 
+  // NTIEB Cap. 65 — Log obrigatório: registra o momento de início para medir processing_ms
+  const pipelineStart = Date.now();
+
   // Estado agregado para o cálculo final via finally (Item 3)
   let csvText: string | undefined;
   let terminal: TerminalReason = null;
@@ -950,6 +953,7 @@ export async function runPipeline(
   let charset: string | undefined;
   let ocrConfidence: number | undefined;
   let total = 0, failed = 0, review = 0;
+  let incomeCount = 0, expenseCount = 0;
   let rowsInserted = 0;
   let lastError: string | null = null;
   let finalState: FinalState = "SUCCESS";
