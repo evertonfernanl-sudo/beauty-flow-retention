@@ -484,7 +484,21 @@ function ImportV3Page() {
                                     )}
                                   </td>
                                   
-                                  <td className="p-2 text-center">{r.confidence}</td>
+                                  <td className="p-2 text-center">
+                                    {(() => {
+                                      const level: ConfidenceLevel =
+                                        (r.confidence_level as ConfidenceLevel | null | undefined) ??
+                                        toConfidenceLevel(r.confidence ?? 0);
+                                      return (
+                                        <span title={r.rule_applied ?? undefined} className="inline-flex items-center gap-1">
+                                          <span className="tabular-nums text-muted-foreground">{r.confidence}</span>
+                                          <Badge variant="outline" className="text-[10px] px-1 py-0">
+                                            {CONFIDENCE_LABEL[level]}
+                                          </Badge>
+                                        </span>
+                                      );
+                                    })()}
+                                  </td>
                                   <td className="p-2">
                                     <Badge variant={
                                       r.status === "applied" ? "default" : 
