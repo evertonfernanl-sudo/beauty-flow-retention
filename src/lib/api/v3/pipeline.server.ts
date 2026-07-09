@@ -14,8 +14,11 @@ import {
   PATTERN_TO_MATRIX,
   toConfidenceLevel,
   toHomologationStatus,
+  requiresManualReview,
   formatRuleApplied,
 } from "./ntieb/rules";
+import { assembleBlocks } from "./blocks/blockAssembler";
+import { captureExtractSummary, validateBalance, type ExtractSummary } from "./validation/balanceValidator";
 
 type SB = SupabaseClient<Database>;
 
@@ -46,6 +49,7 @@ export type RawTable = {
   charset?: string;
   ocrConfidence?: number;
   headerFailed?: boolean;
+  extractSummary?: ExtractSummary; // NTIEB Cap. 15.3 / 55
 };
 
 export type CanonicalRow = {
@@ -256,6 +260,7 @@ function finalizeTable(
   const headerSignature = rawHeaders.map((c) => String(c ?? "").trim().toLowerCase()).filter(Boolean).join("|");
 
   const filteredBodyMatrix: Array<Array<string | { text: string; x: number }>> = [];
+  const summaryRows: string[][] = []; // NTIEB Cap. 15.3 — linhas neutras (não viram lançamento, mas alimentam validação de saldo)
   for (const row of bodyMatrix) {
     // 1. Filtrar cabeçalho repetido (comum em PDFs multipáginas)
     const rowSig = row.map((c) => String(getCellText(c) ?? "").trim().toLowerCase()).filter(Boolean).join("|");
@@ -264,8 +269,10 @@ function finalizeTable(
     }
 
     // 2. Filtrar resumos e saldos usando a biblioteca isolada da V3
-    const isSummaryOrBalance = isSummaryOrBalanceRow(row.map((c) => getCellText(c)));
+    const cellTexts = row.map((c) => getCellText(c));
+    const isSummaryOrBalance = isSummaryOrBalanceRow(cellTexts);
     if (isSummaryOrBalance) {
+      summaryRows.push(cellTexts);
       continue;
     }
 
@@ -303,7 +310,7 @@ function finalizeTable(
     }
   }
 
-  // Cap. 24.7 — merge de linhas quebradas: linha sem data válida E sem valor/débito/crédito → concatena em description da anterior
+  // NTIEB Cap. 7, 13, 14, 16.4 — reconstrução de blocos multi-linha e herança temporal delegada ao blockAssembler
   const dateIdx = headers.findIndex((h) => matchCell(h)?.field === "transaction_date");
   const valueIdxs = headers.map((h, i) => {
     const field = matchCell(h)?.field;
@@ -312,30 +319,14 @@ function finalizeTable(
   }).filter((i) => i >= 0);
   const descIdx = headers.findIndex((h) => matchCell(h)?.field === "description");
 
-  const merged: string[][] = [];
-  let lastValidDateCell = "";
-  for (const row of alignedBodyMatrix) {
-    const dateCell = dateIdx >= 0 ? String(row[dateIdx] ?? "").trim() : "";
-    const hasValue = valueIdxs.some((i) => String(row[i] ?? "").trim().length > 0);
-    const hasDate = parseDate(dateCell) != null;
-    
-    if (hasDate) {
-      lastValidDateCell = dateCell;
-    }
-
-    if (!hasDate && !hasValue && merged.length > 0 && descIdx >= 0) {
-      const prev = merged[merged.length - 1];
-      const extra = row.map((c) => String(c ?? "").trim()).filter(Boolean).join(" ");
-      if (extra) prev[descIdx] = `${prev[descIdx] ?? ""} ${extra}`.trim();
-      continue;
-    }
-
-    if (!hasDate && hasValue && lastValidDateCell && dateIdx >= 0) {
-      row[dateIdx] = lastValidDateCell;
-    }
-
-    merged.push(row);
-  }
+  const assembled = assembleBlocks({
+    bodyMatrix: alignedBodyMatrix,
+    dateIdx,
+    valueIdxs,
+    descIdx,
+    parseDate,
+  });
+  const merged = assembled.merged;
 
   const rows: RawRow[] = merged
     .filter((r) => r.some((c) => String(c ?? "").trim() !== ""))
@@ -345,7 +336,15 @@ function finalizeTable(
       return obj;
     });
 
-  return { headers, rows, meta, charset };
+  // NTIEB Cap. 15.3 / 55 — captura saldos e totais das linhas neutras
+  const extractSummary = captureExtractSummary(summaryRows);
+
+  // Auditoria: expõe estatísticas do assembler para debug/log
+  (meta as any).blocks_closed = assembled.blocksClosed;
+  (meta as any).lines_appended = assembled.linesAppended;
+  (meta as any).dates_inherited = assembled.datesInherited;
+
+  return { headers, rows, meta, charset, extractSummary };
 }
 
 function mostCommon(arr: number[]): number {
@@ -954,6 +953,9 @@ export async function runPipeline(
   let ocrConfidence: number | undefined;
   let total = 0, failed = 0, review = 0;
   let incomeCount = 0, expenseCount = 0;
+  let totalIncomeAmount = 0, totalExpenseAmount = 0; // NTIEB Cap. 55
+  let veryLowConfCount = 0; // NTIEB Cap. 61
+  let extractSummary: ExtractSummary | undefined;
   let rowsInserted = 0;
   let lastError: string | null = null;
   let finalState: FinalState = "SUCCESS";
@@ -1002,6 +1004,7 @@ export async function runPipeline(
 
     charset = raw.charset ?? "utf-8";
     ocrConfidence = raw.ocrConfidence;
+    extractSummary = raw.extractSummary;
 
     const isImagePdf = args.source === "pdf" && (
       raw.headerFailed ||
@@ -1088,6 +1091,7 @@ export async function runPipeline(
       const matrix = (parsed.data ?? []).filter((r) => Array.isArray(r) && r.some((c) => String(c ?? "").trim() !== ""));
       raw = finalizeTable(matrix, { source: "pdf_ocr" }, "utf-8");
       ocrConfidence = 1.0; // Definido como 100% de confiança operacional
+      extractSummary = raw.extractSummary;
       csvText = ocrCsvText;
 
       if (raw.headerFailed || raw.rows.length === 0) {
@@ -1212,14 +1216,30 @@ export async function runPipeline(
       if (status === "LINE_FAILED") failed++;
       else if (status === "LINE_REVIEW") review++;
 
-      // NTIEB Cap. 65 — contadores de receita/despesa para o log da importação
+      // NTIEB Cap. 65 — contadores de receita/despesa e totais para validação de saldo (Cap. 55)
       const dir = resolution?.classification?.direction as "INCOME" | "EXPENSE" | null | undefined;
-      if (dir === "INCOME") incomeCount++;
-      else if (dir === "EXPENSE") expenseCount++;
+      if (dir === "INCOME") {
+        incomeCount++;
+        if (canonical.amount != null) totalIncomeAmount += Math.abs(canonical.amount);
+      } else if (dir === "EXPENSE") {
+        expenseCount++;
+        if (canonical.amount != null) totalExpenseAmount += Math.abs(canonical.amount);
+      }
 
       // NTIEB Cap. 36/61 — nível de confiança oficial derivado do score
       const confScore = resolution?.classification?.confidence ?? 0;
       const confidence_level = toConfidenceLevel(confScore);
+
+      // NTIEB Cap. 61 — regra dura: MUITO_BAIXA sempre vai para revisão manual
+      if (confidence_level === "MUITO_BAIXA") {
+        veryLowConfCount++;
+        if (status === "OK") {
+          status = "LINE_REVIEW";
+          review++;
+          rowReasons.push(formatRuleApplied("61", "Confiança Muito Baixa — revisão obrigatória"));
+        }
+      }
+
 
       // NTIEB Cap. 62 — regra citada por linha
       const rule_applied =
@@ -1314,8 +1334,19 @@ export async function runPipeline(
 
     try {
       // NTIEB Cap. 64 — status oficial de homologação derivado do finalState
-      const homologation_status = toHomologationStatus(finalState);
+      let homologation_status = toHomologationStatus(finalState);
       const processing_ms = Date.now() - pipelineStart;
+
+      // NTIEB Cap. 55 — validação de saldo do extrato
+      const balance = validateBalance(
+        extractSummary ?? { saldoInicial: null, saldoFinal: null, totalEntradas: null, totalSaidas: null },
+        { income: totalIncomeAmount, expense: totalExpenseAmount },
+      );
+
+      // Divergência de saldo eleva homologação para "APROVADA_COM_ALERTAS"
+      if (balance.applicable && balance.valid === false && homologation_status === "APROVADA") {
+        homologation_status = "APROVADA_COM_ALERTAS";
+      }
 
       await sb.from("v3_imports").update({
         status: finalState === "FAILED" ? "failed" : finalState === "REVIEW" ? "review" : "done",
@@ -1335,14 +1366,23 @@ export async function runPipeline(
         processing_ms,
         income_count: incomeCount,
         expense_count: expenseCount,
+        // NTIEB Cap. 55 — saldo do extrato
+        saldo_inicial: extractSummary?.saldoInicial ?? null,
+        saldo_final: extractSummary?.saldoFinal ?? null,
+        total_entradas_extrato: extractSummary?.totalEntradas ?? null,
+        total_saidas_extrato: extractSummary?.totalSaidas ?? null,
+        balance_valid: balance.applicable ? balance.valid : null,
+        balance_delta: balance.applicable ? balance.delta : null,
+        // NTIEB Cap. 61 — total de linhas com confiança Muito Baixa (revisão obrigatória)
+        very_low_confidence_count: veryLowConfCount,
       } as any).eq("id", args.importId);
 
       await auditLog(sb, {
         importId: args.importId, companyId: args.companyId,
         stage: "state_machine", event: "FINAL_STATE",
-        input: { terminal, total, failed, review, ocrConfidence, incomeCount, expenseCount } as any,
-        output: { finalState, homologation_status } as any,
-        reason: `NTIEB Cap. 37/64: finalState=${finalState}, homologation=${homologation_status}${terminal ? ` (terminal=${terminal})` : ""}`,
+        input: { terminal, total, failed, review, ocrConfidence, incomeCount, expenseCount, veryLowConfCount } as any,
+        output: { finalState, homologation_status, balance } as any,
+        reason: `NTIEB Cap. 37/55/64: finalState=${finalState}, homologation=${homologation_status}, balance=${balance.reason}${terminal ? ` (terminal=${terminal})` : ""}`,
       });
     } catch {
       // não relança — o erro original (se houver) já é preservado

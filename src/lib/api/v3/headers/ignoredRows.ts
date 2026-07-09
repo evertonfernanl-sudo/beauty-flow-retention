@@ -27,11 +27,19 @@ export const IGNORED_ROW_PATTERNS = {
     /tem\s+alguma\s+duvida/i,
     /atendimento\s+24h/i,
     /ouvidoria/i,
-    /nubank\.com\.br/i
+    /nubank\.com\.br/i,
+    // NTIEB Cap. 12.3 — ruído administrativo adicional (telefones, endereços, canais)
+    /\bsac\b|\bfale conosco\b|\bcapitais\s+e\s+regi[oõ]es\b|\bdemais\s+localidades\b/i,
+    /\bcaixa\s+postal\b/i,
+    /\bwww\.[a-z0-9.-]+\.[a-z]{2,}\b/i,
+    /^\s*0800[\s\-]?\d{3}[\s\-]?\d{4}\s*$/i,
+    /^\s*\(?\d{2}\)?\s*\d{4,5}[\s\-]?\d{4}\s*$/,
   ],
   Metadados: [
     /extrato\s+gerado\s+dia/i,
-    /valores\s+em\s+r\$/i
+    /valores\s+em\s+r\$/i,
+    // NTIEB Cap. 12.3 — CPF/CNPJ do titular do extrato (não é lançamento)
+    /\bcpf\s*(do\s*titular|titular)?\s*:?\s*\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/i,
   ]
 };
 

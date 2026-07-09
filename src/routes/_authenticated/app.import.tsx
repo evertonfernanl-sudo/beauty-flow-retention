@@ -278,6 +278,21 @@ function ImportV3Page() {
                     <div className="text-[11px] text-muted-foreground mt-1">
                       {imp.total_rows} linhas · {imp.failed_rows ?? 0} falha · {imp.review_rows ?? 0} revisão
                       {imp.ocr_confidence != null && ` · OCR ${(imp.ocr_confidence * 100).toFixed(0)}%`}
+                      {(imp as any).very_low_confidence_count > 0 && (
+                        <span className="ml-1 text-amber-600" title="NTIEB Cap. 61 — linhas com confiança Muito Baixa exigem revisão manual">
+                          · {(imp as any).very_low_confidence_count} conf. muito baixa
+                        </span>
+                      )}
+                      {(imp as any).balance_valid === false && (
+                        <span className="ml-1 text-amber-600" title={`NTIEB Cap. 55 — divergência de saldo de R$ ${Number((imp as any).balance_delta ?? 0).toFixed(2)}`}>
+                          · saldo divergente (Δ R$ {Number((imp as any).balance_delta ?? 0).toFixed(2)})
+                        </span>
+                      )}
+                      {(imp as any).balance_valid === true && (
+                        <span className="ml-1 text-emerald-600" title="NTIEB Cap. 55 — SI + Receitas − Despesas ≈ SF">
+                          · saldo confere
+                        </span>
+                      )}
                     </div>
                   )}
                   {imp.last_error && <div className="text-destructive text-[11px] mt-1 line-clamp-2">{imp.last_error}</div>}
