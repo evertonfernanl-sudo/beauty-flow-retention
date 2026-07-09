@@ -1210,6 +1210,9 @@ export async function runPipeline(
         ? await checkDuplicate(sb, args.companyId, canonical, built.map((b) => ({ canonical: b.canonical })))
         : { duplicate: false, conflicts: [] };
 
+      if (status === "LINE_FAILED") failed++;
+      else if (status === "LINE_REVIEW") review++;
+
       // NTIEB Cap. 65 — contadores de receita/despesa e totais para validação de saldo (Cap. 55)
       const dir = resolution?.classification?.direction as "INCOME" | "EXPENSE" | null | undefined;
       if (dir === "INCOME") {
@@ -1225,17 +1228,15 @@ export async function runPipeline(
       const confidence_level = toConfidenceLevel(confScore);
 
       // NTIEB Cap. 61 — regra dura: MUITO_BAIXA sempre vai para revisão manual
-      if (status === "OK" && requiresManualReview(confidence_level)) {
-        status = "LINE_REVIEW";
-        review++;
+      if (confidence_level === "MUITO_BAIXA") {
         veryLowConfCount++;
-        rowReasons.push(formatRuleApplied("61", "Confiança Muito Baixa — revisão obrigatória"));
-      } else if (confidence_level === "MUITO_BAIXA") {
-        veryLowConfCount++;
+        if (status === "OK") {
+          status = "LINE_REVIEW";
+          review++;
+          rowReasons.push(formatRuleApplied("61", "Confiança Muito Baixa — revisão obrigatória"));
+        }
       }
 
-      // Recalcula contagens de failed/review após ajuste (evitando dupla contagem)
-      // (feito acima já — apenas ajuste)
 
       // NTIEB Cap. 62 — regra citada por linha
       const rule_applied =
