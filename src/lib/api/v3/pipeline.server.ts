@@ -955,6 +955,7 @@ export async function runPipeline(
   let incomeCount = 0, expenseCount = 0;
   let totalIncomeAmount = 0, totalExpenseAmount = 0; // NTIEB Cap. 55
   let veryLowConfCount = 0; // NTIEB Cap. 61
+  let extractSummary: ExtractSummary | undefined;
   let rowsInserted = 0;
   let lastError: string | null = null;
   let finalState: FinalState = "SUCCESS";
