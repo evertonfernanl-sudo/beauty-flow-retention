@@ -19,7 +19,7 @@ A norma foi salva em `docs/ntieb-v1.md` como referência oficial. O pipeline V3 
 | Cap. 64 — Homologação (4 status) | `final_state` com 4 valores | Renomear/mapear para os 4 status oficiais |
 | Cap. 65 — Log obrigatório | Parcial (`v3_imports`) | Faltam: versão NTIEB, tempo, contagem R/D |
 
-## Fases
+## Fases (Status: 1, 2, 3, 4 concluídas)
 
 ### Fase 1 — Rastreabilidade e Matriz Oficial (baixo risco, alto valor)
 
