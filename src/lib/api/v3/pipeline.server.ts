@@ -1004,6 +1004,7 @@ export async function runPipeline(
 
     charset = raw.charset ?? "utf-8";
     ocrConfidence = raw.ocrConfidence;
+    extractSummary = raw.extractSummary;
 
     const isImagePdf = args.source === "pdf" && (
       raw.headerFailed ||
