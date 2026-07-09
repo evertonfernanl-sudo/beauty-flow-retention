@@ -1334,8 +1334,19 @@ export async function runPipeline(
 
     try {
       // NTIEB Cap. 64 — status oficial de homologação derivado do finalState
-      const homologation_status = toHomologationStatus(finalState);
+      let homologation_status = toHomologationStatus(finalState);
       const processing_ms = Date.now() - pipelineStart;
+
+      // NTIEB Cap. 55 — validação de saldo do extrato
+      const balance = validateBalance(
+        extractSummary ?? { saldoInicial: null, saldoFinal: null, totalEntradas: null, totalSaidas: null },
+        { income: totalIncomeAmount, expense: totalExpenseAmount },
+      );
+
+      // Divergência de saldo eleva homologação para "APROVADA_COM_ALERTAS"
+      if (balance.applicable && balance.valid === false && homologation_status === "APROVADA") {
+        homologation_status = "APROVADA_COM_ALERTAS";
+      }
 
       await sb.from("v3_imports").update({
         status: finalState === "FAILED" ? "failed" : finalState === "REVIEW" ? "review" : "done",
@@ -1355,14 +1366,23 @@ export async function runPipeline(
         processing_ms,
         income_count: incomeCount,
         expense_count: expenseCount,
+        // NTIEB Cap. 55 — saldo do extrato
+        saldo_inicial: extractSummary?.saldoInicial ?? null,
+        saldo_final: extractSummary?.saldoFinal ?? null,
+        total_entradas_extrato: extractSummary?.totalEntradas ?? null,
+        total_saidas_extrato: extractSummary?.totalSaidas ?? null,
+        balance_valid: balance.applicable ? balance.valid : null,
+        balance_delta: balance.applicable ? balance.delta : null,
+        // NTIEB Cap. 61 — total de linhas com confiança Muito Baixa (revisão obrigatória)
+        very_low_confidence_count: veryLowConfCount,
       } as any).eq("id", args.importId);
 
       await auditLog(sb, {
         importId: args.importId, companyId: args.companyId,
         stage: "state_machine", event: "FINAL_STATE",
-        input: { terminal, total, failed, review, ocrConfidence, incomeCount, expenseCount } as any,
-        output: { finalState, homologation_status } as any,
-        reason: `NTIEB Cap. 37/64: finalState=${finalState}, homologation=${homologation_status}${terminal ? ` (terminal=${terminal})` : ""}`,
+        input: { terminal, total, failed, review, ocrConfidence, incomeCount, expenseCount, veryLowConfCount } as any,
+        output: { finalState, homologation_status, balance } as any,
+        reason: `NTIEB Cap. 37/55/64: finalState=${finalState}, homologation=${homologation_status}, balance=${balance.reason}${terminal ? ` (terminal=${terminal})` : ""}`,
       });
     } catch {
       // não relança — o erro original (se houver) já é preservado
