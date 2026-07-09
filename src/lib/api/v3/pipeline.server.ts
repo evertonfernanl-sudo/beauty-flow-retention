@@ -260,6 +260,7 @@ function finalizeTable(
   const headerSignature = rawHeaders.map((c) => String(c ?? "").trim().toLowerCase()).filter(Boolean).join("|");
 
   const filteredBodyMatrix: Array<Array<string | { text: string; x: number }>> = [];
+  const summaryRows: string[][] = []; // NTIEB Cap. 15.3 — linhas neutras (não viram lançamento, mas alimentam validação de saldo)
   for (const row of bodyMatrix) {
     // 1. Filtrar cabeçalho repetido (comum em PDFs multipáginas)
     const rowSig = row.map((c) => String(getCellText(c) ?? "").trim().toLowerCase()).filter(Boolean).join("|");
@@ -268,8 +269,10 @@ function finalizeTable(
     }
 
     // 2. Filtrar resumos e saldos usando a biblioteca isolada da V3
-    const isSummaryOrBalance = isSummaryOrBalanceRow(row.map((c) => getCellText(c)));
+    const cellTexts = row.map((c) => getCellText(c));
+    const isSummaryOrBalance = isSummaryOrBalanceRow(cellTexts);
     if (isSummaryOrBalance) {
+      summaryRows.push(cellTexts);
       continue;
     }
 
@@ -307,7 +310,7 @@ function finalizeTable(
     }
   }
 
-  // Cap. 24.7 — merge de linhas quebradas: linha sem data válida E sem valor/débito/crédito → concatena em description da anterior
+  // NTIEB Cap. 7, 13, 14, 16.4 — reconstrução de blocos multi-linha e herança temporal delegada ao blockAssembler
   const dateIdx = headers.findIndex((h) => matchCell(h)?.field === "transaction_date");
   const valueIdxs = headers.map((h, i) => {
     const field = matchCell(h)?.field;
@@ -316,30 +319,14 @@ function finalizeTable(
   }).filter((i) => i >= 0);
   const descIdx = headers.findIndex((h) => matchCell(h)?.field === "description");
 
-  const merged: string[][] = [];
-  let lastValidDateCell = "";
-  for (const row of alignedBodyMatrix) {
-    const dateCell = dateIdx >= 0 ? String(row[dateIdx] ?? "").trim() : "";
-    const hasValue = valueIdxs.some((i) => String(row[i] ?? "").trim().length > 0);
-    const hasDate = parseDate(dateCell) != null;
-    
-    if (hasDate) {
-      lastValidDateCell = dateCell;
-    }
-
-    if (!hasDate && !hasValue && merged.length > 0 && descIdx >= 0) {
-      const prev = merged[merged.length - 1];
-      const extra = row.map((c) => String(c ?? "").trim()).filter(Boolean).join(" ");
-      if (extra) prev[descIdx] = `${prev[descIdx] ?? ""} ${extra}`.trim();
-      continue;
-    }
-
-    if (!hasDate && hasValue && lastValidDateCell && dateIdx >= 0) {
-      row[dateIdx] = lastValidDateCell;
-    }
-
-    merged.push(row);
-  }
+  const assembled = assembleBlocks({
+    bodyMatrix: alignedBodyMatrix,
+    dateIdx,
+    valueIdxs,
+    descIdx,
+    parseDate,
+  });
+  const merged = assembled.merged;
 
   const rows: RawRow[] = merged
     .filter((r) => r.some((c) => String(c ?? "").trim() !== ""))
@@ -349,7 +336,15 @@ function finalizeTable(
       return obj;
     });
 
-  return { headers, rows, meta, charset };
+  // NTIEB Cap. 15.3 / 55 — captura saldos e totais das linhas neutras
+  const extractSummary = captureExtractSummary(summaryRows);
+
+  // Auditoria: expõe estatísticas do assembler para debug/log
+  (meta as any).blocks_closed = assembled.blocksClosed;
+  (meta as any).lines_appended = assembled.linesAppended;
+  (meta as any).dates_inherited = assembled.datesInherited;
+
+  return { headers, rows, meta, charset, extractSummary };
 }
 
 function mostCommon(arr: number[]): number {
