@@ -14,8 +14,11 @@ import {
   PATTERN_TO_MATRIX,
   toConfidenceLevel,
   toHomologationStatus,
+  requiresManualReview,
   formatRuleApplied,
 } from "./ntieb/rules";
+import { assembleBlocks } from "./blocks/blockAssembler";
+import { captureExtractSummary, validateBalance, type ExtractSummary } from "./validation/balanceValidator";
 
 type SB = SupabaseClient<Database>;
 
