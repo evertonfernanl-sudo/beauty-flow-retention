@@ -49,6 +49,7 @@ export type RawTable = {
   charset?: string;
   ocrConfidence?: number;
   headerFailed?: boolean;
+  extractSummary?: ExtractSummary; // NTIEB Cap. 15.3 / 55
 };
 
 export type CanonicalRow = {
