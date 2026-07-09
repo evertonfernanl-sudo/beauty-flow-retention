@@ -3162,6 +3162,8 @@ export type Database = {
       }
       v3_imports: {
         Row: {
+          balance_delta: number | null
+          balance_valid: boolean | null
           charset: string | null
           company_id: string
           created_at: string
@@ -3181,14 +3183,21 @@ export type Database = {
           parser_version: string | null
           processing_ms: number | null
           review_rows: number | null
+          saldo_final: number | null
+          saldo_inicial: number | null
           size_bytes: number
           source: string
           status: string
           storage_path: string
+          total_entradas_extrato: number | null
           total_rows: number | null
+          total_saidas_extrato: number | null
           updated_at: string
+          very_low_confidence_count: number | null
         }
         Insert: {
+          balance_delta?: number | null
+          balance_valid?: boolean | null
           charset?: string | null
           company_id: string
           created_at?: string
@@ -3208,14 +3217,21 @@ export type Database = {
           parser_version?: string | null
           processing_ms?: number | null
           review_rows?: number | null
+          saldo_final?: number | null
+          saldo_inicial?: number | null
           size_bytes?: number
           source: string
           status?: string
           storage_path: string
+          total_entradas_extrato?: number | null
           total_rows?: number | null
+          total_saidas_extrato?: number | null
           updated_at?: string
+          very_low_confidence_count?: number | null
         }
         Update: {
+          balance_delta?: number | null
+          balance_valid?: boolean | null
           charset?: string | null
           company_id?: string
           created_at?: string
@@ -3235,12 +3251,17 @@ export type Database = {
           parser_version?: string | null
           processing_ms?: number | null
           review_rows?: number | null
+          saldo_final?: number | null
+          saldo_inicial?: number | null
           size_bytes?: number
           source?: string
           status?: string
           storage_path?: string
+          total_entradas_extrato?: number | null
           total_rows?: number | null
+          total_saidas_extrato?: number | null
           updated_at?: string
+          very_low_confidence_count?: number | null
         }
         Relationships: [
           {
