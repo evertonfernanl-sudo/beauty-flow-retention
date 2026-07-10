@@ -20,6 +20,8 @@ import {
 import { assembleBlocks } from "./blocks/blockAssembler";
 import { captureExtractSummary, validateBalance, type ExtractSummary } from "./validation/balanceValidator";
 import { IssuerBank, inferIssuerBank } from "./banks/issuerBank";
+import { PageColumnLayout, PdfPhysicalLine, PdfPhysicalCell, compareDetectedLayouts, validatePageDataAgainstLayout, alignPhysicalCells } from "./pdf/pageLayout";
+import { classifyNonTransactionalRow, RowClassificationContext } from "./rows/nonTransactionalClassifier";
 
 type SB = SupabaseClient<Database>;
 
@@ -124,7 +126,7 @@ export async function parsePdf(buffer: Uint8Array): Promise<RawTable> {
   cleanBuffer.set(buffer);
   const unpdf: any = await import("unpdf");
   const pdf = await unpdf.getDocumentProxy(cleanBuffer);
-  const perPage: Array<Array<Array<{ text: string; x: number }>>> = [];
+  const perPage: Array<Array<Array<{ text: string; x: number; y: number; pageNumber: number; pageWidth: number; physicalLine: number; width?: number }>>> = [];
   const imagePages: number[] = [];
   let totalCellsEst = 0, totalCellsGot = 0;
 
@@ -132,6 +134,10 @@ export async function parsePdf(buffer: Uint8Array): Promise<RawTable> {
   for (let p = 1; p <= numPages; p++) {
     const page = await pdf.getPage(p);
     const content = await page.getTextContent();
+    const viewport = page.getViewport({ scale: 1 });
+    const pageWidth = viewport.width;
+    const pageHeight = viewport.height;
+
     const items: Array<{ str: string; x: number; y: number; w: number }> = (content.items ?? [])
       .filter((it: any) => it && typeof it.str === "string" && it.str.trim().length > 0)
       .map((it: any) => ({
@@ -151,16 +157,16 @@ export async function parsePdf(buffer: Uint8Array): Promise<RawTable> {
     // Agrupa por linha (Y). Tolerância = mediana da altura de fonte estimada.
     const yTol = 3.0;
     const sorted = [...items].sort((a, b) => b.y - a.y || a.x - b.x);
-    const lines: Array<Array<{ str: string; x: number; w: number }>> = [];
+    const lines: Array<Array<{ str: string; x: number; y: number; w: number }>> = [];
     let currentY: number | null = null;
-    let current: Array<{ str: string; x: number; w: number }> = [];
+    let current: Array<{ str: string; x: number; y: number; w: number }> = [];
     for (const it of sorted) {
       if (currentY == null || Math.abs(currentY - it.y) <= yTol) {
-        current.push({ str: it.str, x: it.x, w: it.w });
+        current.push({ str: it.str, x: it.x, y: it.y, w: it.w });
         currentY = currentY == null ? it.y : (currentY + it.y) / 2;
       } else {
         lines.push(current);
-        current = [{ str: it.str, x: it.x, w: it.w }];
+        current = [{ str: it.str, x: it.x, y: it.y, w: it.w }];
         currentY = it.y;
       }
     }
@@ -168,31 +174,57 @@ export async function parsePdf(buffer: Uint8Array): Promise<RawTable> {
 
     // Colunas por gaps de X: agrupa tokens contíguos com gap < xGap; separa em células.
     const xGap = 8;
-    const matrix: Array<Array<{ text: string; x: number }>> = [];
+    const matrix: Array<Array<{ text: string; x: number; y: number; pageNumber: number; pageWidth: number; physicalLine: number; width?: number }>> = [];
+    let physicalLineCounter = 1;
+
     for (const line of lines) {
       line.sort((a, b) => a.x - b.x);
-      const cells: Array<{ text: string; x: number }> = [];
+      const cells: Array<{ text: string; x: number; y: number; pageNumber: number; pageWidth: number; physicalLine: number; width?: number }> = [];
       let buf = "";
       let startX = -1;
+      let startY = -1;
       let lastX = -Infinity;
       for (const t of line) {
         if (buf === "") {
           buf = t.str;
           startX = t.x;
+          startY = t.y;
           lastX = t.x + (t.w || t.str.length * 6);
           continue;
         }
         if (t.x - lastX > xGap) {
-          cells.push({ text: buf.trim(), x: startX });
+          cells.push({
+            text: buf.trim(),
+            x: startX,
+            y: startY,
+            width: lastX - startX,
+            pageNumber: p,
+            pageWidth: pageWidth,
+            physicalLine: physicalLineCounter
+          });
           buf = t.str;
           startX = t.x;
+          startY = t.y;
         } else {
           buf += " " + t.str;
         }
         lastX = t.x + (t.w || t.str.length * 6);
       }
-      if (buf) cells.push({ text: buf.trim(), x: startX });
-      if (cells.some((c) => c.text.length > 0)) matrix.push(cells);
+      if (buf) {
+        cells.push({
+          text: buf.trim(),
+          x: startX,
+          y: startY,
+          width: lastX - startX,
+          pageNumber: p,
+          pageWidth: pageWidth,
+          physicalLine: physicalLineCounter
+        });
+      }
+      if (cells.some((c) => c.text.length > 0)) {
+        matrix.push(cells);
+        physicalLineCounter++;
+      }
     }
 
     const modeCols = mostCommon(matrix.map((r) => r.length));
@@ -201,12 +233,10 @@ export async function parsePdf(buffer: Uint8Array): Promise<RawTable> {
     perPage.push(matrix);
   }
 
-  const merged: Array<Array<{ text: string; x: number }>> = [];
+  const merged: Array<Array<{ text: string; x: number; y: number; pageNumber: number; pageWidth: number; physicalLine: number; width?: number }>> = [];
   for (const page of perPage) merged.push(...page);
   const confidence = totalCellsEst > 0 ? Math.min(1, totalCellsGot / totalCellsEst) : 0;
 
-  // Item 4/5 — se todas as páginas são imagem OU se não conseguimos NADA de texto,
-  // devolve tabela vazia com sinal para o orquestrador emitir OCR_REVIEW.
   const meta: Record<string, unknown> = { source: "pdf", pages: numPages, imagePages };
   if (merged.length === 0) {
     return { headers: [], rows: [], meta, charset: "utf-8", headerFailed: true, ocrConfidence: 0 };
@@ -219,37 +249,221 @@ export async function parsePdf(buffer: Uint8Array): Promise<RawTable> {
 }
 
 function finalizeTable(
-  matrix: Array<Array<string | { text: string; x: number }>>,
+  matrix: Array<Array<string | { text: string; x: number; y?: number; pageNumber?: number; pageWidth?: number; physicalLine?: number; width?: number }>>,
   meta: Record<string, unknown>,
   charset: string
 ): RawTable {
   if (matrix.length === 0) return { headers: [], rows: [], meta, charset, headerFailed: true };
 
-  const getCellText = (cell: string | { text: string; x: number }): string => {
+  const getCellText = (cell: any): string => {
     if (cell == null) return "";
     if (typeof cell === "string") return cell;
     return cell.text ?? "";
   };
 
-  const getCellX = (cell: string | { text: string; x: number }): number => {
+  const getCellX = (cell: any): number => {
     if (cell == null || typeof cell === "string") return 0;
     return cell.x ?? 0;
   };
 
-  // Busca do cabeçalho delegando para o novo módulo encapsulado 10/10 da V3
+  // Busca do cabeçalho global
   const stringMatrix = matrix.map((row) => row.map((c) => getCellText(c)));
-  const detection = detectHeader(stringMatrix, meta?.source as string);
-  const headerIdx = detection.headerIndex;
+  const globalDetection = detectHeader(stringMatrix, meta?.source as string);
+  const globalHeaderIdx = globalDetection.headerIndex;
 
-  if (headerIdx < 0 || detection.headerFailed) {
+  const isCoordinateBased = globalHeaderIdx >= 0 && matrix[globalHeaderIdx].some(h => typeof h !== "string");
+
+  if (!isCoordinateBased) {
+    // Fluxos CSV, XLSX ou OCR (não baseados em coordenadas/viewport)
+    if (globalHeaderIdx < 0 || globalDetection.headerFailed) {
+      return { headers: [], rows: [], meta, charset, headerFailed: true };
+    }
+
+    const rawHeaders = matrix[globalHeaderIdx].map((h, i) => String(getCellText(h) ?? `col_${i}`).trim() || `col_${i}`);
+    const seen = new Map<string, number>();
+    const headers = rawHeaders.map((h) => {
+      const n = (seen.get(h) ?? 0) + 1;
+      seen.set(h, n);
+      return n === 1 ? h : `${h}__${n}`;
+    });
+
+    const bodyMatrix = matrix.slice(globalHeaderIdx + 1);
+    const headerSignature = rawHeaders.map((c) => String(c ?? "").trim().toLowerCase()).filter(Boolean).join("|");
+
+    const filteredBodyMatrix: string[][] = [];
+    const summaryRows: string[][] = [];
+
+    let rows_before_phase3 = bodyMatrix.length;
+    let rows_after_phase3 = 0;
+    let rows_removed_by_phase3 = 0;
+
+    let empty_lines_discarded = 0;
+    let metadata_lines_discarded = 0;
+    let repeated_headers_discarded = 0;
+    let footer_lines_discarded = 0;
+    let institutional_lines_discarded = 0;
+    let balance_lines_captured = 0;
+    let summary_lines_captured = 0;
+    let total_lines_captured = 0;
+    let ambiguous_rows_forwarded_or_reviewed = 0;
+    let transaction_candidate_rows_forwarded = 0;
+
+    for (const row of bodyMatrix) {
+      const rowSig = row.map((c) => String(getCellText(c) ?? "").trim().toLowerCase()).filter(Boolean).join("|");
+      if (headerSignature && rowSig === headerSignature) {
+        repeated_headers_discarded++;
+        rows_removed_by_phase3++;
+        continue;
+      }
+
+      const cellTexts = row.map((c) => getCellText(c));
+      const context: RowClassificationContext = {
+        source: meta?.source as string || "csv",
+        knownHeaders: headers
+      };
+      const classification = classifyNonTransactionalRow(cellTexts, context);
+
+      if (classification.category === "EMPTY") empty_lines_discarded++;
+      else if (classification.category === "METADATA") metadata_lines_discarded++;
+      else if (classification.category === "REPEATED_HEADER") repeated_headers_discarded++;
+      else if (classification.category === "FOOTER") footer_lines_discarded++;
+      else if (classification.category === "INSTITUTIONAL") institutional_lines_discarded++;
+      else if (classification.category === "BALANCE") balance_lines_captured++;
+      else if (classification.category === "SUMMARY") summary_lines_captured++;
+      else if (classification.category === "TOTAL") total_lines_captured++;
+      else if (classification.category === "AMBIGUOUS") ambiguous_rows_forwarded_or_reviewed++;
+      else if (classification.category === "TRANSACTION_CANDIDATE") transaction_candidate_rows_forwarded++;
+
+      switch (classification.action) {
+        case "DISCARD_BEFORE_BLOCKS":
+          rows_removed_by_phase3++;
+          break;
+        case "CAPTURE_AS_BALANCE":
+        case "CAPTURE_AS_SUMMARY":
+        case "CAPTURE_AS_TOTAL":
+          summaryRows.push(cellTexts);
+          rows_removed_by_phase3++;
+          break;
+        case "FORWARD_TO_BLOCK_ASSEMBLER":
+        case "KEEP_FOR_REVIEW":
+          filteredBodyMatrix.push(cellTexts);
+          rows_after_phase3++;
+          break;
+      }
+    }
+
+    meta.rows_before_phase3 = rows_before_phase3;
+    meta.rows_after_phase3 = rows_after_phase3;
+    meta.rows_removed_by_phase3 = rows_removed_by_phase3;
+    meta.empty_lines_discarded = empty_lines_discarded;
+    meta.metadata_lines_discarded = metadata_lines_discarded;
+    meta.repeated_headers_discarded = repeated_headers_discarded;
+    meta.footer_lines_discarded = footer_lines_discarded;
+    meta.institutional_lines_discarded = institutional_lines_discarded;
+    meta.balance_lines_captured = balance_lines_captured;
+    meta.summary_lines_captured = summary_lines_captured;
+    meta.total_lines_captured = total_lines_captured;
+    meta.ambiguous_rows_forwarded_or_reviewed = ambiguous_rows_forwarded_or_reviewed;
+    meta.transaction_candidate_rows_forwarded = transaction_candidate_rows_forwarded;
+
+    const dateIdx = headers.findIndex((h) => matchCell(h)?.field === "transaction_date");
+    const valueIdxs = headers.map((h, i) => {
+      const field = matchCell(h)?.field;
+      if (field === "amount" || field === "debit_amount" || field === "credit_amount") return i;
+      return -1;
+    }).filter((i) => i >= 0);
+    const descIdx = headers.findIndex((h) => matchCell(h)?.field === "description");
+
+    const assembled = assembleBlocks({
+      bodyMatrix: filteredBodyMatrix,
+      dateIdx,
+      valueIdxs,
+      descIdx,
+      parseDate,
+    });
+    const merged = assembled.merged;
+
+    const rows: RawRow[] = merged
+      .filter((r) => r.some((c) => String(c ?? "").trim() !== ""))
+      .map((r) => {
+        const obj: RawRow = {};
+        headers.forEach((h, i) => { obj[h] = String(r[i] ?? "").trim(); });
+        return obj;
+      });
+
+    const extractSummary = captureExtractSummary(summaryRows);
+    (meta as any).blocks_closed = assembled.blocksClosed;
+    (meta as any).lines_appended = assembled.linesAppended;
+    (meta as any).dates_inherited = assembled.datesInherited;
+
+    return { headers, rows, meta, charset, extractSummary };
+  }
+
+  // PDF Nativo (Alinhamento por Página - Fase 2)
+  const pagesMap = new Map<number, PdfPhysicalLine[]>();
+  for (const row of matrix) {
+    const firstCell = row[0];
+    if (firstCell && typeof firstCell !== "string") {
+      const pNum = firstCell.pageNumber ?? 1;
+      const pWidth = firstCell.pageWidth ?? 595.276;
+      if (!pagesMap.has(pNum)) {
+        pagesMap.set(pNum, []);
+      }
+      pagesMap.get(pNum)!.push({
+        pageNumber: pNum,
+        physicalLine: firstCell.physicalLine ?? 1,
+        y: firstCell.y ?? 0,
+        pageWidth: pWidth,
+        cells: row as PdfPhysicalCell[]
+      });
+    }
+  }
+
+  const pageNumbers = Array.from(pagesMap.keys()).sort((a, b) => a - b);
+  let primaryLayout: PageColumnLayout | null = null;
+  const detectedPageLayouts = new Map<number, PageColumnLayout>();
+  const headerIndicesPerPage = new Map<number, number>();
+
+  // 1ª passada: Detectar cabeçalhos tabulares em cada página
+  for (const pNum of pageNumbers) {
+    const pLines = pagesMap.get(pNum)!;
+    const stringMatrixOfPage = pLines.map(line => line.cells.map(c => c.text));
+    const detection = detectHeader(stringMatrixOfPage, meta?.source as string);
+    if (detection.headerIndex >= 0 && !detection.headerFailed) {
+      const headerRow = pLines[detection.headerIndex];
+      const rawHeaders = headerRow.cells.map((h, i) => String(h.text ?? `col_${i}`).trim() || `col_${i}`);
+      
+      const pageLayout: PageColumnLayout = {
+        pageNumber: pNum,
+        source: "DETECTED_HEADER",
+        pageWidth: headerRow.pageWidth,
+        headers: headerRow.cells.map((cell, idx) => {
+          const name = rawHeaders[idx];
+          return {
+            originalName: name,
+            normalizedName: name.toLowerCase().trim(),
+            x: cell.x,
+            xRelative: cell.x / headerRow.pageWidth,
+            width: cell.width
+          };
+        }) as any,
+        confidence: "HIGH",
+        reasons: ["Cabeçalho detectado na própria página."]
+      };
+      detectedPageLayouts.set(pNum, pageLayout);
+      headerIndicesPerPage.set(pNum, detection.headerIndex);
+      if (!primaryLayout) {
+        primaryLayout = pageLayout;
+      }
+    }
+  }
+
+  if (!primaryLayout) {
     return { headers: [], rows: [], meta, charset, headerFailed: true };
   }
 
-  const rawHeaders = matrix[headerIdx].map((h, i) => String(getCellText(h) ?? `col_${i}`).trim() || `col_${i}`);
-  const headerXs = matrix[headerIdx].map((h) => getCellX(h));
-  const isCoordinateBased = matrix[headerIdx].some(h => typeof h !== "string");
-
-  // dedupe cabeçalhos duplicados no arquivo
+  // Deduplicar cabeçalhos primários para obter o contrato de colunas global
+  const rawHeaders = primaryLayout.headers.map((h: any) => h.originalName);
   const seen = new Map<string, number>();
   const headers = rawHeaders.map((h) => {
     const n = (seen.get(h) ?? 0) + 1;
@@ -257,61 +471,174 @@ function finalizeTable(
     return n === 1 ? h : `${h}__${n}`;
   });
 
-  const bodyMatrix = matrix.slice(headerIdx + 1);
-  const headerSignature = rawHeaders.map((c) => String(c ?? "").trim().toLowerCase()).filter(Boolean).join("|");
+  // 2ª passada: Resolver páginas sem cabeçalho e aplicar alinhamentos
+  let pages_extracted = pageNumbers.length;
+  let pages_with_detected_header = 0;
+  let pages_reusing_previous_layout = 0;
+  let pages_with_adjusted_layout = 0;
+  let pages_with_unresolved_layout = 0;
+  let repeated_headers_removed = 0;
+  let layout_equivalence_failures = 0;
 
-  const filteredBodyMatrix: Array<Array<string | { text: string; x: number }>> = [];
-  const summaryRows: string[][] = []; // NTIEB Cap. 15.3 — linhas neutras (não viram lançamento, mas alimentam validação de saldo)
-  for (const row of bodyMatrix) {
-    // 1. Filtrar cabeçalho repetido (comum em PDFs multipáginas)
-    const rowSig = row.map((c) => String(getCellText(c) ?? "").trim().toLowerCase()).filter(Boolean).join("|");
-    if (headerSignature && rowSig === headerSignature) {
-      continue;
-    }
+  for (const pNum of pageNumbers) {
+    const pLines = pagesMap.get(pNum)!;
+    let pageLayout = detectedPageLayouts.get(pNum);
 
-    // 2. Filtrar resumos e saldos usando a biblioteca isolada da V3
-    const cellTexts = row.map((c) => getCellText(c));
-    const isSummaryOrBalance = isSummaryOrBalanceRow(cellTexts);
-    if (isSummaryOrBalance) {
-      summaryRows.push(cellTexts);
-      continue;
-    }
-
-    filteredBodyMatrix.push(row);
-  }
-
-  // Alinhar a matriz do corpo com base nos Xs do cabeçalho
-  const alignedBodyMatrix: string[][] = [];
-  for (const row of filteredBodyMatrix) {
-    if (isCoordinateBased) {
-      const alignedRow = new Array(headers.length).fill("");
-      for (const cell of row) {
-        const txt = getCellText(cell);
-        const cx = getCellX(cell);
-        if (!txt) continue;
-        
-        let closestIdx = 0;
-        let minDiff = Infinity;
-        for (let j = 0; j < headerXs.length; j++) {
-          const diff = Math.abs(headerXs[j] - cx);
-          if (diff < minDiff) {
-            minDiff = diff;
-            closestIdx = j;
-          }
-        }
-        if (alignedRow[closestIdx]) {
-          alignedRow[closestIdx] += " " + txt;
-        } else {
-          alignedRow[closestIdx] = txt;
+    if (pageLayout) {
+      pages_with_detected_header++;
+      if (pNum !== primaryLayout.pageNumber) {
+        repeated_headers_removed++;
+        const isEquivalent = compareDetectedLayouts(pageLayout, primaryLayout);
+        if (!isEquivalent) {
+          layout_equivalence_failures++;
+          pageLayout.reasons.push("Cabeçalho detectado difere da estrutura principal.");
         }
       }
-      alignedBodyMatrix.push(alignedRow);
     } else {
-      alignedBodyMatrix.push(row.map(c => getCellText(c)));
+      let prevLayout: PageColumnLayout | null = null;
+      for (let prevP = pNum - 1; prevP >= 1; prevP--) {
+        const l = detectedPageLayouts.get(prevP);
+        if (l && l.source !== "UNRESOLVED") {
+          prevLayout = l;
+          break;
+        }
+      }
+
+      if (prevLayout) {
+        const resolved = validatePageDataAgainstLayout(pLines, prevLayout, pNum, pLines[0].pageWidth);
+        detectedPageLayouts.set(pNum, resolved);
+        pageLayout = resolved;
+
+        if (resolved.source === "REUSED_PREVIOUS") {
+          pages_reusing_previous_layout++;
+          if (resolved.appliedOffset !== 0) {
+            pages_with_adjusted_layout++;
+          }
+        } else {
+          pages_with_unresolved_layout++;
+        }
+      } else {
+        const unresolved: PageColumnLayout = {
+          pageNumber: pNum,
+          source: "UNRESOLVED",
+          pageWidth: pLines[0].pageWidth,
+          headers: primaryLayout.headers as any,
+          confidence: "LOW",
+          reasons: ["Sem layout anterior para reutilizar."]
+        };
+        detectedPageLayouts.set(pNum, unresolved);
+        pageLayout = unresolved;
+        pages_with_unresolved_layout++;
+      }
     }
   }
 
-  // NTIEB Cap. 7, 13, 14, 16.4 — reconstrução de blocos multi-linha e herança temporal delegada ao blockAssembler
+  const alignedBodyMatrix: string[][] = [];
+  const summaryRows: string[][] = [];
+
+  let rows_before_phase3 = 0;
+  let rows_after_phase3 = 0;
+  let rows_removed_by_phase3 = 0;
+
+  let empty_lines_discarded = 0;
+  let metadata_lines_discarded = 0;
+  let repeated_headers_discarded = 0;
+  let footer_lines_discarded = 0;
+  let institutional_lines_discarded = 0;
+  let balance_lines_captured = 0;
+  let summary_lines_captured = 0;
+  let total_lines_captured = 0;
+  let ambiguous_rows_forwarded_or_reviewed = 0;
+  let transaction_candidate_rows_forwarded = 0;
+
+  const filtered_rows: any[] = [];
+
+  for (const pNum of pageNumbers) {
+    const pLines = pagesMap.get(pNum)!;
+    const pageLayout = detectedPageLayouts.get(pNum)!;
+    const headerIdx = headerIndicesPerPage.get(pNum) ?? -1;
+
+    for (let i = 0; i < pLines.length; i++) {
+      const line = pLines[i];
+      rows_before_phase3++;
+      
+      // Remove apenas o cabeçalho tabular repetido confirmado
+      if (pageLayout.source === "DETECTED_HEADER" && i === headerIdx) {
+        repeated_headers_discarded++;
+        rows_removed_by_phase3++;
+        continue;
+      }
+
+      const cellTexts = line.cells.map(c => c.text);
+      const context: RowClassificationContext = {
+        source: meta?.source as string || "pdf",
+        pageNumber: line.pageNumber,
+        physicalLine: line.physicalLine,
+        isFirstUsefulLineOfPage: i === 0 || (i === 1 && headerIdx === 0),
+        isLastUsefulLineOfPage: i === pLines.length - 1,
+        knownHeaders: headers
+      };
+      
+      const classification = classifyNonTransactionalRow(cellTexts, context);
+
+      if (classification.category === "EMPTY") empty_lines_discarded++;
+      else if (classification.category === "METADATA") metadata_lines_discarded++;
+      else if (classification.category === "REPEATED_HEADER") repeated_headers_discarded++;
+      else if (classification.category === "FOOTER") footer_lines_discarded++;
+      else if (classification.category === "INSTITUTIONAL") institutional_lines_discarded++;
+      else if (classification.category === "BALANCE") balance_lines_captured++;
+      else if (classification.category === "SUMMARY") summary_lines_captured++;
+      else if (classification.category === "TOTAL") total_lines_captured++;
+      else if (classification.category === "AMBIGUOUS") ambiguous_rows_forwarded_or_reviewed++;
+      else if (classification.category === "TRANSACTION_CANDIDATE") transaction_candidate_rows_forwarded++;
+
+      if (classification.preserveForAudit) {
+        filtered_rows.push({
+          pageNumber: line.pageNumber,
+          physicalLine: line.physicalLine,
+          category: classification.category,
+          action: classification.action,
+          reasonCode: classification.reasonCode,
+          reasons: classification.reasons,
+          originalText: cellTexts.join(" | ")
+        });
+      }
+
+      switch (classification.action) {
+        case "DISCARD_BEFORE_BLOCKS":
+          rows_removed_by_phase3++;
+          break;
+        case "CAPTURE_AS_BALANCE":
+        case "CAPTURE_AS_SUMMARY":
+        case "CAPTURE_AS_TOTAL":
+          summaryRows.push(cellTexts);
+          rows_removed_by_phase3++;
+          break;
+        case "FORWARD_TO_BLOCK_ASSEMBLER":
+        case "KEEP_FOR_REVIEW":
+          const alignedRow = alignPhysicalCells(line, pageLayout);
+          alignedBodyMatrix.push(alignedRow);
+          rows_after_phase3++;
+          break;
+      }
+    }
+  }
+
+  meta.rows_before_phase3 = rows_before_phase3;
+  meta.rows_after_phase3 = rows_after_phase3;
+  meta.rows_removed_by_phase3 = rows_removed_by_phase3;
+  meta.empty_lines_discarded = empty_lines_discarded;
+  meta.metadata_lines_discarded = metadata_lines_discarded;
+  meta.repeated_headers_discarded = repeated_headers_discarded;
+  meta.footer_lines_discarded = footer_lines_discarded;
+  meta.institutional_lines_discarded = institutional_lines_discarded;
+  meta.balance_lines_captured = balance_lines_captured;
+  meta.summary_lines_captured = summary_lines_captured;
+  meta.total_lines_captured = total_lines_captured;
+  meta.ambiguous_rows_forwarded_or_reviewed = ambiguous_rows_forwarded_or_reviewed;
+  meta.transaction_candidate_rows_forwarded = transaction_candidate_rows_forwarded;
+  meta.filtered_rows = filtered_rows;
+
   const dateIdx = headers.findIndex((h) => matchCell(h)?.field === "transaction_date");
   const valueIdxs = headers.map((h, i) => {
     const field = matchCell(h)?.field;
@@ -337,10 +664,32 @@ function finalizeTable(
       return obj;
     });
 
-  // NTIEB Cap. 15.3 / 55 — captura saldos e totais das linhas neutras
   const extractSummary = captureExtractSummary(summaryRows);
 
-  // Auditoria: expõe estatísticas do assembler para debug/log
+  const pagesDetails = pageNumbers.map(pNum => {
+    const layout = detectedPageLayouts.get(pNum);
+    return {
+      pageNumber: pNum,
+      layoutSource: layout?.source,
+      layoutConfidence: layout?.confidence,
+      equivalentToPage: layout?.equivalentToPage,
+      detectedColumnCount: layout?.headers.length,
+      appliedOffset: layout?.appliedOffset,
+      offsetResidual: layout?.offsetResidual,
+      compatibleRowRatio: layout?.compatibleRowRatio,
+      reasons: layout?.reasons
+    };
+  });
+
+  (meta as any).pages_extracted = pages_extracted;
+  (meta as any).pages_with_detected_header = pages_with_detected_header;
+  (meta as any).pages_reusing_previous_layout = pages_reusing_previous_layout;
+  (meta as any).pages_with_adjusted_layout = pages_with_adjusted_layout;
+  (meta as any).pages_with_unresolved_layout = pages_with_unresolved_layout;
+  (meta as any).repeated_headers_removed = repeated_headers_removed;
+  (meta as any).layout_equivalence_failures = layout_equivalence_failures;
+  (meta as any).pages_details = pagesDetails;
+
   (meta as any).blocks_closed = assembled.blocksClosed;
   (meta as any).lines_appended = assembled.linesAppended;
   (meta as any).dates_inherited = assembled.datesInherited;
