@@ -535,6 +535,7 @@ function finalizeTable(
 
   const alignedBodyMatrix: string[][] = [];
   const summaryRows: string[][] = [];
+  const alignedLineMetadata: Array<{ pageNumber: number, physicalLine: number }> = [];
 
   let rows_before_phase3 = 0;
   let rows_after_phase3 = 0;
@@ -618,6 +619,11 @@ function finalizeTable(
         case "KEEP_FOR_REVIEW":
           const alignedRow = alignPhysicalCells(line, pageLayout);
           alignedBodyMatrix.push(alignedRow);
+          alignedLineMetadata.push({
+            pageNumber: line.pageNumber,
+            physicalLine: line.physicalLine,
+            pageLayoutResolved: pageLayout.source !== "UNRESOLVED"
+          });
           rows_after_phase3++;
           break;
       }
@@ -653,6 +659,7 @@ function finalizeTable(
     valueIdxs,
     descIdx,
     parseDate,
+    lineMetadata: alignedLineMetadata
   });
   const merged = assembled.merged;
 
