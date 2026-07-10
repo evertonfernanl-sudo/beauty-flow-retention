@@ -19,6 +19,7 @@ import {
 } from "./ntieb/rules";
 import { assembleBlocks } from "./blocks/blockAssembler";
 import { captureExtractSummary, validateBalance, type ExtractSummary } from "./validation/balanceValidator";
+import { IssuerBank, inferIssuerBank } from "./banks/issuerBank";
 
 type SB = SupabaseClient<Database>;
 
@@ -374,7 +375,7 @@ export function buildCanonical(
   raw: RawRow,
   map: FieldMap,
   extraConcat?: { field: string; cols: [string, string] },
-  bankName?: string,
+  issuerBank?: IssuerBank | null,
 ): { canonical: CanonicalRow; snapshot: Record<string, string>; errors: string[] } {
   const snapshot: Record<string, string> = { ...raw };
   const errors: string[] = [];
@@ -432,7 +433,7 @@ export function buildCanonical(
     raw_extra: extractExtra(raw, map, extraConcat),
   };
 
-  const enriched = enrichRow(canonical, bankName);
+  const enriched = enrichRow(canonical, issuerBank);
   return { canonical: enriched, snapshot, errors };
 }
 
@@ -688,7 +689,7 @@ export async function resolveRow(
   sb: SB,
   companyId: string,
   canonical: CanonicalRow,
-  bankName?: string,
+  issuerBank?: IssuerBank | null,
 ): Promise<{
   suggestions: Record<string, unknown>;
   reasons: string[];
@@ -728,10 +729,10 @@ export async function resolveRow(
   }
 
   // Se ainda assim não foi identificado nenhum cliente na linha nem na descrição, associa ao Banco do Extrato
-  if (!clientName && bankName) {
-    clientName = bankName;
-    canonical.client_name = bankName;
-    reasons.push(`cliente atribuído ao banco emissor: ${bankName}`);
+  if (!clientName && issuerBank) {
+    clientName = issuerBank;
+    canonical.client_name = issuerBank;
+    reasons.push(`cliente atribuído ao banco emissor: ${issuerBank}`);
   }
 
   // Resolução: CPF → telefone → documento → nome
@@ -1164,11 +1165,11 @@ export async function runPipeline(
 
     const filename = args.storagePath.split("/").pop() || "extrato.pdf";
     const sampleText = csvText || raw.headers.join(" ") + " " + raw.rows.slice(0, 5).map(r => Object.values(r).join(" ")).join(" ");
-    const bankName = inferBankNameV3(filename, sampleText);
+    const issuerBank = inferIssuerBank(filename, sampleText);
 
     // 4-8) Por linha: canonical → guard → resolução → dedup
     const startCanonical = Date.now();
-    const built = raw.rows.map((r) => buildCanonical(r, map, extraConcat, bankName));
+    const built = raw.rows.map((r) => buildCanonical(r, map, extraConcat, issuerBank));
     const canonicalTime = Date.now() - startCanonical;
     console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: buildCanonical\nRows: ${built.length}\nTime: ${canonicalTime} ms\nStatus: OK`);
 
@@ -1204,7 +1205,7 @@ export async function runPipeline(
 
       let resolution: any = null;
       if (status !== "LINE_FAILED") {
-        resolution = await resolveRow(sb, args.companyId, canonical, bankName);
+        resolution = await resolveRow(sb, args.companyId, canonical, issuerBank);
         if (resolution.needsReview) status = "LINE_REVIEW";
         rowReasons.push(...resolution.reasons);
       }
@@ -1750,17 +1751,4 @@ async function executeNativePdfFormatter(pdf: any, apiKey: string): Promise<stri
   return nativeCsvAccumulator;
 }
 
-export function inferBankNameV3(filename?: string | null, sampleText?: string | null): string {
-  const f = (filename || "").toLowerCase();
-  const s = (sampleText || "").toLowerCase();
-  if (f.includes("itau") || s.includes("itau") || s.includes("itaú")) return "Itaú";
-  if (f.includes("bradesco") || s.includes("bradesco")) return "Bradesco";
-  if (f.includes("santander") || s.includes("santander")) return "Santander";
-  if (f.includes("brasil") || f.includes("bb") || s.includes("bb") || s.includes("brasil") || s.includes("banco do brasil")) return "Banco do Brasil";
-  if (f.includes("nubank") || s.includes("nubank") || s.includes("nu pagamentos") || s.includes("nu pagamento")) return "Nubank";
-  if (f.includes("inter") || s.includes("inter") || s.includes("banco inter")) return "Banco Inter";
-  if (f.includes("caixa") || s.includes("caixa econ") || s.includes("cef") || s.includes("caixa")) return "Caixa Econômica";
-  if (f.includes("sicredi") || s.includes("sicredi")) return "Sicredi";
-  if (f.includes("sicoob") || s.includes("sicoob")) return "Sicoob";
-  return "Banco Importado";
-}
+

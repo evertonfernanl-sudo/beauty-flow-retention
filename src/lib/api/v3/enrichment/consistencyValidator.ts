@@ -1,11 +1,12 @@
 import type { CanonicalRow } from "../pipeline.server";
 import { TransactionPatternKey, isSystemPattern } from "./transactionPatternLibrary";
 import { BANK_NAMES } from "./aliases";
+import { IssuerBank } from "../banks/issuerBank";
 
 export function validateCanonicalConsistency(
   c: CanonicalRow,
   pattern: TransactionPatternKey,
-  bankName?: string
+  issuerBank?: IssuerBank | null
 ): CanonicalRow {
   const validated = { ...c };
 
@@ -21,7 +22,7 @@ export function validateCanonicalConsistency(
   // 2. Se for operação de sistema e o cliente estiver vazio, preenche com o banco emissor
   const system = isSystemPattern(pattern);
   if (system && (validated.client_name == null || validated.client_name === "")) {
-    validated.client_name = bankName ? `banco ${bankName.toLowerCase().trim()}` : "banco emissor";
+    validated.client_name = issuerBank ?? "banco emissor";
   }
 
   // 3. Fallback de coerência de direção de acordo com o padrão

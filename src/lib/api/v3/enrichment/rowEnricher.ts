@@ -6,8 +6,9 @@ import { extractDate } from "./dateExtractor";
 import { detectOperation } from "./operationDetector";
 import { detectDirection } from "./directionDetector";
 import { validateCanonicalConsistency } from "./consistencyValidator";
+import { IssuerBank } from "../banks/issuerBank";
 
-export function enrichRow(c: CanonicalRow, bankName?: string): CanonicalRow {
+export function enrichRow(c: CanonicalRow, issuerBank?: IssuerBank | null): CanonicalRow {
   let enriched = { ...c };
 
   // 1. Normalizar descrição para análise (descrição original preservada no enriched.description)
@@ -43,7 +44,7 @@ export function enrichRow(c: CanonicalRow, bankName?: string): CanonicalRow {
   // O consistencyValidator e classify cuidarão de manter a coerência final.
   
   // 7. Validar consistência da CanonicalRow inteira (aplica correções finais)
-  enriched = validateCanonicalConsistency(enriched, pattern, bankName);
+  enriched = validateCanonicalConsistency(enriched, pattern, issuerBank);
 
   return enriched;
 }
