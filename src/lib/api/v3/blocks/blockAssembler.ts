@@ -21,11 +21,23 @@ export type BlockAssemblerInput = {
   lineMetadata?: BlockLineMetadata[];
 };
 
+export type AssembledBlock = {
+  row: string[];
+  pageStart: number;
+  pageEnd: number;
+  originLines: Array<{ pageNumber: number; physicalLine: number }>;
+  hasExplicitDate: boolean;
+  hasExplicitValue: boolean;
+  isAmbiguous: boolean;
+  ambiguityReasons: string[];
+};
+
 export type BlockAssemblerOutput = {
   merged: string[][];
   blocksClosed: number;
   linesAppended: number;        
   datesInherited: number;       // Mantido em 0 nesta fase por conta da desativação
+  blocks?: AssembledBlock[];
 };
 
 type ActiveBlock = {
@@ -43,6 +55,7 @@ type ActiveBlock = {
 export function assembleBlocks(input: BlockAssemblerInput): BlockAssemblerOutput {
   const { bodyMatrix, dateIdx, valueIdxs, descIdx, parseDate, lineMetadata } = input;
   const merged: string[][] = [];
+  const blocks: AssembledBlock[] = [];
   
   let blocksClosed = 0;
   let linesAppended = 0;
@@ -71,6 +84,16 @@ export function assembleBlocks(input: BlockAssemblerInput): BlockAssemblerOutput
     }
 
     merged.push(row);
+    blocks.push({
+      row,
+      pageStart: activeBlock.pageStart,
+      pageEnd: activeBlock.pageEnd,
+      originLines: activeBlock.originLines,
+      hasExplicitDate: activeBlock.hasExplicitDate,
+      hasExplicitValue: activeBlock.hasExplicitValue,
+      isAmbiguous: activeBlock.isAmbiguous,
+      ambiguityReasons: activeBlock.ambiguityReasons
+    });
     if (activeBlock.hasExplicitDate && activeBlock.hasExplicitValue) {
       blocksClosed++;
     }
@@ -191,6 +214,16 @@ export function assembleBlocks(input: BlockAssemblerInput): BlockAssemblerOutput
       } else {
         // BOUNDARY ou continuação órfã sem bloco anterior
         merged.push(row);
+        blocks.push({
+          row,
+          pageStart: meta?.pageNumber ?? 1,
+          pageEnd: meta?.pageNumber ?? 1,
+          originLines: [{ pageNumber: meta?.pageNumber ?? 1, physicalLine: meta?.physicalLine ?? 1 }],
+          hasExplicitDate: hasDate,
+          hasExplicitValue: hasValue,
+          isAmbiguous: true,
+          ambiguityReasons: [reasonCode]
+        });
       }
     } else {
       // Estado: OPEN_BLOCK ou OPEN_AMBIGUOUS_BLOCK
@@ -238,6 +271,16 @@ export function assembleBlocks(input: BlockAssemblerInput): BlockAssemblerOutput
       } else if (kind === "TRANSACTION_BOUNDARY") {
         emitActiveBlock();
         merged.push(row);
+        blocks.push({
+          row,
+          pageStart: meta?.pageNumber ?? 1,
+          pageEnd: meta?.pageNumber ?? 1,
+          originLines: [{ pageNumber: meta?.pageNumber ?? 1, physicalLine: meta?.physicalLine ?? 1 }],
+          hasExplicitDate: hasDate,
+          hasExplicitValue: hasValue,
+          isAmbiguous: true,
+          ambiguityReasons: [reasonCode]
+        });
       } else {
         // AMBIGUOUS_BLOCK_LINE
         emitActiveBlock();
@@ -259,5 +302,5 @@ export function assembleBlocks(input: BlockAssemblerInput): BlockAssemblerOutput
   // Emite o último bloco pendente
   emitActiveBlock();
 
-  return { merged, blocksClosed, linesAppended, datesInherited };
+  return { merged, blocksClosed, linesAppended, datesInherited, blocks };
 }

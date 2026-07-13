@@ -1,0 +1,66 @@
+-- Migration: Add audit fields for Phase 7 (Observabilidade e Auditoria)
+-- Rollback:
+-- ALTER TABLE public.v3_imports 
+--   DROP COLUMN IF EXISTS audit_summary, DROP COLUMN IF EXISTS audit_version,
+--   DROP COLUMN IF EXISTS physical_lines_extracted, DROP COLUMN IF EXISTS lines_into_finalize,
+--   DROP COLUMN IF EXISTS lines_out_finalize, DROP COLUMN IF EXISTS pages_extracted,
+--   DROP COLUMN IF EXISTS pages_with_detected_header, DROP COLUMN IF EXISTS pages_reusing_previous_layout,
+--   DROP COLUMN IF EXISTS pages_with_adjusted_layout, DROP COLUMN IF EXISTS pages_with_unresolved_layout,
+--   DROP COLUMN IF EXISTS layout_equivalence_failures, DROP COLUMN IF EXISTS repeated_headers_removed,
+--   DROP COLUMN IF EXISTS administrative_lines_discarded, DROP COLUMN IF EXISTS institutional_lines_discarded,
+--   DROP COLUMN IF EXISTS metadata_lines_discarded, DROP COLUMN IF EXISTS footer_lines_discarded,
+--   DROP COLUMN IF EXISTS summary_lines_captured, DROP COLUMN IF EXISTS balance_lines_captured,
+--   DROP COLUMN IF EXISTS total_lines_captured, DROP COLUMN IF EXISTS transaction_candidate_rows,
+--   DROP COLUMN IF EXISTS ambiguous_rows, DROP COLUMN IF EXISTS blocks_created,
+--   DROP COLUMN IF EXISTS blocks_appended, DROP COLUMN IF EXISTS blocks_crossing_pages,
+--   DROP COLUMN IF EXISTS blocks_marked_ambiguous, DROP COLUMN IF EXISTS possible_mega_blocks,
+--   DROP COLUMN IF EXISTS dates_explicit, DROP COLUMN IF EXISTS dates_inherited,
+--   DROP COLUMN IF EXISTS dates_missing, DROP COLUMN IF EXISTS temporal_conflicts,
+--   DROP COLUMN IF EXISTS rows_gate_passed, DROP COLUMN IF EXISTS rows_gate_failed,
+--   DROP COLUMN IF EXISTS rows_approved, DROP COLUMN IF EXISTS rows_review,
+--   DROP COLUMN IF EXISTS rows_failed, DROP COLUMN IF EXISTS rows_persisted;
+-- ALTER TABLE public.v3_import_rows 
+--   DROP COLUMN IF EXISTS origin_lines, DROP COLUMN IF EXISTS block_debug, DROP COLUMN IF EXISTS audit_trace;
+
+ALTER TABLE public.v3_imports
+  ADD COLUMN IF NOT EXISTS audit_summary jsonb,
+  ADD COLUMN IF NOT EXISTS audit_version text,
+  ADD COLUMN IF NOT EXISTS physical_lines_extracted integer,
+  ADD COLUMN IF NOT EXISTS lines_into_finalize integer,
+  ADD COLUMN IF NOT EXISTS lines_out_finalize integer,
+  ADD COLUMN IF NOT EXISTS pages_extracted integer,
+  ADD COLUMN IF NOT EXISTS pages_with_detected_header integer,
+  ADD COLUMN IF NOT EXISTS pages_reusing_previous_layout integer,
+  ADD COLUMN IF NOT EXISTS pages_with_adjusted_layout integer,
+  ADD COLUMN IF NOT EXISTS pages_with_unresolved_layout integer,
+  ADD COLUMN IF NOT EXISTS layout_equivalence_failures integer,
+  ADD COLUMN IF NOT EXISTS repeated_headers_removed integer,
+  ADD COLUMN IF NOT EXISTS administrative_lines_discarded integer,
+  ADD COLUMN IF NOT EXISTS institutional_lines_discarded integer,
+  ADD COLUMN IF NOT EXISTS metadata_lines_discarded integer,
+  ADD COLUMN IF NOT EXISTS footer_lines_discarded integer,
+  ADD COLUMN IF NOT EXISTS summary_lines_captured integer,
+  ADD COLUMN IF NOT EXISTS balance_lines_captured integer,
+  ADD COLUMN IF NOT EXISTS total_lines_captured integer,
+  ADD COLUMN IF NOT EXISTS transaction_candidate_rows integer,
+  ADD COLUMN IF NOT EXISTS ambiguous_rows integer,
+  ADD COLUMN IF NOT EXISTS blocks_created integer,
+  ADD COLUMN IF NOT EXISTS blocks_appended integer,
+  ADD COLUMN IF NOT EXISTS blocks_crossing_pages integer,
+  ADD COLUMN IF NOT EXISTS blocks_marked_ambiguous integer,
+  ADD COLUMN IF NOT EXISTS possible_mega_blocks integer,
+  ADD COLUMN IF NOT EXISTS dates_explicit integer,
+  ADD COLUMN IF NOT EXISTS dates_inherited integer,
+  ADD COLUMN IF NOT EXISTS dates_missing integer,
+  ADD COLUMN IF NOT EXISTS temporal_conflicts integer,
+  ADD COLUMN IF NOT EXISTS rows_gate_passed integer,
+  ADD COLUMN IF NOT EXISTS rows_gate_failed integer,
+  ADD COLUMN IF NOT EXISTS rows_approved integer,
+  ADD COLUMN IF NOT EXISTS rows_review integer,
+  ADD COLUMN IF NOT EXISTS rows_failed integer,
+  ADD COLUMN IF NOT EXISTS rows_persisted integer;
+
+ALTER TABLE public.v3_import_rows
+  ADD COLUMN IF NOT EXISTS origin_lines jsonb,
+  ADD COLUMN IF NOT EXISTS block_debug jsonb,
+  ADD COLUMN IF NOT EXISTS audit_trace jsonb;

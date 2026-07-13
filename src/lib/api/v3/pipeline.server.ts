@@ -22,6 +22,10 @@ import { captureExtractSummary, validateBalance, type ExtractSummary } from "./v
 import { IssuerBank, inferIssuerBank } from "./banks/issuerBank";
 import { PageColumnLayout, PdfPhysicalLine, PdfPhysicalCell, compareDetectedLayouts, validatePageDataAgainstLayout, alignPhysicalCells } from "./pdf/pageLayout";
 import { classifyNonTransactionalRow, RowClassificationContext } from "./rows/nonTransactionalClassifier";
+import { applyTemporalContextToBlocks } from "./temporal/temporalContext";
+import { evaluateRowQuality } from "./confidence/confidenceCalculator";
+import { ImportAuditCollector } from "./audit/auditCollector";
+import { generateAuditTextReport } from "./audit/auditReport";
 
 type SB = SupabaseClient<Database>;
 
@@ -103,25 +107,31 @@ function decodeDeterministic(buffer: Uint8Array): { text: string; charset: strin
   return { text, charset: "windows-1252", hadReplacements: text.includes("\uFFFD") };
 }
 
-export function parseCsv(buffer: Uint8Array): RawTable {
+export function parseCsv(buffer: Uint8Array, collector?: ImportAuditCollector): RawTable {
   const { text, charset } = decodeDeterministic(buffer);
   const parsed = Papa.parse<string[]>(text, { skipEmptyLines: true });
   const matrix = (parsed.data ?? []).filter((r) => Array.isArray(r) && r.some((c) => String(c ?? "").trim() !== ""));
-  return finalizeTable(matrix, { source: "csv" }, charset);
+  if (collector) {
+    collector.increment("physical_lines_extracted", matrix.length);
+  }
+  return finalizeTable(matrix, { source: "csv" }, charset, collector);
 }
 
-export function parseXlsx(buffer: Uint8Array): RawTable {
+export function parseXlsx(buffer: Uint8Array, collector?: ImportAuditCollector): RawTable {
   const wb = XLSX.read(buffer, { type: "array" });
   const ws = wb.Sheets[wb.SheetNames[0]];
   const matrix: string[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" });
   const clean = matrix.filter((r) => r.some((c) => String(c ?? "").trim() !== ""));
-  return finalizeTable(clean, { source: "xlsx", sheet: wb.SheetNames[0] }, "utf-8");
+  if (collector) {
+    collector.increment("physical_lines_extracted", clean.length);
+  }
+  return finalizeTable(clean, { source: "xlsx", sheet: wb.SheetNames[0] }, "utf-8", collector);
 }
 
 // PDF — reconstrução tabular via pdfjs-dist (unpdf) usando coordenadas X/Y.
 // - Agrupa itens por Y (mesma linha visual) e ordena por X (colunas).
 // - Se a página tiver texto insuficiente, marca imagePages para fallback OCR (Cap. 24.5–24.6).
-export async function parsePdf(buffer: Uint8Array): Promise<RawTable> {
+export async function parsePdf(buffer: Uint8Array, collector?: ImportAuditCollector): Promise<RawTable> {
   const cleanBuffer = new Uint8Array(buffer.length);
   cleanBuffer.set(buffer);
   const unpdf: any = await import("unpdf");
@@ -242,7 +252,10 @@ export async function parsePdf(buffer: Uint8Array): Promise<RawTable> {
     return { headers: [], rows: [], meta, charset: "utf-8", headerFailed: true, ocrConfidence: 0 };
   }
 
-  const table = finalizeTable(merged, meta, "utf-8");
+  if (collector) {
+    collector.increment("physical_lines_extracted", merged.length);
+  }
+  const table = finalizeTable(merged, meta, "utf-8", collector);
   table.ocrConfidence = confidence;
   (table.meta as any).imagePages = imagePages;
   return table;
@@ -251,7 +264,8 @@ export async function parsePdf(buffer: Uint8Array): Promise<RawTable> {
 function finalizeTable(
   matrix: Array<Array<string | { text: string; x: number; y?: number; pageNumber?: number; pageWidth?: number; physicalLine?: number; width?: number }>>,
   meta: Record<string, unknown>,
-  charset: string
+  charset: string,
+  collector?: ImportAuditCollector
 ): RawTable {
   if (matrix.length === 0) return { headers: [], rows: [], meta, charset, headerFailed: true };
 
@@ -292,6 +306,8 @@ function finalizeTable(
 
     const filteredBodyMatrix: string[][] = [];
     const summaryRows: string[][] = [];
+    const filtered_rows: any[] = [];
+    let row_idx = 0;
 
     let rows_before_phase3 = bodyMatrix.length;
     let rows_after_phase3 = 0;
@@ -308,20 +324,67 @@ function finalizeTable(
     let ambiguous_rows_forwarded_or_reviewed = 0;
     let transaction_candidate_rows_forwarded = 0;
 
+    if (collector) {
+      collector.recordPageLayout({
+        pageNumber: 1,
+        layoutSource: "DETECTED_HEADER",
+        layoutConfidence: "HIGH",
+        reasons: ["Mapeamento padrão de colunas CSV/XLSX/OCR."]
+      });
+    }
+
     for (const row of bodyMatrix) {
       const rowSig = row.map((c) => String(getCellText(c) ?? "").trim().toLowerCase()).filter(Boolean).join("|");
       if (headerSignature && rowSig === headerSignature) {
         repeated_headers_discarded++;
         rows_removed_by_phase3++;
+        if (collector) {
+          collector.recordPhase3Row({
+            pageNumber: 1,
+            physicalLine: row_idx + 1,
+            category: "REPEATED_HEADER",
+            action: "DISCARD_BEFORE_BLOCKS",
+            reasonCode: "REPEATED_HEADER_LINE",
+            confidence: "HIGH",
+            matchedSignals: ["REPEATED_HEADER"],
+            textPreview: row.map(getCellText).join(" | ")
+          });
+        }
         continue;
       }
 
+      row_idx++;
       const cellTexts = row.map((c) => getCellText(c));
       const context: RowClassificationContext = {
         source: meta?.source as string || "csv",
         knownHeaders: headers
       };
       const classification = classifyNonTransactionalRow(cellTexts, context);
+
+      if (collector) {
+        collector.recordPhase3Row({
+          pageNumber: 1,
+          physicalLine: row_idx,
+          category: classification.category,
+          action: classification.action,
+          reasonCode: classification.reasonCode,
+          confidence: classification.confidence,
+          matchedSignals: classification.matchedSignals,
+          textPreview: cellTexts.join(" | ")
+        });
+      }
+
+      if (classification.preserveForAudit) {
+        filtered_rows.push({
+          pageNumber: 1,
+          physicalLine: row_idx,
+          category: classification.category,
+          action: classification.action,
+          reasonCode: classification.reasonCode,
+          reasons: classification.reasons,
+          originalText: cellTexts.join(" | ")
+        });
+      }
 
       if (classification.category === "EMPTY") empty_lines_discarded++;
       else if (classification.category === "METADATA") metadata_lines_discarded++;
@@ -381,13 +444,86 @@ function finalizeTable(
       descIdx,
       parseDate,
     });
-    const merged = assembled.merged;
 
-    const rows: RawRow[] = merged
-      .filter((r) => r.some((c) => String(c ?? "").trim() !== ""))
-      .map((r) => {
+    if (collector) {
+      for (const block of assembled.blocks || []) {
+        collector.recordBlock({
+          blockId: block.blockId || "",
+          pageStart: 1,
+          pageEnd: 1,
+          originLines: (block.originLines || []).map((ol: any) => ({
+            pageNumber: ol.pageNumber ?? 1,
+            physicalLine: ol.physicalLine ?? 1,
+          })),
+          openedBy: block.openedBy || "",
+          closedBy: block.closedBy || "",
+          appendedBy: (block.appendedBy || []).map((ap: any) => ({
+            pageNumber: ap.pageNumber ?? 1,
+            physicalLine: ap.physicalLine ?? 1,
+            reasonCode: ap.reasonCode || "",
+          })),
+          descriptionLineCount: block.descriptionLines?.length ?? 1,
+          crossedPageBoundary: false,
+          ambiguous: block.isAmbiguous || false,
+          ambiguityReasons: block.ambiguityReasons || [],
+          valueConflict: block.valueConflict || false,
+          documentConflict: block.documentConflict || false,
+          possibleMegaBlock: (block.ambiguityReasons || []).includes("POSSIBLE_MEGA_BLOCK"),
+        });
+      }
+    }
+
+    const resolvedBlocks = applyTemporalContextToBlocks({
+      blocks: assembled.blocks || [],
+      dateIdx,
+      valueIdxs,
+      descIdx,
+      parseDate,
+      isCoordinateBased: false,
+      filteredRows: filtered_rows,
+      meta
+    });
+
+    if (collector) {
+      for (const block of resolvedBlocks) {
+        if (block.dateAssignment === "DATE_GROUP_MARKER") continue;
+        collector.recordTemporal({
+          blockId: block.blockId || "",
+          assignment: block.dateAssignment as any,
+          normalizedDate: block.dateNormalized || null,
+          reasonCode: block.dateReasonCode || "",
+          sourceBlockId: block.dateSourceBlockId || null,
+          sourcePageNumber: block.dateSourcePage || null,
+          sourcePhysicalLine: block.dateSourcePhysicalLine || null,
+          inheritedAcrossPage: block.dateReasonCode === "INHERITED_CROSS_PAGE",
+          contextInvalidated: false,
+          conflictReasons: [],
+        });
+      }
+    }
+
+    const rows: RawRow[] = resolvedBlocks
+      .filter((b) => b.dateAssignment !== "DATE_GROUP_MARKER")
+      .map((b) => {
         const obj: RawRow = {};
-        headers.forEach((h, i) => { obj[h] = String(r[i] ?? "").trim(); });
+        headers.forEach((h, i) => { obj[h] = String(b.row[i] ?? "").trim(); });
+        obj._dateRaw = b.dateRaw || "";
+        obj._dateNormalized = b.dateNormalized || "";
+        obj._dateDetected = String(b.dateDetected);
+        obj._dateInherited = String(b.dateInherited);
+        obj._dateAssignment = b.dateAssignment;
+        obj._dateSourcePage = b.dateSourcePage != null ? String(b.dateSourcePage) : "";
+        obj._dateSourcePhysicalLine = b.dateSourcePhysicalLine != null ? String(b.dateSourcePhysicalLine) : "";
+        obj._dateSourceBlockId = b.dateSourceBlockId || "";
+        obj._dateReasonCode = b.dateReasonCode;
+        obj._blockId = b.blockId || "";
+        obj._pageStart = b.pageStart != null ? String(b.pageStart) : "";
+        obj._pageEnd = b.pageEnd != null ? String(b.pageEnd) : "";
+        obj._isAmbiguous = String(b.isAmbiguous || false);
+        obj._ambiguityReasons = (b.ambiguityReasons || []).join(",");
+        obj._originLines = JSON.stringify(b.originLines || []);
+        obj._hasExplicitDate = String(b.hasExplicitDate || false);
+        obj._hasExplicitValue = String(b.hasExplicitValue || false);
         return obj;
       });
 
@@ -533,6 +669,22 @@ function finalizeTable(
     }
   }
 
+  if (collector) {
+    for (const pNum of pageNumbers) {
+      const layout = detectedPageLayouts.get(pNum);
+      if (layout) {
+        collector.recordPageLayout({
+          pageNumber: pNum,
+          layoutSource: layout.source,
+          layoutConfidence: layout.confidence,
+          equivalentToPage: layout.equivalentToPage,
+          detectedColumnCount: layout.headers?.length ?? 0,
+          reasons: layout.reasons || [],
+        });
+      }
+    }
+  }
+
   const alignedBodyMatrix: string[][] = [];
   const summaryRows: string[][] = [];
   const alignedLineMetadata: Array<{ pageNumber: number, physicalLine: number }> = [];
@@ -567,6 +719,18 @@ function finalizeTable(
       if (pageLayout.source === "DETECTED_HEADER" && i === headerIdx) {
         repeated_headers_discarded++;
         rows_removed_by_phase3++;
+        if (collector) {
+          collector.recordPhase3Row({
+            pageNumber: line.pageNumber,
+            physicalLine: line.physicalLine,
+            category: "REPEATED_HEADER",
+            action: "DISCARD_BEFORE_BLOCKS",
+            reasonCode: "REPEATED_HEADER_LINE",
+            confidence: "HIGH",
+            matchedSignals: ["REPEATED_HEADER"],
+            textPreview: line.cells.map(c => c.text).join(" | ")
+          });
+        }
         continue;
       }
 
@@ -581,6 +745,19 @@ function finalizeTable(
       };
       
       const classification = classifyNonTransactionalRow(cellTexts, context);
+
+      if (collector) {
+        collector.recordPhase3Row({
+          pageNumber: line.pageNumber,
+          physicalLine: line.physicalLine,
+          category: classification.category,
+          action: classification.action,
+          reasonCode: classification.reasonCode,
+          confidence: classification.confidence,
+          matchedSignals: classification.matchedSignals,
+          textPreview: cellTexts.join(" | ")
+        });
+      }
 
       if (classification.category === "EMPTY") empty_lines_discarded++;
       else if (classification.category === "METADATA") metadata_lines_discarded++;
@@ -661,13 +838,86 @@ function finalizeTable(
     parseDate,
     lineMetadata: alignedLineMetadata
   });
-  const merged = assembled.merged;
 
-  const rows: RawRow[] = merged
-    .filter((r) => r.some((c) => String(c ?? "").trim() !== ""))
-    .map((r) => {
+  if (collector) {
+    for (const block of assembled.blocks || []) {
+      collector.recordBlock({
+        blockId: block.blockId || "",
+        pageStart: block.pageStart ?? 1,
+        pageEnd: block.pageEnd ?? 1,
+        originLines: (block.originLines || []).map((ol: any) => ({
+          pageNumber: ol.pageNumber ?? 1,
+          physicalLine: ol.physicalLine ?? 1,
+        })),
+        openedBy: block.openedBy || "",
+        closedBy: block.closedBy || "",
+        appendedBy: (block.appendedBy || []).map((ap: any) => ({
+          pageNumber: ap.pageNumber ?? 1,
+          physicalLine: ap.physicalLine ?? 1,
+          reasonCode: ap.reasonCode || "",
+        })),
+        descriptionLineCount: block.descriptionLines?.length ?? 1,
+        crossedPageBoundary: block.pageStart !== block.pageEnd,
+        ambiguous: block.isAmbiguous || false,
+        ambiguityReasons: block.ambiguityReasons || [],
+        valueConflict: block.valueConflict || false,
+        documentConflict: block.documentConflict || false,
+        possibleMegaBlock: (block.ambiguityReasons || []).includes("POSSIBLE_MEGA_BLOCK"),
+      });
+    }
+  }
+
+  const resolvedBlocks = applyTemporalContextToBlocks({
+    blocks: assembled.blocks || [],
+    dateIdx,
+    valueIdxs,
+    descIdx,
+    parseDate,
+    isCoordinateBased: true,
+    filteredRows: filtered_rows,
+    meta
+  });
+
+  if (collector) {
+    for (const block of resolvedBlocks) {
+      if (block.dateAssignment === "DATE_GROUP_MARKER") continue;
+      collector.recordTemporal({
+        blockId: block.blockId || "",
+        assignment: block.dateAssignment as any,
+        normalizedDate: block.dateNormalized || null,
+        reasonCode: block.dateReasonCode || "",
+        sourceBlockId: block.dateSourceBlockId || null,
+        sourcePageNumber: block.dateSourcePage || null,
+        sourcePhysicalLine: block.dateSourcePhysicalLine || null,
+        inheritedAcrossPage: block.dateReasonCode === "INHERITED_CROSS_PAGE",
+        contextInvalidated: false,
+        conflictReasons: [],
+      });
+    }
+  }
+
+  const rows: RawRow[] = resolvedBlocks
+    .filter((b) => b.dateAssignment !== "DATE_GROUP_MARKER")
+    .map((b) => {
       const obj: RawRow = {};
-      headers.forEach((h, i) => { obj[h] = String(r[i] ?? "").trim(); });
+      headers.forEach((h, i) => { obj[h] = String(b.row[i] ?? "").trim(); });
+      obj._dateRaw = b.dateRaw || "";
+      obj._dateNormalized = b.dateNormalized || "";
+      obj._dateDetected = String(b.dateDetected);
+      obj._dateInherited = String(b.dateInherited);
+      obj._dateAssignment = b.dateAssignment;
+      obj._dateSourcePage = b.dateSourcePage != null ? String(b.dateSourcePage) : "";
+      obj._dateSourcePhysicalLine = b.dateSourcePhysicalLine != null ? String(b.dateSourcePhysicalLine) : "";
+      obj._dateSourceBlockId = b.dateSourceBlockId || "";
+      obj._dateReasonCode = b.dateReasonCode;
+      obj._blockId = b.blockId || "";
+      obj._pageStart = b.pageStart != null ? String(b.pageStart) : "";
+      obj._pageEnd = b.pageEnd != null ? String(b.pageEnd) : "";
+      obj._isAmbiguous = String(b.isAmbiguous || false);
+      obj._ambiguityReasons = (b.ambiguityReasons || []).join(",");
+      obj._originLines = JSON.stringify(b.originLines || []);
+      obj._hasExplicitDate = String(b.hasExplicitDate || false);
+      obj._hasExplicitValue = String(b.hasExplicitValue || false);
       return obj;
     });
 
@@ -890,7 +1140,11 @@ function extractExtra(raw: RawRow, map: FieldMap, extraConcat?: { cols: [string,
   const mapped = new Set(Object.values(map).filter(Boolean) as string[]);
   if (extraConcat) extraConcat.cols.forEach((c) => mapped.add(c));
   const extra: Record<string, string> = {};
-  for (const [k, v] of Object.entries(raw)) if (!mapped.has(k)) extra[k] = v;
+  for (const [k, v] of Object.entries(raw)) {
+    if (!mapped.has(k) || k.startsWith("_")) {
+      extra[k] = v;
+    }
+  }
   return extra;
 }
 
@@ -1299,6 +1553,9 @@ export async function runPipeline(
 ): Promise<{ rowsInserted: number; finalState: FinalState; csvText?: string }> {
   await sb.from("v3_imports").update({ status: "parsing" }).eq("id", args.importId);
 
+  const collector = new ImportAuditCollector(args.importId, args.source);
+  collector.setFilename(args.storagePath.split("/").pop() || "extrato.pdf");
+
   // NTIEB Cap. 65 — Log obrigatório: registra o momento de início para medir processing_ms
   const pipelineStart = Date.now();
 
@@ -1328,6 +1585,8 @@ export async function runPipeline(
         stage: "orchestrator", event: "SCHEMA_MISMATCH",
         reason: lastError,
       });
+      collector.setStatus("FAILED");
+      collector.addError(lastError);
       return { rowsInserted: 0, finalState: "FAILED" };
     }
 
@@ -1337,6 +1596,8 @@ export async function runPipeline(
     if (dl.error || !dl.data) {
       const downloadTime = Date.now() - startDownload;
       console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: downloadStorage\nRows: 0\nTime: ${downloadTime} ms\nStatus: ERROR\nError: ${dl.error?.message ?? "Dados vazios"}`);
+      collector.setStatus("FAILED");
+      collector.addError(dl.error?.message ?? "Download dos dados do arquivo retornou vazio");
       throw new Error(`Falha no download: ${dl.error?.message}`);
     }
     const arrayBuffer = await dl.data.arrayBuffer();
@@ -1350,10 +1611,12 @@ export async function runPipeline(
     // 2) Conversão
     const startParse = Date.now();
     let raw: RawTable;
-    if (args.source === "csv") raw = parseCsv(buf);
-    else if (args.source === "xlsx") raw = parseXlsx(buf);
-    else if (args.source === "pdf") raw = await parsePdf(buf);
+    collector.startPhase("PHASE_2");
+    if (args.source === "csv") raw = parseCsv(buf, collector);
+    else if (args.source === "xlsx") raw = parseXlsx(buf, collector);
+    else if (args.source === "pdf") raw = await parsePdf(buf, collector);
     else throw new Error(`Fonte não suportada na V3: ${args.source}`);
+    collector.endPhase("PHASE_2");
 
     const parseTime = Date.now() - startParse;
     console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: parse_${args.source}\nRows: ${raw.rows.length}\nTime: ${parseTime} ms\nStatus: OK`);
@@ -1540,6 +1803,26 @@ export async function runPipeline(
       return n === 0;
     };
 
+    let rows_evaluated_phase6 = 0;
+    let rows_gate_passed = 0;
+    let rows_gate_failed = 0;
+    let rows_approved = 0;
+    let rows_review_stat = 0;
+    let rows_failed_stat = 0;
+    let rows_capped_by_structure = 0;
+    let rows_capped_by_missing_client = 0;
+    let rows_capped_by_inherited_date = 0;
+    let rows_capped_by_unresolved_layout = 0;
+    let rows_with_direction_conflict = 0;
+    let rows_with_value_conflict = 0;
+    let rows_with_temporal_conflict = 0;
+    let possible_mega_blocks = 0;
+
+    let sum_direction_confidence = 0;
+    let sum_structural_confidence = 0;
+    let sum_semantic_confidence = 0;
+    let sum_overall_confidence = 0;
+
     for (let i = 0; i < built.length; i++) {
       const { canonical: rawCan, snapshot, errors } = built[i];
       const guard = assertionGuard(rawCan, snapshot, map);
@@ -1562,9 +1845,46 @@ export async function runPipeline(
       let resolution: any = null;
       if (status !== "LINE_FAILED") {
         resolution = await resolveRow(sb, args.companyId, canonical, issuerBank);
-        if (resolution.needsReview) status = "LINE_REVIEW";
         rowReasons.push(...resolution.reasons);
       }
+
+      // Fase 6: Gate Estrutural e Decisão de Confiança
+      const directionConf = resolution?.classification?.confidence ?? 0;
+      const isPdf = args.source === "pdf";
+      const quality = evaluateRowQuality(canonical, directionConf, isPdf, issuerBank);
+
+      // Sobrescreve/atualiza status local baseado na Fase 6
+      if (quality.finalStatus === "LINE_FAILED") {
+        status = "LINE_FAILED";
+      } else if (quality.finalStatus === "LINE_REVIEW") {
+        if (status === "OK") {
+          status = "LINE_REVIEW";
+        }
+      }
+      rowReasons.push(...quality.reasons);
+
+      // Atualiza estatísticas da Fase 6
+      rows_evaluated_phase6++;
+      if (quality.gate.passed) rows_gate_passed++;
+      else rows_gate_failed++;
+
+      if (quality.finalStatus === "LINE_APPROVED") rows_approved++;
+      else if (quality.finalStatus === "LINE_REVIEW") rows_review_stat++;
+      else if (quality.finalStatus === "LINE_FAILED") rows_failed_stat++;
+
+      if (quality.reasonCodes.includes("CAPPED_BY_STRUCTURE")) rows_capped_by_structure++;
+      if (quality.reasonCodes.includes("MISSING_CLIENT")) rows_capped_by_missing_client++;
+      if (quality.reasonCodes.includes("INHERITED_DATE") || quality.reasonCodes.includes("CROSS_PAGE_INHERITED_DATE")) rows_capped_by_inherited_date++;
+      if (quality.reasonCodes.includes("UNRESOLVED_PAGE_LAYOUT")) rows_capped_by_unresolved_layout++;
+      if (quality.reasonCodes.includes("DIRECTION_COLUMN_CONFLICT")) rows_with_direction_conflict++;
+      if (quality.reasonCodes.includes("VALUE_CONFLICT")) rows_with_value_conflict++;
+      if (quality.reasonCodes.includes("TEMPORAL_CONFLICT")) rows_with_temporal_conflict++;
+      if (quality.reasonCodes.includes("POSSIBLE_MEGA_BLOCK")) possible_mega_blocks++;
+
+      sum_direction_confidence += quality.confidence.directionConfidence;
+      sum_structural_confidence += quality.confidence.structuralConfidence;
+      sum_semantic_confidence += quality.confidence.semanticConfidence;
+      sum_overall_confidence += quality.confidence.overallConfidence;
 
       const dup = status !== "LINE_FAILED"
         ? await checkDuplicate(sb, args.companyId, canonical, built.map((b) => ({ canonical: b.canonical })))
@@ -1573,19 +1893,9 @@ export async function runPipeline(
       if (status === "LINE_FAILED") failed++;
       else if (status === "LINE_REVIEW") review++;
 
-      // NTIEB Cap. 65 — contadores de receita/despesa e totais para validação de saldo (Cap. 55)
-      const dir = resolution?.classification?.direction as "INCOME" | "EXPENSE" | null | undefined;
-      if (dir === "INCOME") {
-        incomeCount++;
-        if (canonical.amount != null) totalIncomeAmount += Math.abs(canonical.amount);
-      } else if (dir === "EXPENSE") {
-        expenseCount++;
-        if (canonical.amount != null) totalExpenseAmount += Math.abs(canonical.amount);
-      }
-
       // NTIEB Cap. 36/61 — nível de confiança oficial derivado do score
-      const confScore = resolution?.classification?.confidence ?? 0;
-      const confidence_level = toConfidenceLevel(confScore);
+      const confScore = quality.confidence.overallConfidence;
+      const confidence_level = quality.confidence.overallBand;
 
       // NTIEB Cap. 61 — regra dura: MUITO_BAIXA sempre vai para revisão manual
       if (confidence_level === "MUITO_BAIXA") {
@@ -1596,7 +1906,6 @@ export async function runPipeline(
           rowReasons.push(formatRuleApplied("61", "Confiança Muito Baixa — revisão obrigatória"));
         }
       }
-
 
       // NTIEB Cap. 62 — regra citada por linha
       const rule_applied =
@@ -1610,6 +1919,60 @@ export async function runPipeline(
         charset, file_hash, headers: raw.headers, map, meta: raw.meta,
         restored_fields: guard.restored,
         ntieb_version: NTIEB_VERSION,
+        confidence_breakdown: quality.confidence,
+      };
+
+      // Fase 7: Adicionar registros de auditoria por linha
+      if (collector) {
+        collector.recordConfidence({
+          blockId: canonical.raw_extra?._blockId || "",
+          directionConfidence: quality.confidence.directionConfidence,
+          structuralConfidence: quality.confidence.structuralConfidence,
+          semanticConfidence: quality.confidence.semanticConfidence,
+          overallConfidence: quality.confidence.overallConfidence,
+          directionBand: quality.confidence.directionBand,
+          structuralBand: quality.confidence.structuralBand,
+          semanticBand: quality.confidence.semanticBand,
+          overallBand: quality.confidence.overallBand,
+          capsApplied: quality.reasonCodes.filter(rc => rc.startsWith("CAPPED_")),
+          hardFailures: quality.gate.hardFailures,
+          reviewReasons: quality.gate.reviewReasons,
+          finalStatus: quality.finalStatus,
+        });
+      }
+
+      const origin_lines = canonical.raw_extra?._originLines ? JSON.parse(canonical.raw_extra._originLines) : [];
+      const block_debug = {
+        blockId: canonical.raw_extra?._blockId || "",
+        openedBy: "",
+        closedBy: "",
+        crossedPageBoundary: canonical.raw_extra?._pageStart !== canonical.raw_extra?._pageEnd,
+        ambiguous: canonical.raw_extra?._isAmbiguous === "true",
+        possibleMegaBlock: (canonical.raw_extra?._ambiguityReasons ?? "").includes("POSSIBLE_MEGA_BLOCK"),
+      };
+      const audit_trace = {
+        version: "1.0",
+        source: {
+          pageStart: Number(canonical.raw_extra?._pageStart || 1),
+          pageEnd: Number(canonical.raw_extra?._pageEnd || 1),
+          originLines,
+        },
+        block: {
+          blockId: block_debug.blockId,
+          openedBy: "",
+          closedBy: "",
+        },
+        temporal: {
+          assignment: canonical.raw_extra?._dateAssignment || "",
+          reasonCode: canonical.raw_extra?._dateReasonCode || "",
+        },
+        confidence: {
+          structural: quality.confidence.structuralConfidence,
+          semantic: quality.confidence.semanticConfidence,
+          direction: quality.confidence.directionConfidence,
+          overall: quality.confidence.overallConfidence,
+          finalStatus: quality.finalStatus,
+        }
       };
 
       rowsToInsert.push({
@@ -1624,12 +1987,15 @@ export async function runPipeline(
         resolved_service_id: resolution?.resolved_service_id ?? null,
         status,
         confidence: confScore,
-        classification_confidence: resolution?.classification?.confidence ?? null,
+        classification_confidence: quality.confidence.directionConfidence,
         confidence_level,
         rule_applied,
         possible_duplicate: dup.duplicate,
         duplicate_of: dup.conflicts,
         reason: rowReasons.join(" | ").slice(0, 2000),
+        origin_lines,
+        block_debug,
+        audit_trace,
       });
 
       if (guard.restored.length > 0) {
@@ -1641,6 +2007,31 @@ export async function runPipeline(
         });
       }
     }
+
+    if (raw.meta) {
+      const m = raw.meta as any;
+      m.rows_evaluated_phase6 = rows_evaluated_phase6;
+      m.rows_gate_passed = rows_gate_passed;
+      m.rows_gate_failed = rows_gate_failed;
+      m.rows_approved = rows_approved;
+      m.rows_review_stat = rows_review_stat;
+      m.rows_failed_stat = rows_failed_stat;
+      m.rows_capped_by_structure = rows_capped_by_structure;
+      m.rows_capped_by_missing_client = rows_capped_by_missing_client;
+      m.rows_capped_by_inherited_date = rows_capped_by_inherited_date;
+      m.rows_capped_by_unresolved_layout = rows_capped_by_unresolved_layout;
+      m.rows_with_direction_conflict = rows_with_direction_conflict;
+      m.rows_with_value_conflict = rows_with_value_conflict;
+      m.rows_with_temporal_conflict = rows_with_temporal_conflict;
+      m.possible_mega_blocks = possible_mega_blocks;
+      
+      const count = rows_evaluated_phase6 || 1;
+      m.average_direction_confidence = sum_direction_confidence / count;
+      m.average_structural_confidence = sum_structural_confidence / count;
+      m.average_semantic_confidence = sum_semantic_confidence / count;
+      m.average_overall_confidence = sum_overall_confidence / count;
+    }
+
     const resolveTime = Date.now() - startResolve;
     console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: resolveRow\nRows: ${rowsToInsert.length}\nTime: ${resolveTime} ms\nStatus: OK`);
 
@@ -1705,7 +2096,17 @@ export async function runPipeline(
         homologation_status = "APROVADA_COM_ALERTAS";
       }
 
-      await sb.from("v3_imports").update({
+      collector.setStatus(
+        finalState === "FAILED" ? "FAILED" : finalState === "REVIEW" ? "COMPLETED_WITH_REVIEW" : "COMPLETED"
+      );
+      if (lastError) collector.addError(lastError);
+
+      const report = collector.finalize(rowsInserted);
+
+      // Imprime o relatório textual no log do servidor
+      console.log(generateAuditTextReport(report));
+
+      const updatePayload: any = {
         status: finalState === "FAILED" ? "failed" : finalState === "REVIEW" ? "review" : "done",
         final_state: finalState,
         file_hash: file_hash ?? null,
@@ -1732,7 +2133,45 @@ export async function runPipeline(
         balance_delta: balance.applicable ? balance.delta : null,
         // NTIEB Cap. 61 — total de linhas com confiança Muito Baixa (revisão obrigatória)
         very_low_confidence_count: veryLowConfCount,
-      } as any).eq("id", args.importId);
+
+        // Fase 7: Metadados e Relatório JSON Consolidado
+        audit_summary: report,
+        audit_version: "1.0",
+        physical_lines_extracted: report.summary.physicalLinesExtracted ?? null,
+        pages_extracted: report.summary.pagesExtracted ?? null,
+        pages_with_detected_header: raw?.meta?.pages_with_detected_header ?? null,
+        pages_reusing_previous_layout: raw?.meta?.pages_reusing_previous_layout ?? null,
+        pages_with_adjusted_layout: raw?.meta?.pages_with_adjusted_layout ?? null,
+        pages_with_unresolved_layout: raw?.meta?.pages_with_unresolved_layout ?? null,
+        layout_equivalence_failures: raw?.meta?.layout_equivalence_failures ?? null,
+        repeated_headers_removed: raw?.meta?.repeated_headers_removed ?? null,
+        administrative_lines_discarded: raw?.meta?.administrative_lines_discarded ?? null,
+        institutional_lines_discarded: raw?.meta?.institutional_lines_discarded ?? null,
+        metadata_lines_discarded: raw?.meta?.metadata_lines_discarded ?? null,
+        footer_lines_discarded: raw?.meta?.footer_lines_discarded ?? null,
+        summary_lines_captured: raw?.meta?.summary_lines_captured ?? null,
+        balance_lines_captured: raw?.meta?.balance_lines_captured ?? null,
+        total_lines_captured: raw?.meta?.total_lines_captured ?? null,
+        transaction_candidate_rows: report.summary.transactionCandidates ?? null,
+        ambiguous_rows: raw?.meta?.ambiguous_rows_forwarded_or_reviewed ?? null,
+        blocks_created: report.summary.blocksCreated ?? null,
+        blocks_appended: raw?.meta?.blocks_appended ?? null,
+        blocks_crossing_pages: raw?.meta?.blocks_crossing_pages ?? null,
+        blocks_marked_ambiguous: raw?.meta?.blocks_marked_ambiguous ?? null,
+        possible_mega_blocks: raw?.meta?.possible_mega_blocks ?? null,
+        dates_explicit: raw?.meta?.dates_explicit ?? null,
+        dates_inherited: raw?.meta?.dates_inherited ?? null,
+        dates_missing: raw?.meta?.dates_missing ?? null,
+        temporal_conflicts: raw?.meta?.temporal_conflicts ?? null,
+        rows_gate_passed: report.phases.phase6.totals.rows_gate_passed ?? null,
+        rows_gate_failed: report.phases.phase6.totals.rows_gate_failed ?? null,
+        rows_approved: report.summary.rowsApproved ?? null,
+        rows_review: report.summary.rowsReview ?? null,
+        rows_failed: report.summary.rowsFailed ?? null,
+        rows_persisted: rowsInserted,
+      };
+
+      await sb.from("v3_imports").update(updatePayload).eq("id", args.importId);
 
       await auditLog(sb, {
         importId: args.importId, companyId: args.companyId,
@@ -1741,8 +2180,8 @@ export async function runPipeline(
         output: { finalState, homologation_status, balance } as any,
         reason: `NTIEB Cap. 37/55/64: finalState=${finalState}, homologation=${homologation_status}, balance=${balance.reason}${terminal ? ` (terminal=${terminal})` : ""}`,
       });
-    } catch {
-      // não relança — o erro original (se houver) já é preservado
+    } catch (e: any) {
+      console.warn("[SIE V3] Falha técnica ao salvar observabilidade opcional/essencial:", e.message || e);
     }
   }
 
