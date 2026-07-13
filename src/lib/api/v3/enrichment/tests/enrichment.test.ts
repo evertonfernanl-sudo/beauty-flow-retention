@@ -69,6 +69,15 @@ describe("SIE V3 Semantic Enrichment Test Suite - Universal (10/10)", () => {
     const pPixSHPP = detectTransactionPattern(normalizeDescription("Transferência enviada pelo Pix SHPP BRASIL INSTITUICAO DE PAG - 38.372.267/0001-82"));
     expect(pPixSHPP).toBe("PIX_SENT");
     expect(extractClient("Transferência enviada pelo Pix SHPP BRASIL INSTITUICAO DE PAG - 38.372.267/0001-82", pPixSHPP)).toBe("SHPP BRASIL INSTITUICAO DE PAG");
+
+    // Bradesco / Nubank / Outros marcadores explícitos (Fase 15.2 e 15.3)
+    expect(extractClient("DES: EVERTON FERNANDES LIM 06/07 PIX ENVIADO", "PIX_SENT")).toBe("EVERTON FERNANDES LIM");
+    expect(extractClient("DES: Domingos Alves Lima 07/07 PIX RECEBIDO", "PIX_RECEIVED")).toBe("Domingos Alves Lima");
+    expect(extractClient("REM: Ana Célia Andrade da 07/07 PIX ENVIADO", "PIX_SENT")).toBe("Ana Célia Andrade da");
+    expect(extractClient("DES: ADRIELY SILVA DA ROCH 07/07", null)).toBe("ADRIELY SILVA DA ROCH");
+    expect(extractClient("FAVORECIDO: JOÃO DA SILVA BANCO INTER AG 0001", "PIX_SENT")).toBe("JOÃO DA SILVA");
+    expect(extractClient("DESTINATARIO: MARIA SOUZA CPF ***.123.456-**", "PIX_SENT")).toBe("MARIA SOUZA");
+    expect(extractClient("BENEFICIÁRIO: EMPRESA TESTE LTDA CNPJ 00.000.000/0001-00", null)).toBe("EMPRESA TESTE LTDA");
   });
 
   test("Cenário 2: Interpretação de datas no formato textual brasileiro", () => {
@@ -120,6 +129,26 @@ describe("SIE V3 Semantic Enrichment Test Suite - Universal (10/10)", () => {
     // 6. Sinal positivo
     const c6: CanonicalRow = { amount: 20, description: "Investimento" } as any;
     expect(detectDirection(c6, null)).toBe("INCOME");
+
+    // Cenários específicos Nubank e novas regras de direção (Fase 15.5)
+    const cPixSentNubank: CanonicalRow = { amount: -50, description: "PIX enviado para João" } as any;
+    const patPixSent = detectTransactionPattern(normalizeDescription(cPixSentNubank.description));
+    expect(patPixSent).toBe("PIX_SENT");
+    expect(detectDirection(cPixSentNubank, patPixSent)).toBe("EXPENSE");
+
+    const cPixRecNubank: CanonicalRow = { amount: 150, description: "PIX recebido de Maria" } as any;
+    const patPixRec = detectTransactionPattern(normalizeDescription(cPixRecNubank.description));
+    expect(patPixRec).toBe("PIX_RECEIVED");
+    expect(detectDirection(cPixRecNubank, patPixRec)).toBe("INCOME");
+
+    const cPixPagoNubank: CanonicalRow = { amount: -20, description: "PIX pago - Supermercado" } as any;
+    const patPixPago = detectTransactionPattern(normalizeDescription(cPixPagoNubank.description));
+    expect(patPixPago).toBe("PIX_SENT");
+    expect(detectDirection(cPixPagoNubank, patPixPago)).toBe("EXPENSE");
+
+    // Conflito de evidências (Debit e Credit preenchidos simultaneamente)
+    const cConflict: CanonicalRow = { debit_amount: 10, credit_amount: 10, amount: 10 } as any;
+    expect(detectDirection(cConflict, null)).toBe("INCOME"); // Fallback final (sinal positivo) já que colunas estruturais têm conflito mútuo
   });
 
   test("Cenário 5: Consistency Validator & Banco Fallback", () => {

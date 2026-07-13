@@ -65,8 +65,8 @@ export const INVESTMENT_PATTERNS = [
 ];
 
 export const PIX_PATTERNS = [
-  { key: "PIX_RECEIVED", regex: /\b(pix\s+recebido|transferencia\s+recebida\s+pelo\s+pix|transferência\s+recebida\s+pelo\s+pix|recebido\s+pelo\s+pix)\b/i },
-  { key: "PIX_SENT", regex: /\b(pix\s+enviado|transferencia\s+enviada\s+pelo\s+pix|transferência\s+enviada\s+pelo\s+pix|enviado\s+pelo\s+pix)\b/i },
+  { key: "PIX_RECEIVED", regex: /\b(pix\s+recebido|transferencia\s+recebida\s+pelo\s+pix|transferência\s+recebida\s+pelo\s+pix|recebido\s+pelo\s+pix|transfer[êe]ncia\s+recebida|dep[óo]sito\s+recebido)\b/i },
+  { key: "PIX_SENT", regex: /\b(pix\s+enviado|transferencia\s+enviada\s+pelo\s+pix|transferência\s+enviada\s+pelo\s+pix|enviado\s+pelo\s+pix|pix\s+pago|pix\s+paga|pagamento\s+pix|transfer[êe]ncia\s+enviada)\b/i },
 ];
 
 export const TED_PATTERNS = [
