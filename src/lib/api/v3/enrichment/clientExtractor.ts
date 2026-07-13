@@ -29,6 +29,30 @@ function isInvalidClientName(name: string): boolean {
   return false;
 }
 
+export function cleanClientCandidate(candidate: string): string {
+  let clean = candidate.trim();
+  
+  // 1. Remove qualquer data (ex: 06/07, 06/07/2026, 06-07)
+  clean = clean.split(/\b\d{1,2}[/\-.]\d{1,2}(?:[/\-.]\d{2,4})?\b/)[0];
+  
+  // 2. Remove marcadores bancários/sistêmicos e tudo que vem depois
+  const stopKeywords = [
+    "pix enviado", "pix recebido", "ted enviada", "ted recebido", "doc enviado", "doc recebido",
+    "banco", "agencia", "agência", "conta", "cpf", "cnpj", "chave", "comprovante",
+    "valor", "tarifa", "pagamento", "transferencia", "transferência"
+  ];
+  
+  for (const kw of stopKeywords) {
+    const regex = new RegExp(`\\b${kw}\\b.*`, "i");
+    clean = clean.replace(regex, "");
+  }
+  
+  // 3. Limpa caracteres residuais não alfabéticos do final
+  clean = clean.replace(/[^A-Za-zÀ-ÿ\s'\.\-]+.*$/, "").trim();
+  
+  return clean;
+}
+
 export function extractClient(
   desc: string | null | undefined,
   pattern: TransactionPatternKey
@@ -43,17 +67,31 @@ export function extractClient(
   // Normalização de múltiplos espaços
   const clean = desc.replace(/\s+/g, " ").trim();
 
-  // 1) Quebra por "-" se presente (padrão muito comum)
+  // 1) Marcadores explícitos na descrição (Bradesco, Nubank, etc.)
+  const markerRegex = /\b(?:favorecido|destinat[aá]rio|recebedor|pagador|benefici[aá]rio|fav|nome|des|rem)\s*[:\-]\s*([^;,\n]+)/i;
+  const explicitMarkerMatch = clean.match(markerRegex);
+  if (explicitMarkerMatch && explicitMarkerMatch[1]) {
+    const rawCandidate = explicitMarkerMatch[1].trim();
+    const candidate = cleanClientCandidate(rawCandidate);
+    if (candidate) {
+      const words = candidate.split(/\s+/).filter((w) => w.length > 1);
+      const validWords = words.filter((w) => !isInvalidClientName(w));
+      if (validWords.length >= 2) {
+        return candidate;
+      }
+    }
+  }
+
+  // 2) Quebra por "-" se presente (padrão muito comum)
   const parts = clean
     .split("-")
     .map((p) => p.trim())
     .filter(Boolean);
   
   if (parts.length >= 2) {
-    const nameRegex = /^[A-Za-zÀ-ÿ\s'\.\-]+$/;
     for (const part of parts) {
-      const strippedPart = stripPrefixes(part);
-      if (nameRegex.test(strippedPart)) {
+      const strippedPart = cleanClientCandidate(stripPrefixes(part));
+      if (strippedPart) {
         const words = strippedPart.split(/\s+/).filter((w) => w.length > 1);
         const validWords = words.filter((w) => !isInvalidClientName(w));
         if (validWords.length >= 2) {
@@ -63,12 +101,11 @@ export function extractClient(
     }
   }
 
-  // 2) Tenta casar nome limpo após remoção de prefixo da descrição toda
-  const strippedDesc = stripPrefixes(clean);
-  const words = strippedDesc.split(/\s+/);
-  if (words.length >= 2) {
-    const nameRegex = /^[A-Za-zÀ-ÿ\s'\.\-]+$/;
-    if (nameRegex.test(strippedDesc)) {
+  // 3) Tenta casar nome limpo após remoção de prefixo da descrição toda
+  const strippedDesc = cleanClientCandidate(stripPrefixes(clean));
+  if (strippedDesc) {
+    const words = strippedDesc.split(/\s+/);
+    if (words.length >= 2) {
       const validWords = words.filter((w) => w.length >= 2 && !isInvalidClientName(w));
       if (validWords.length >= 2) {
         return strippedDesc;
@@ -76,14 +113,16 @@ export function extractClient(
     }
   }
 
-  // 3) Se sobrou nome de empresa com números/barras (ex: ASSAI ATACADISTA 06.057.223/0001-71)
+  // 4) Se sobrou nome de empresa com números/barras (ex: ASSAI ATACADISTA 06.057.223/0001-71)
   const docOrBankMatch = clean.match(/^([A-Za-zÀ-ÿ\s'\.\-&]{4,60})(?:\s+-\s+|\s+[\d•\-\.\/]+|$)/);
   if (docOrBankMatch && docOrBankMatch[1]) {
-    const candidate = stripPrefixes(docOrBankMatch[1]);
-    const words = candidate.split(/\s+/).filter((w) => w.length >= 2);
-    const validWords = words.filter((w) => !isInvalidClientName(w));
-    if (validWords.length >= 2) {
-      return candidate;
+    const candidate = cleanClientCandidate(stripPrefixes(docOrBankMatch[1]));
+    if (candidate) {
+      const words = candidate.split(/\s+/).filter((w) => w.length >= 2);
+      const validWords = words.filter((w) => !isInvalidClientName(w));
+      if (validWords.length >= 2) {
+        return candidate;
+      }
     }
   }
 
