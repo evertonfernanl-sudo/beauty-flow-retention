@@ -1519,14 +1519,37 @@ async function auditLog(sb: SB, args: {
 // Item 2 — validação de compatibilidade schema vs pipeline.
 // Faz uma sondagem barata: tenta INSERT com status inválido antigo; se aceitar → schema V2.
 async function checkSchemaCompatibility(sb: SB): Promise<{ ok: boolean; detail?: string }> {
-  // Introspecção via information_schema não fica exposta pela Data API; usamos probing por dry insert.
-  // Estratégia: fazer um insert com status novo em row inexistente e reverter — como o Data API não expõe
-  // transações, apenas testamos se o status 'OK' é aceito por meio de uma leitura barata + confiança na migration.
   try {
-    // Se a migração está aplicada, INSERT com status='OK' será validado pelo CHECK sem erro de constraint.
-    // Aqui só verificamos leitura básica; qualquer falha de INSERT posterior será tratada pelo orquestrador.
-    const { error } = await sb.from("v3_import_rows").select("id").limit(1);
-    if (error) return { ok: false, detail: error.message };
+    const { error: rowErr } = await sb
+      .from("v3_import_rows")
+      .select("id, audit_trace")
+      .limit(1);
+    
+    if (rowErr) {
+      if (rowErr.message.includes("column") && rowErr.message.includes("audit_trace")) {
+        return { 
+          ok: false, 
+          detail: "A coluna 'audit_trace' não existe em 'v3_import_rows'." 
+        };
+      }
+      return { ok: false, detail: `v3_import_rows check failed: ${rowErr.message}` };
+    }
+
+    const { error: impErr } = await sb
+      .from("v3_imports")
+      .select("id, audit_summary")
+      .limit(1);
+    
+    if (impErr) {
+      if (impErr.message.includes("column") && impErr.message.includes("audit_summary")) {
+        return { 
+          ok: false, 
+          detail: "A coluna 'audit_summary' não existe em 'v3_imports'." 
+        };
+      }
+      return { ok: false, detail: `v3_imports check failed: ${impErr.message}` };
+    }
+
     return { ok: true };
   } catch (e: any) {
     return { ok: false, detail: e.message ?? String(e) };
@@ -1586,7 +1609,7 @@ export async function runPipeline(
       });
       collector.setStatus("FAILED");
       collector.addError(lastError);
-      return { rowsInserted: 0, finalState: "FAILED" };
+      throw new Error(lastError);
     }
 
     // 1) Download + hash
@@ -2104,7 +2127,8 @@ export async function runPipeline(
       // Imprime o relatório textual no log do servidor
       console.log(generateAuditTextReport(report));
 
-      const updatePayload: any = {
+      // 1. Update Essencial
+      const essentialPayload: any = {
         status: finalState === "FAILED" ? "failed" : finalState === "REVIEW" ? "review" : "done",
         final_state: finalState,
         file_hash: file_hash ?? null,
@@ -2115,61 +2139,82 @@ export async function runPipeline(
         review_rows: review,
         last_error: lastError,
         finished_at: new Date().toISOString(),
-        // NTIEB Cap. 64/65 — homologação e log oficial
         homologation_status,
         ntieb_version: NTIEB_VERSION,
         parser_version: PARSER_VERSION,
         processing_ms,
         income_count: incomeCount,
         expense_count: expenseCount,
-        // NTIEB Cap. 55 — saldo do extrato
         saldo_inicial: extractSummary?.saldoInicial ?? null,
         saldo_final: extractSummary?.saldoFinal ?? null,
         total_entradas_extrato: extractSummary?.totalEntradas ?? null,
         total_saidas_extrato: extractSummary?.totalSaidas ?? null,
         balance_valid: balance.applicable ? balance.valid : null,
         balance_delta: balance.applicable ? balance.delta : null,
-        // NTIEB Cap. 61 — total de linhas com confiança Muito Baixa (revisão obrigatória)
         very_low_confidence_count: veryLowConfCount,
-
-        // Fase 7: Metadados e Relatório JSON Consolidado
-        audit_summary: report,
-        audit_version: "1.0",
-        physical_lines_extracted: report.summary.physicalLinesExtracted ?? null,
-        pages_extracted: report.summary.pagesExtracted ?? null,
-        pages_with_detected_header: raw?.meta?.pages_with_detected_header ?? null,
-        pages_reusing_previous_layout: raw?.meta?.pages_reusing_previous_layout ?? null,
-        pages_with_adjusted_layout: raw?.meta?.pages_with_adjusted_layout ?? null,
-        pages_with_unresolved_layout: raw?.meta?.pages_with_unresolved_layout ?? null,
-        layout_equivalence_failures: raw?.meta?.layout_equivalence_failures ?? null,
-        repeated_headers_removed: raw?.meta?.repeated_headers_removed ?? null,
-        administrative_lines_discarded: raw?.meta?.administrative_lines_discarded ?? null,
-        institutional_lines_discarded: raw?.meta?.institutional_lines_discarded ?? null,
-        metadata_lines_discarded: raw?.meta?.metadata_lines_discarded ?? null,
-        footer_lines_discarded: raw?.meta?.footer_lines_discarded ?? null,
-        summary_lines_captured: raw?.meta?.summary_lines_captured ?? null,
-        balance_lines_captured: raw?.meta?.balance_lines_captured ?? null,
-        total_lines_captured: raw?.meta?.total_lines_captured ?? null,
-        transaction_candidate_rows: report.summary.transactionCandidates ?? null,
-        ambiguous_rows: raw?.meta?.ambiguous_rows_forwarded_or_reviewed ?? null,
-        blocks_created: report.summary.blocksCreated ?? null,
-        blocks_appended: raw?.meta?.blocks_appended ?? null,
-        blocks_crossing_pages: raw?.meta?.blocks_crossing_pages ?? null,
-        blocks_marked_ambiguous: raw?.meta?.blocks_marked_ambiguous ?? null,
-        possible_mega_blocks: raw?.meta?.possible_mega_blocks ?? null,
-        dates_explicit: raw?.meta?.dates_explicit ?? null,
-        dates_inherited: raw?.meta?.dates_inherited ?? null,
-        dates_missing: raw?.meta?.dates_missing ?? null,
-        temporal_conflicts: raw?.meta?.temporal_conflicts ?? null,
-        rows_gate_passed: report.phases.phase6.totals.rows_gate_passed ?? null,
-        rows_gate_failed: report.phases.phase6.totals.rows_gate_failed ?? null,
-        rows_approved: report.summary.rowsApproved ?? null,
-        rows_review: report.summary.rowsReview ?? null,
-        rows_failed: report.summary.rowsFailed ?? null,
-        rows_persisted: rowsInserted,
       };
 
-      await sb.from("v3_imports").update(updatePayload).eq("id", args.importId);
+      console.log(`[SIE V3] Salvando estado essencial da importação ${args.importId}...`);
+      const { error: essentialErr } = await sb
+        .from("v3_imports")
+        .update(essentialPayload)
+        .eq("id", args.importId);
+
+      if (essentialErr) {
+        console.error("[SIE V3] Erro crítico ao salvar estado essencial da importação:", essentialErr.message);
+      }
+
+      // 2. Update de Auditoria (opcional/aditivo, tolerante a falhas)
+      try {
+        console.log(`[SIE V3] Salvando observabilidade e auditoria da importação ${args.importId}...`);
+        const auditPayload: any = {
+          audit_summary: report,
+          audit_version: "1.0",
+          physical_lines_extracted: report.summary.physicalLinesExtracted ?? null,
+          pages_extracted: report.summary.pagesExtracted ?? null,
+          pages_with_detected_header: raw?.meta?.pages_with_detected_header ?? null,
+          pages_reusing_previous_layout: raw?.meta?.pages_reusing_previous_layout ?? null,
+          pages_with_adjusted_layout: raw?.meta?.pages_with_adjusted_layout ?? null,
+          pages_with_unresolved_layout: raw?.meta?.pages_with_unresolved_layout ?? null,
+          layout_equivalence_failures: raw?.meta?.layout_equivalence_failures ?? null,
+          repeated_headers_removed: raw?.meta?.repeated_headers_removed ?? null,
+          administrative_lines_discarded: raw?.meta?.administrative_lines_discarded ?? null,
+          institutional_lines_discarded: raw?.meta?.institutional_lines_discarded ?? null,
+          metadata_lines_discarded: raw?.meta?.metadata_lines_discarded ?? null,
+          footer_lines_discarded: raw?.meta?.footer_lines_discarded ?? null,
+          summary_lines_captured: raw?.meta?.summary_lines_captured ?? null,
+          balance_lines_captured: raw?.meta?.balance_lines_captured ?? null,
+          total_lines_captured: raw?.meta?.total_lines_captured ?? null,
+          transaction_candidate_rows: report.summary.transactionCandidates ?? null,
+          ambiguous_rows: raw?.meta?.ambiguous_rows_forwarded_or_reviewed ?? null,
+          blocks_created: report.summary.blocksCreated ?? null,
+          blocks_appended: raw?.meta?.blocks_appended ?? null,
+          blocks_crossing_pages: raw?.meta?.blocks_crossing_pages ?? null,
+          blocks_marked_ambiguous: raw?.meta?.blocks_marked_ambiguous ?? null,
+          possible_mega_blocks: raw?.meta?.possible_mega_blocks ?? null,
+          dates_explicit: raw?.meta?.dates_explicit ?? null,
+          dates_inherited: raw?.meta?.dates_inherited ?? null,
+          dates_missing: raw?.meta?.dates_missing ?? null,
+          temporal_conflicts: raw?.meta?.temporal_conflicts ?? null,
+          rows_gate_passed: report.phases.phase6.totals.rows_gate_passed ?? null,
+          rows_gate_failed: report.phases.phase6.totals.rows_gate_failed ?? null,
+          rows_approved: report.summary.rowsApproved ?? null,
+          rows_review: report.summary.rowsReview ?? null,
+          rows_failed: report.summary.rowsFailed ?? null,
+          rows_persisted: rowsInserted,
+        };
+
+        const { error: auditErr } = await sb
+          .from("v3_imports")
+          .update(auditPayload)
+          .eq("id", args.importId);
+
+        if (auditErr) {
+          console.warn("[SIE V3] Falha técnica ao salvar observabilidade/métricas de auditoria (colunas podem não existir):", auditErr.message);
+        }
+      } catch (auditExc: any) {
+        console.warn("[SIE V3] Exceção ao salvar observabilidade de auditoria:", auditExc.message || auditExc);
+      }
 
       await auditLog(sb, {
         importId: args.importId, companyId: args.companyId,
@@ -2179,7 +2224,7 @@ export async function runPipeline(
         reason: `NTIEB Cap. 37/55/64: finalState=${finalState}, homologation=${homologation_status}, balance=${balance.reason}${terminal ? ` (terminal=${terminal})` : ""}`,
       });
     } catch (e: any) {
-      console.warn("[SIE V3] Falha técnica ao salvar observabilidade opcional/essencial:", e.message || e);
+      console.warn("[SIE V3] Falha técnica ao executar processamento de finalização de importação:", e.message || e);
     }
   }
 
