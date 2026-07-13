@@ -3710,6 +3710,7 @@ export type Database = {
       }
     }
     Functions: {
+      accept_invitation: { Args: { _token: string }; Returns: string }
       assign_user_role: {
         Args: {
           _company_id: string
