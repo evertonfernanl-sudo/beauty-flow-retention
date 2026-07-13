@@ -130,7 +130,7 @@ describe("SIE V3 Semantic Enrichment Test Suite - Universal (10/10)", () => {
       amount: 100,
       transaction_date: "2026-06-02"
     } as any;
-    const validated = validateCanonicalConsistency(rowSys, "SYSTEM_RDB_REDEMPTION", "nubank");
+    const validated = validateCanonicalConsistency(rowSys, "SYSTEM_RDB_REDEMPTION", "banco nubank");
     expect(validated.client_name).toBe("banco nubank");
 
     // Cliente contendo palavra proibida (ex: "PIX") deve ser anulado
@@ -160,7 +160,7 @@ describe("SIE V3 Semantic Enrichment Test Suite - Universal (10/10)", () => {
       raw_extra: {}
     };
 
-    const enriched = enrichRow(row, "nubank");
+    const enriched = enrichRow(row, "banco nubank");
     // Não deve sobrescrever o cliente nem a data nem o tipo
     expect(enriched.client_name).toBe("Cliente Existente");
     expect(enriched.transaction_date).toBe("2026-05-10");

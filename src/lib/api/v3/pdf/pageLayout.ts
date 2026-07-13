@@ -22,6 +22,7 @@ export type PageColumnLayout = {
   source: "DETECTED_HEADER" | "REUSED_PREVIOUS" | "INFERRED_GEOMETRY" | "UNRESOLVED";
   pageWidth: number;
   headers: Array<{
+    originalName?: string;
     normalizedName: string;
     x: number;
     xRelative: number;

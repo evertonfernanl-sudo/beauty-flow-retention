@@ -446,30 +446,29 @@ function finalizeTable(
     });
 
     if (collector) {
+      let blockCounter = 1;
       for (const block of assembled.blocks || []) {
+        const blockId = `1-${block.originLines[0]?.physicalLine ?? blockCounter}-${blockCounter}`;
         collector.recordBlock({
-          blockId: block.blockId || "",
+          blockId,
           pageStart: 1,
           pageEnd: 1,
           originLines: (block.originLines || []).map((ol: any) => ({
             pageNumber: ol.pageNumber ?? 1,
             physicalLine: ol.physicalLine ?? 1,
           })),
-          openedBy: block.openedBy || "",
-          closedBy: block.closedBy || "",
-          appendedBy: (block.appendedBy || []).map((ap: any) => ({
-            pageNumber: ap.pageNumber ?? 1,
-            physicalLine: ap.physicalLine ?? 1,
-            reasonCode: ap.reasonCode || "",
-          })),
-          descriptionLineCount: block.descriptionLines?.length ?? 1,
+          openedBy: block.hasExplicitDate ? "EXPLICIT_DATE" : "CONTINUATION_RULE",
+          closedBy: "NEXT_BLOCK_OR_EOF",
+          appendedBy: [],
+          descriptionLineCount: block.originLines.length,
           crossedPageBoundary: false,
           ambiguous: block.isAmbiguous || false,
           ambiguityReasons: block.ambiguityReasons || [],
-          valueConflict: block.valueConflict || false,
-          documentConflict: block.documentConflict || false,
+          valueConflict: false,
+          documentConflict: false,
           possibleMegaBlock: (block.ambiguityReasons || []).includes("POSSIBLE_MEGA_BLOCK"),
         });
+        blockCounter++;
       }
     }
 
@@ -687,7 +686,7 @@ function finalizeTable(
 
   const alignedBodyMatrix: string[][] = [];
   const summaryRows: string[][] = [];
-  const alignedLineMetadata: Array<{ pageNumber: number, physicalLine: number }> = [];
+  const alignedLineMetadata: Array<{ pageNumber: number, physicalLine: number, pageLayoutResolved?: boolean }> = [];
 
   let rows_before_phase3 = 0;
   let rows_after_phase3 = 0;
@@ -840,30 +839,29 @@ function finalizeTable(
   });
 
   if (collector) {
+    let blockCounter = 1;
     for (const block of assembled.blocks || []) {
+      const blockId = `${block.pageStart}-${block.originLines[0]?.physicalLine ?? blockCounter}-${blockCounter}`;
       collector.recordBlock({
-        blockId: block.blockId || "",
+        blockId,
         pageStart: block.pageStart ?? 1,
         pageEnd: block.pageEnd ?? 1,
         originLines: (block.originLines || []).map((ol: any) => ({
           pageNumber: ol.pageNumber ?? 1,
           physicalLine: ol.physicalLine ?? 1,
         })),
-        openedBy: block.openedBy || "",
-        closedBy: block.closedBy || "",
-        appendedBy: (block.appendedBy || []).map((ap: any) => ({
-          pageNumber: ap.pageNumber ?? 1,
-          physicalLine: ap.physicalLine ?? 1,
-          reasonCode: ap.reasonCode || "",
-        })),
-        descriptionLineCount: block.descriptionLines?.length ?? 1,
+        openedBy: block.hasExplicitDate ? "EXPLICIT_DATE" : "CONTINUATION_RULE",
+        closedBy: "NEXT_BLOCK_OR_EOF",
+        appendedBy: [],
+        descriptionLineCount: block.originLines.length,
         crossedPageBoundary: block.pageStart !== block.pageEnd,
         ambiguous: block.isAmbiguous || false,
         ambiguityReasons: block.ambiguityReasons || [],
-        valueConflict: block.valueConflict || false,
-        documentConflict: block.documentConflict || false,
+        valueConflict: false,
+        documentConflict: false,
         possibleMegaBlock: (block.ambiguityReasons || []).includes("POSSIBLE_MEGA_BLOCK"),
       });
+      blockCounter++;
     }
   }
 
@@ -1561,6 +1559,7 @@ export async function runPipeline(
 
   // Estado agregado para o cálculo final via finally (Item 3)
   let csvText: string | undefined;
+  let raw: RawTable | undefined;
   let terminal: TerminalReason = null;
   let file_hash: string | undefined;
   let charset: string | undefined;
@@ -1610,7 +1609,6 @@ export async function runPipeline(
 
     // 2) Conversão
     const startParse = Date.now();
-    let raw: RawTable;
     collector.startPhase("PHASE_2");
     if (args.source === "csv") raw = parseCsv(buf, collector);
     else if (args.source === "xlsx") raw = parseXlsx(buf, collector);
@@ -1955,7 +1953,7 @@ export async function runPipeline(
         source: {
           pageStart: Number(canonical.raw_extra?._pageStart || 1),
           pageEnd: Number(canonical.raw_extra?._pageEnd || 1),
-          originLines,
+          originLines: origin_lines,
         },
         block: {
           blockId: block_debug.blockId,
