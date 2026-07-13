@@ -25,7 +25,8 @@ import { classifyNonTransactionalRow, RowClassificationContext } from "./rows/no
 import { applyTemporalContextToBlocks } from "./temporal/temporalContext";
 import { evaluateRowQuality } from "./confidence/confidenceCalculator";
 import { ImportAuditCollector } from "./audit/auditCollector";
-import { generateAuditTextReport } from "./audit/auditReport";
+import { detectDelimitedTextStructure } from "./parsing/delimitedTextDetector";
+import { parseBrazilianMoney } from "./parsing/moneyParser";
 
 type SB = SupabaseClient<Database>;
 
@@ -1052,34 +1053,7 @@ function normalizeDoc(s: string): string | null {
 }
 
 function parseBrNumber(s: string): number | null {
-  if (!s) return null;
-  const t = String(s).trim();
-  if (!t) return null;
-  // Detecta sinal
-  const negative = /^-|-$|\(.+\)/.test(t) || /\bD\b/i.test(t.trim().slice(-3)) || /[Dd]$/.test(t.trim());
-  const cleaned = t.replace(/[^\d,.\-]/g, "").replace(/^-/, "").replace(/-$/, "");
-  if (!cleaned) return null;
-  const commas = (cleaned.match(/,/g) ?? []).length;
-  const dots = (cleaned.match(/\./g) ?? []).length;
-  let normalized: string;
-  if (commas === 1 && dots >= 1) {
-    // BR: "1.234,56"
-    normalized = cleaned.replace(/\./g, "").replace(",", ".");
-  } else if (dots >= 2 && commas === 0) {
-    // "1.234.567" — BR sem decimais ou US com múltiplos milhares
-    normalized = cleaned.replace(/\./g, "");
-  } else if (commas === 1 && dots === 0) {
-    normalized = cleaned.replace(",", ".");
-  } else if (dots === 1 && commas === 0) {
-    normalized = cleaned; // US: "1234.56"
-  } else if (commas === 0 && dots === 0) {
-    normalized = cleaned;
-  } else {
-    normalized = cleaned.replace(/,/g, "");
-  }
-  const n = Number(normalized);
-  if (!Number.isFinite(n)) return null;
-  return negative && n > 0 ? -n : n;
+  return parseBrazilianMoney(s).value;
 }
 
 function parseBrNumberStrict(s: string, errors: string[], field: string): number | null {
@@ -1728,9 +1702,26 @@ export async function runPipeline(
       }
 
       // 2. Validação Estrutural pós-OCR (Seção 6)
-      const parsed = Papa.parse<string[]>(ocrCsvText, { delimiter: ";", skipEmptyLines: true });
-      const matrix = (parsed.data ?? []).filter((r) => Array.isArray(r) && r.some((c) => String(c ?? "").trim() !== ""));
-      raw = finalizeTable(matrix, { source: "pdf_ocr" }, "utf-8");
+      const detection = detectDelimitedTextStructure(ocrCsvText);
+      let delimiterToUse: ";" | "," | "\t" | "|" = ";";
+      if (detection.delimiter) {
+        delimiterToUse = detection.delimiter;
+      }
+      let parsed = Papa.parse<string[]>(ocrCsvText, { delimiter: delimiterToUse, skipEmptyLines: true });
+      let matrix = (parsed.data ?? []).filter((r) => Array.isArray(r) && r.some((c) => String(c ?? "").trim() !== ""));
+      let testRaw = finalizeTable(matrix, { source: "pdf_ocr" }, "utf-8");
+
+      if ((testRaw.headerFailed || testRaw.rows.length === 0) && delimiterToUse !== ";") {
+        const fallbackParsed = Papa.parse<string[]>(ocrCsvText, { delimiter: ";", skipEmptyLines: true });
+        const fallbackMatrix = (fallbackParsed.data ?? []).filter((r) => Array.isArray(r) && r.some((c) => String(c ?? "").trim() !== ""));
+        const fallbackRaw = finalizeTable(fallbackMatrix, { source: "pdf_ocr" }, "utf-8");
+        if (!fallbackRaw.headerFailed && fallbackRaw.rows.length > 0) {
+          parsed = fallbackParsed;
+          matrix = fallbackMatrix;
+          testRaw = fallbackRaw;
+        }
+      }
+      raw = testRaw;
       ocrConfidence = 1.0; // Definido como 100% de confiança operacional
       extractSummary = raw.extractSummary;
       csvText = ocrCsvText;

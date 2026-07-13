@@ -5,17 +5,22 @@ export function detectDirection(
   c: CanonicalRow,
   pattern: TransactionPatternKey
 ): "INCOME" | "EXPENSE" | null {
-  // 1. Coluna Débito
-  if (c.debit_amount != null && c.debit_amount > 0) {
+  // 1. Colunas estruturais (quando apenas uma das duas colunas está preenchida)
+  const hasDebit = c.debit_amount != null && c.debit_amount > 0;
+  const hasCredit = c.credit_amount != null && c.credit_amount > 0;
+  if (hasDebit && !hasCredit) {
     return "EXPENSE";
   }
-
-  // 2. Coluna Crédito
-  if (c.credit_amount != null && c.credit_amount > 0) {
+  if (hasCredit && !hasDebit) {
     return "INCOME";
   }
 
-  // 3 e 4. Mapeamento baseado no padrão identificado
+  // 2. Sinal monetário confiável (valor negativo sempre indica despesa)
+  if (c.amount != null && c.amount < 0) {
+    return "EXPENSE";
+  }
+
+  // 3 e 4. Operações semânticas e regras sistêmicas (padrão identificado)
   if (pattern) {
     const expensePatterns = [
       "PIX_SENT",
@@ -50,12 +55,7 @@ export function detectDirection(
     }
   }
 
-  // 5. Sinal de amount negativo
-  if (c.amount != null && c.amount < 0) {
-    return "EXPENSE";
-  }
-
-  // 6. Sinal de amount positivo
+  // 5. Fallback final (sinal positivo apenas quando nenhuma evidência anterior existir)
   if (c.amount != null && c.amount > 0) {
     return "INCOME";
   }
