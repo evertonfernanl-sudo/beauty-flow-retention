@@ -27,6 +27,7 @@ import { evaluateRowQuality } from "./confidence/confidenceCalculator";
 import { ImportAuditCollector } from "./audit/auditCollector";
 import { detectDelimitedTextStructure } from "./parsing/delimitedTextDetector";
 import { parseBrazilianMoney } from "./parsing/moneyParser";
+import { generateAuditTextReport } from "./audit/auditReport";
 
 type SB = SupabaseClient<Database>;
 
