@@ -28,6 +28,10 @@ import { ImportAuditCollector } from "./audit/auditCollector";
 import { detectDelimitedTextStructure } from "./parsing/delimitedTextDetector";
 import { parseBrazilianMoney } from "./parsing/moneyParser";
 import { generateAuditTextReport } from "./audit/auditReport";
+import { classifyPage } from "./pdf/pageClassifier";
+import { extractNativePdfToCsv } from "./pdf/nativeExtractor";
+import { extractOcrPageToCsv } from "./pdf/ocrExtractor";
+import { validateCanonicalCsv } from "./parsing/csvValidator";
 
 type SB = SupabaseClient<Database>;
 
@@ -1608,137 +1612,15 @@ export async function runPipeline(
     // 2) Conversão
     const startParse = Date.now();
     collector.startPhase("PHASE_2");
-    if (args.source === "csv") raw = parseCsv(buf, collector);
-    else if (args.source === "xlsx") raw = parseXlsx(buf, collector);
-    else if (args.source === "pdf") raw = await parsePdf(buf, collector);
-    else throw new Error(`Fonte não suportada na V3: ${args.source}`);
-    collector.endPhase("PHASE_2");
 
-    const parseTime = Date.now() - startParse;
-    console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: parse_${args.source}\nRows: ${raw.rows.length}\nTime: ${parseTime} ms\nStatus: OK`);
-    console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: finalizeTable\nRows: ${raw.rows.length}\nTime: 0 ms\nStatus: OK`);
+    let isImagePdf = false;
+    let nativePages: number[] = [];
+    let imagePages: number[] = [];
 
-    charset = raw.charset ?? "utf-8";
-    ocrConfidence = raw.ocrConfidence;
-    extractSummary = raw.extractSummary;
-
-    const isImagePdf = args.source === "pdf" && (
-      raw.headerFailed ||
-      raw.rows.length === 0 ||
-      raw.rows.reduce((sum, r) => sum + Object.values(r).join("").length, 0) < 50
-    );
-
-    if (isImagePdf) {
-      console.log(`[SIE V3] PDF Imagem/Escaneado detectado (file_hash: ${file_hash}). Iniciando OCR Fallback...`);
+    if (args.source === "csv") {
+      raw = parseCsv(buf, collector);
+      charset = raw.charset ?? "utf-8";
       
-      // 1. Verificar cache determinístico (comentado para garantir execução fresca da IA)
-      let ocrCsvText = "";
-      /*
-      try {
-        const { data: cached, error: cacheReadErr } = await (sb as any)
-          .from("v3_ocr_cache")
-          .select("ocr_text")
-          .eq("file_hash", file_hash!)
-          .maybeSingle();
-        
-        if (cacheReadErr) {
-          console.warn("[SIE V3] Erro ao consultar cache de OCR:", cacheReadErr.message);
-        } else if (cached?.ocr_text) {
-          console.log(`[SIE V3] Cache localizado para o arquivo. Carregando dados...`);
-          ocrCsvText = cached.ocr_text;
-          
-          await auditLog(sb, {
-            importId: args.importId, companyId: args.companyId,
-            stage: "OCR_EXECUTION", event: "OCR_CACHE_HIT",
-            reason: "Representação obtida do cache de hashes determinístico",
-          });
-        }
-      } catch (cacheErr: any) {
-        console.warn("[SIE V3] Exceção ao consultar cache de OCR:", cacheErr.message || cacheErr);
-      }
-      */
-
-      if (ocrCsvText) {
-        // Cache localizado, pula processamento da IA
-      } else {
-        const apiKey = process.env.LOVABLE_API_KEY;
-        if (!apiKey) {
-          throw new Error("IA indisponível para OCR: LOVABLE_API_KEY ausente no ambiente de produção.");
-        }
-
-        const startTime = Date.now();
-        console.log(`[SIE V3] Iniciando conversão de PDF para CSV alinhado com a ferramenta clássica...`);
-        await auditLog(sb, {
-          importId: args.importId, companyId: args.companyId,
-          stage: "OCR_EXECUTION", event: "OCR_START",
-          reason: "Iniciando processo de conversão estrutural de PDF Imagem para CSV via Gemini",
-        });
-        const cleanBuf = new Uint8Array(buf.length);
-        cleanBuf.set(buf);
-        const { convertPdfBufferToCsvRaw } = await import("../worker.server");
-        ocrCsvText = await convertPdfBufferToCsvRaw(cleanBuf, args.storagePath.split("/").pop() || "extrato.pdf");
-
-        const duration = Date.now() - startTime;
-
-        // Salvar em cache
-        try {
-          const { error: cacheErr } = await (sb as any).from("v3_ocr_cache").insert({
-            file_hash: file_hash!,
-            ocr_text: ocrCsvText,
-          });
-          if (cacheErr) {
-            console.warn("[SIE V3] Erro ao gravar no cache de OCR:", cacheErr.message);
-          }
-        } catch (cacheWriteErr: any) {
-          console.warn("[SIE V3] Exceção ao gravar no cache de OCR:", cacheWriteErr.message || cacheWriteErr);
-        }
-
-        // Audit Log
-        const numPages = ((raw.meta as any)?.pages ?? 1) as number;
-        await auditLog(sb, {
-          importId: args.importId, companyId: args.companyId,
-          stage: "OCR_EXECUTION", event: "OCR_SUCCESS",
-          reason: `OCR/Formatação executado com sucesso. Páginas: ${numPages} | Duração: ${duration}ms`,
-        });
-      }
-
-      // 2. Validação Estrutural pós-OCR (Seção 6)
-      const detection = detectDelimitedTextStructure(ocrCsvText);
-      let delimiterToUse: ";" | "," | "\t" | "|" = ";";
-      if (detection.delimiter) {
-        delimiterToUse = detection.delimiter;
-      }
-      let parsed = Papa.parse<string[]>(ocrCsvText, { delimiter: delimiterToUse, skipEmptyLines: true });
-      let matrix = (parsed.data ?? []).filter((r) => Array.isArray(r) && r.some((c) => String(c ?? "").trim() !== ""));
-      let testRaw = finalizeTable(matrix, { source: "pdf_ocr" }, "utf-8");
-
-      if ((testRaw.headerFailed || testRaw.rows.length === 0) && delimiterToUse !== ";") {
-        const fallbackParsed = Papa.parse<string[]>(ocrCsvText, { delimiter: ";", skipEmptyLines: true });
-        const fallbackMatrix = (fallbackParsed.data ?? []).filter((r) => Array.isArray(r) && r.some((c) => String(c ?? "").trim() !== ""));
-        const fallbackRaw = finalizeTable(fallbackMatrix, { source: "pdf_ocr" }, "utf-8");
-        if (!fallbackRaw.headerFailed && fallbackRaw.rows.length > 0) {
-          parsed = fallbackParsed;
-          matrix = fallbackMatrix;
-          testRaw = fallbackRaw;
-        }
-      }
-      raw = testRaw;
-      ocrConfidence = 1.0; // Definido como 100% de confiança operacional
-      extractSummary = raw.extractSummary;
-      csvText = ocrCsvText;
-
-      if (raw.headerFailed || raw.rows.length === 0) {
-        terminal = "OCR_REVIEW";
-        lastError = "Validação Estrutural pós-OCR falhou: cabeçalhos essenciais ou linhas não localizados no texto gerado.";
-        await auditLog(sb, {
-          importId: args.importId, companyId: args.companyId,
-          stage: "OCR_EXECUTION", event: "OCR_REVIEW",
-          reason: lastError,
-        });
-        return { rowsInserted: 0, finalState: "REVIEW", csvText };
-      }
-    } else {
-      // PDF Nativo ou outros formatos — Cap. 37 — HEADER_FAILED interrompe se falhou
       if (raw.headerFailed || raw.headers.length === 0) {
         terminal = "HEADER_FAILED";
         lastError = "Cabeçalho não identificado (nenhuma linha com ≥2 cabeçalhos conhecidos)";
@@ -1750,23 +1632,150 @@ export async function runPipeline(
         });
         return { rowsInserted: 0, finalState: "FAILED", csvText };
       }
-    }
+    } else if (args.source === "xlsx") {
+      raw = parseXlsx(buf, collector);
+      charset = raw.charset ?? "utf-8";
 
-    if (args.source === "pdf" && !isImagePdf) {
-      csvText = rawTableToCsv(raw);
-    }
+      if (raw.headerFailed || raw.headers.length === 0) {
+        terminal = "HEADER_FAILED";
+        lastError = "Cabeçalho não identificado (nenhuma linha com ≥2 cabeçalhos conhecidos)";
+        await auditLog(sb, {
+          importId: args.importId, companyId: args.companyId,
+          stage: "conversion", event: "HEADER_FAILED",
+          input: { headers_seen: raw.headers, sample: raw.rows.slice(0, 3) } as any,
+          reason: lastError,
+        });
+        return { rowsInserted: 0, finalState: "FAILED", csvText };
+      }
+    } else if (args.source === "pdf") {
+      const unpdf: any = await import("unpdf");
+      const pdf = await unpdf.getDocumentProxy(buf);
+      
+      const pageClassifications: Record<number, "NATIVE" | "IMAGE"> = {};
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        const pageType = classifyPage(content.items ?? []);
+        pageClassifications[i] = pageType;
+        if (pageType === "NATIVE") {
+          nativePages.push(i);
+        } else {
+          imagePages.push(i);
+        }
+      }
 
-    // Cap. 37 — OCR_REVIEW por confiança
-    if (args.source === "pdf" && ocrConfidence != null && ocrConfidence < 0.8 && ocrConfidence > 0) {
-      terminal = "OCR_REVIEW";
-      lastError = `Confiança tabular ${(ocrConfidence * 100).toFixed(1)}% < 80%`;
+      const combinedRows: string[][] = [
+        ["date", "description", "amount", "debit", "credit", "balance", "doc", "client_name", "cpf_cnpj", "phone", "movement_type", "page", "origin_lines"]
+      ];
+
+      let nativeLinesCount = 0;
+      let ocrLinesCount = 0;
+      let cacheHitsCount = 0;
+      let totalOcrTimeMs = 0;
+
+      // Extrator Nativo (Sem IA)
+      if (nativePages.length > 0) {
+        const nativeRes = await extractNativePdfToCsv(pdf, {
+          fileHash: file_hash!,
+          nativePages
+        });
+        const parsedNative = Papa.parse<string[]>(nativeRes.csvText, { delimiter: ";", skipEmptyLines: true });
+        if (parsedNative.data.length > 1) {
+          combinedRows.push(...parsedNative.data.slice(1));
+          nativeLinesCount += parsedNative.data.length - 1;
+        }
+      }
+
+      // Extrator Imagem (OCR Determinístico)
+      if (imagePages.length > 0) {
+        isImagePdf = true;
+        for (const pNum of imagePages) {
+          const ocrRes = await extractOcrPageToCsv(sb, {
+            pdfProxy: pdf,
+            pageIndex: pNum,
+            fileHash: file_hash!,
+            companyId: args.companyId,
+            importId: args.importId
+          });
+          totalOcrTimeMs += ocrRes.ocrTimeMs;
+          if (ocrRes.cacheHit) {
+            cacheHitsCount++;
+          }
+          
+          const parsedOcr = Papa.parse<string[]>(ocrRes.csvLines, { delimiter: ";", skipEmptyLines: true });
+          let startRow = 0;
+          if (parsedOcr.data.length > 0) {
+            const firstRowSig = parsedOcr.data[0].map(c => String(c).toLowerCase().trim()).join(";");
+            if (firstRowSig.includes("date") && firstRowSig.includes("description")) {
+              startRow = 1;
+            }
+          }
+          const rowsToAppend = parsedOcr.data.slice(startRow);
+          combinedRows.push(...rowsToAppend);
+          ocrLinesCount += rowsToAppend.length;
+        }
+      }
+
+      csvText = Papa.unparse(combinedRows, { delimiter: ";" });
+      charset = "utf-8";
+
+      // Auditoria completa (Item 9)
+      const csvHash = await sha256Hex(new TextEncoder().encode(csvText));
       await auditLog(sb, {
-        importId: args.importId, companyId: args.companyId,
-        stage: "conversion", event: "OCR_REVIEW",
-        reason: lastError,
+        importId: args.importId,
+        companyId: args.companyId,
+        stage: "extração",
+        event: "CSV_CANONICO_GERADO",
+        reason: `PDF processado. Páginas: ${pdf.numPages} (Nativas: ${nativePages.length}, Imagens: ${imagePages.length}). Total linhas: ${combinedRows.length - 1}. Cache hits OCR: ${cacheHitsCount}.`,
+        input: {
+          file_hash,
+          csv_hash: csvHash,
+          pipeline_version: "v3.0.0",
+          extractor_version: "v3.0.0",
+          native_pages: nativePages,
+          image_pages: imagePages,
+          native_lines: nativeLinesCount,
+          ocr_lines: ocrLinesCount,
+          cache_hits: cacheHitsCount,
+          ocr_duration_ms: totalOcrTimeMs
+        }
       });
-      return { rowsInserted: 0, finalState: "REVIEW", csvText };
+
+      // Validação do CSV Canônico (Item 5)
+      const validation = validateCanonicalCsv(csvText);
+      if (!validation.valid) {
+        terminal = "HEADER_FAILED";
+        lastError = "Validação estrutural do CSV canônico falhou: " + validation.errors.map(e => `Linha ${e.line}: ${e.error}`).join(" | ");
+        await auditLog(sb, {
+          importId: args.importId,
+          companyId: args.companyId,
+          stage: "validação",
+          event: "VALIDATION_FAILED",
+          reason: lastError,
+        });
+        return { rowsInserted: 0, finalState: "FAILED", csvText };
+      }
+
+      // Downstream Pipeline unificado pós-CSV
+      const meta: Record<string, unknown> = {
+        source: isImagePdf ? "pdf_ocr" : "pdf_native",
+        pages: pdf.numPages,
+        imagePages,
+        nativePages
+      };
+      
+      raw = finalizeTable(combinedRows, meta, "utf-8", collector);
+      ocrConfidence = isImagePdf ? (cacheHitsCount === imagePages.length ? 1.0 : 0.9) : 1.0;
+      extractSummary = raw.extractSummary;
+    } else {
+      throw new Error(`Fonte não suportada na V3: ${args.source}`);
     }
+
+    collector.endPhase("PHASE_2");
+
+    const parseTime = Date.now() - startParse;
+    console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: parse_${args.source}\nRows: ${raw.rows.length}\nTime: ${parseTime} ms\nStatus: OK`);
+    console.log(`\n[PHASE 0 LOG] IMPORT ${args.importId}\nStage: finalizeTable\nRows: ${raw.rows.length}\nTime: 0 ms\nStatus: OK`);
 
     // 3) Mapeamento
     const startMap = Date.now();

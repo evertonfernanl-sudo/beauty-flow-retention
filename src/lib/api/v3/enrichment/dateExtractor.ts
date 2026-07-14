@@ -15,7 +15,7 @@ export function extractDate(s: string | null | undefined): string | null {
 
   // Suporte a mês textual (ex: "01 JAN" ou "15 MAR 2026" ou "15 de Março de 2026")
   const cleanTextDate = t.replace(/\bde\b/gi, "").replace(/\s+/g, " ").trim();
-  const textMonthMatch = cleanTextDate.match(/^(\d{1,2})[\s\-./]+([a-zA-Z]{3,10})(?:[\s\-./]+(\d{2,4}))?$/i);
+  const textMonthMatch = cleanTextDate.match(/^(\d{1,2})[\s\-./]+([a-zA-ZÀ-ÿ]{3,15})(?:[\s\-./]+(\d{2,4}))?$/i);
   if (textMonthMatch) {
     const [, dd, monthName, yy] = textMonthMatch;
     const mm = MONTHS[monthName.toLowerCase().substring(0, 3)];
