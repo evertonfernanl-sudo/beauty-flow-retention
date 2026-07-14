@@ -3017,6 +3017,8 @@ export type Database = {
       v3_import_rows: {
         Row: {
           applied_result: Json | null
+          audit_trace: Json | null
+          block_debug: Json | null
           canonical: Json
           classification_confidence: number | null
           company_id: string
@@ -3026,6 +3028,7 @@ export type Database = {
           duplicate_of: string[] | null
           id: string
           import_id: string
+          origin_lines: Json | null
           original_snapshot: Json
           possible_duplicate: boolean | null
           processing_metadata: Json
@@ -3041,6 +3044,8 @@ export type Database = {
         }
         Insert: {
           applied_result?: Json | null
+          audit_trace?: Json | null
+          block_debug?: Json | null
           canonical: Json
           classification_confidence?: number | null
           company_id: string
@@ -3050,6 +3055,7 @@ export type Database = {
           duplicate_of?: string[] | null
           id?: string
           import_id: string
+          origin_lines?: Json | null
           original_snapshot: Json
           possible_duplicate?: boolean | null
           processing_metadata?: Json
@@ -3065,6 +3071,8 @@ export type Database = {
         }
         Update: {
           applied_result?: Json | null
+          audit_trace?: Json | null
+          block_debug?: Json | null
           canonical?: Json
           classification_confidence?: number | null
           company_id?: string
@@ -3074,6 +3082,7 @@ export type Database = {
           duplicate_of?: string[] | null
           id?: string
           import_id?: string
+          origin_lines?: Json | null
           original_snapshot?: Json
           possible_duplicate?: boolean | null
           processing_metadata?: Json
@@ -3162,104 +3171,212 @@ export type Database = {
       }
       v3_imports: {
         Row: {
+          administrative_lines_discarded: number | null
+          ambiguous_rows: number | null
+          audit_summary: Json | null
+          audit_version: string | null
           balance_delta: number | null
+          balance_lines_captured: number | null
           balance_valid: boolean | null
+          blocks_appended: number | null
+          blocks_created: number | null
+          blocks_crossing_pages: number | null
+          blocks_marked_ambiguous: number | null
           charset: string | null
           company_id: string
           created_at: string
           created_by: string | null
+          dates_explicit: number | null
+          dates_inherited: number | null
+          dates_missing: number | null
           expense_count: number | null
           failed_rows: number | null
           file_hash: string | null
           filename: string
           final_state: string | null
           finished_at: string | null
+          footer_lines_discarded: number | null
           homologation_status: string | null
           id: string
           income_count: number | null
+          institutional_lines_discarded: number | null
           last_error: string | null
+          layout_equivalence_failures: number | null
+          lines_into_finalize: number | null
+          lines_out_finalize: number | null
+          metadata_lines_discarded: number | null
           ntieb_version: string | null
           ocr_confidence: number | null
+          pages_extracted: number | null
+          pages_reusing_previous_layout: number | null
+          pages_with_adjusted_layout: number | null
+          pages_with_detected_header: number | null
+          pages_with_unresolved_layout: number | null
           parser_version: string | null
+          physical_lines_extracted: number | null
+          possible_mega_blocks: number | null
           processing_ms: number | null
+          repeated_headers_removed: number | null
           review_rows: number | null
+          rows_approved: number | null
+          rows_failed: number | null
+          rows_gate_failed: number | null
+          rows_gate_passed: number | null
+          rows_persisted: number | null
+          rows_review: number | null
           saldo_final: number | null
           saldo_inicial: number | null
           size_bytes: number
           source: string
           status: string
           storage_path: string
+          summary_lines_captured: number | null
+          temporal_conflicts: number | null
           total_entradas_extrato: number | null
+          total_lines_captured: number | null
           total_rows: number | null
           total_saidas_extrato: number | null
+          transaction_candidate_rows: number | null
           updated_at: string
           very_low_confidence_count: number | null
         }
         Insert: {
+          administrative_lines_discarded?: number | null
+          ambiguous_rows?: number | null
+          audit_summary?: Json | null
+          audit_version?: string | null
           balance_delta?: number | null
+          balance_lines_captured?: number | null
           balance_valid?: boolean | null
+          blocks_appended?: number | null
+          blocks_created?: number | null
+          blocks_crossing_pages?: number | null
+          blocks_marked_ambiguous?: number | null
           charset?: string | null
           company_id: string
           created_at?: string
           created_by?: string | null
+          dates_explicit?: number | null
+          dates_inherited?: number | null
+          dates_missing?: number | null
           expense_count?: number | null
           failed_rows?: number | null
           file_hash?: string | null
           filename: string
           final_state?: string | null
           finished_at?: string | null
+          footer_lines_discarded?: number | null
           homologation_status?: string | null
           id?: string
           income_count?: number | null
+          institutional_lines_discarded?: number | null
           last_error?: string | null
+          layout_equivalence_failures?: number | null
+          lines_into_finalize?: number | null
+          lines_out_finalize?: number | null
+          metadata_lines_discarded?: number | null
           ntieb_version?: string | null
           ocr_confidence?: number | null
+          pages_extracted?: number | null
+          pages_reusing_previous_layout?: number | null
+          pages_with_adjusted_layout?: number | null
+          pages_with_detected_header?: number | null
+          pages_with_unresolved_layout?: number | null
           parser_version?: string | null
+          physical_lines_extracted?: number | null
+          possible_mega_blocks?: number | null
           processing_ms?: number | null
+          repeated_headers_removed?: number | null
           review_rows?: number | null
+          rows_approved?: number | null
+          rows_failed?: number | null
+          rows_gate_failed?: number | null
+          rows_gate_passed?: number | null
+          rows_persisted?: number | null
+          rows_review?: number | null
           saldo_final?: number | null
           saldo_inicial?: number | null
           size_bytes?: number
           source: string
           status?: string
           storage_path: string
+          summary_lines_captured?: number | null
+          temporal_conflicts?: number | null
           total_entradas_extrato?: number | null
+          total_lines_captured?: number | null
           total_rows?: number | null
           total_saidas_extrato?: number | null
+          transaction_candidate_rows?: number | null
           updated_at?: string
           very_low_confidence_count?: number | null
         }
         Update: {
+          administrative_lines_discarded?: number | null
+          ambiguous_rows?: number | null
+          audit_summary?: Json | null
+          audit_version?: string | null
           balance_delta?: number | null
+          balance_lines_captured?: number | null
           balance_valid?: boolean | null
+          blocks_appended?: number | null
+          blocks_created?: number | null
+          blocks_crossing_pages?: number | null
+          blocks_marked_ambiguous?: number | null
           charset?: string | null
           company_id?: string
           created_at?: string
           created_by?: string | null
+          dates_explicit?: number | null
+          dates_inherited?: number | null
+          dates_missing?: number | null
           expense_count?: number | null
           failed_rows?: number | null
           file_hash?: string | null
           filename?: string
           final_state?: string | null
           finished_at?: string | null
+          footer_lines_discarded?: number | null
           homologation_status?: string | null
           id?: string
           income_count?: number | null
+          institutional_lines_discarded?: number | null
           last_error?: string | null
+          layout_equivalence_failures?: number | null
+          lines_into_finalize?: number | null
+          lines_out_finalize?: number | null
+          metadata_lines_discarded?: number | null
           ntieb_version?: string | null
           ocr_confidence?: number | null
+          pages_extracted?: number | null
+          pages_reusing_previous_layout?: number | null
+          pages_with_adjusted_layout?: number | null
+          pages_with_detected_header?: number | null
+          pages_with_unresolved_layout?: number | null
           parser_version?: string | null
+          physical_lines_extracted?: number | null
+          possible_mega_blocks?: number | null
           processing_ms?: number | null
+          repeated_headers_removed?: number | null
           review_rows?: number | null
+          rows_approved?: number | null
+          rows_failed?: number | null
+          rows_gate_failed?: number | null
+          rows_gate_passed?: number | null
+          rows_persisted?: number | null
+          rows_review?: number | null
           saldo_final?: number | null
           saldo_inicial?: number | null
           size_bytes?: number
           source?: string
           status?: string
           storage_path?: string
+          summary_lines_captured?: number | null
+          temporal_conflicts?: number | null
           total_entradas_extrato?: number | null
+          total_lines_captured?: number | null
           total_rows?: number | null
           total_saidas_extrato?: number | null
+          transaction_candidate_rows?: number | null
           updated_at?: string
           very_low_confidence_count?: number | null
         }
