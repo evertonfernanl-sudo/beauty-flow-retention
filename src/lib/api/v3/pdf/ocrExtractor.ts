@@ -119,6 +119,14 @@ export function calculateOcrCacheHash(
   return crypto.createHash("sha256").update(compositeString).digest("hex");
 }
 
+function escapeCsvCell(val: string): string {
+  const s = String(val ?? "");
+  if (s.includes(";") || s.includes('"') || s.includes("\n") || s.includes("\r")) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
 /**
  * Extract physical table lines from an image page of a PDF via Gemini Vision OCR.
  */
@@ -229,19 +237,33 @@ export async function extractOcrPageToCsv(
     dataUrl = `data:image/bmp;base64,${base64Bmp}`;
   }
 
-  const promptText = `Você é um analisador de documentos especialista em reconstruir tabelas de extrato bancário. Sua tarefa é transcrever todo o conteúdo visível nesta ${isTextFallback ? "página de texto" : "imagem"} diretamente no formato CSV canônico.
-As colunas do CSV devem ser EXATAMENTE:
-date;description;amount;debit;credit;balance;doc;client_name;cpf_cnpj;phone;movement_type;page;origin_lines
+  const promptText = `Você é um analisador de documentos especialista em reconstruir tabelas de extrato bancário. Sua tarefa é transcrever todo o conteúdo visível nesta ${isTextFallback ? "página de texto" : "imagem"} diretamente em formato JSON.
+
+A resposta deve ser um objeto JSON válido contendo uma lista de transações na chave "transactions":
+{
+  "transactions": [
+    {
+      "date": "Data no formato AAAA-MM-DD (ex: se no extrato estiver '05/06/2026', transcreva como '2026-06-05'). Se for apenas o dia do lançamento (ex: '05'), deduza o ano e o mês se houver no cabeçalho ou deixe vazio se for ambíguo.",
+      "description": "Descrição da transação (ex: 'Compra no cartão')",
+      "amount": "Valor total (com sinal e centavos, mantendo a vírgula original, ex: '150,00', '-9,62', ou vazio)",
+      "debit": "Valor do débito se aplicável (ex: '150,00', ou vazio)",
+      "credit": "Valor do crédito se aplicável (ex: '150,00', ou vazio)",
+      "balance": "Saldo final após a transação (ex: '1500,00', ou vazio)",
+      "doc": "Número do documento/autenticação se houver, ou vazio",
+      "client_name": "Nome do cliente/contraparte se houver na linha, ou vazio",
+      "cpf_cnpj": "CPF/CNPJ se houver na linha, ou vazio",
+      "phone": "Telefone se houver na linha, ou vazio",
+      "movement_type": "Tipo de movimentação (C, D, PIX, TED etc.) se disponível",
+      "origin_lines": ["${pageIdx}:<linha_fisica>"]
+    }
+  ]
+}
 
 ATENÇÃO REGRAS OBRIGATÓRIAS:
-1. Use PONTO E VÍRGULA (;) como único delimitador de colunas no CSV.
-2. NUNCA use vírgulas (,) para separar as colunas do CSV.
-3. Mantenha fidelidade absoluta a TODOS os caracteres e dígitos dos valores financeiros. Mantenha os centavos e decimais originais intactos usando vírgula (,) exatamente como no texto original (ex: se o valor for 150,00 ou -9,62, o CSV deve conter exatamente '150,00' ou '-9,62'; NUNCA arredonde nem remova/altere centavos).
-4. Datas devem ser escritas no formato AAAA-MM-DD (ex: se no extrato estiver '05/06/2026', transcreva como '2026-06-05'). Se for apenas o dia do lançamento (ex: '05'), deduza o ano e o mês se houver no cabeçalho ou deixe vazio se for ambíguo.
-5. O campo 'page' deve conter o número da página fornecido: ${pageIdx}.
-6. O campo 'origin_lines' deve conter um array JSON contendo a página e o índice da linha física que você identificou no documento (ex: se for a primeira linha da tabela, coloque '["${pageIdx}:1"]'; se for a segunda linha da tabela, coloque '["${pageIdx}:2"]', etc.).
-7. Transcreva cada linha física da tabela individualmente. Não faça resumos, não faça consolidações nem pulos de linha.
-8. Retorne APENAS o código do CSV válido, sem blocos de código markdown (como \`\`\`csv), sem explicações e sem comentários.`;
+1. Mantenha fidelidade absoluta a TODOS os caracteres e dígitos dos valores financeiros. Mantenha os centavos e decimais originais intactos usando vírgula (,) exatamente como no texto original (NUNCA altere centavos).
+2. O campo 'origin_lines' deve ser obrigatoriamente um array de string com o formato ["${pageIdx}:linha_fisica"] representando a linha que você identificou (ex: se for a primeira linha de transação vista, '["${pageIdx}:1"]').
+3. Transcreva cada linha de transação individualmente. Não faça resumos nem consolidações.
+4. Retorne APENAS o JSON válido.`;
 
   const messages = [
     {
@@ -277,6 +299,7 @@ ATENÇÃO REGRAS OBRIGATÓRIAS:
     body: JSON.stringify({
       model: MODEL_VERSION,
       temperature: 0.0,
+      response_format: { type: "json_object" },
       messages
     })
   });
@@ -294,7 +317,59 @@ ATENÇÃO REGRAS OBRIGATÓRIAS:
     rawContent = rawContent.replace(/^```[a-zA-Z]*\n/, "").replace(/\n```$/, "");
   }
 
-  pageCsv = rawContent.trim();
+  try {
+    const parsed = JSON.parse(rawContent);
+    const transactions = Array.isArray(parsed.transactions) ? parsed.transactions : [];
+    
+    const csvRows: string[] = [];
+    csvRows.push("date;description;amount;debit;credit;balance;doc;client_name;cpf_cnpj;phone;movement_type;page;origin_lines");
+
+    for (const t of transactions) {
+      const dateVal = String(t.date ?? "").trim();
+      const descVal = String(t.description ?? "").trim();
+      const amountVal = String(t.amount ?? "").trim();
+      const debitVal = String(t.debit ?? "").trim();
+      const creditVal = String(t.credit ?? "").trim();
+      const balanceVal = String(t.balance ?? "").trim();
+      const docVal = String(t.doc ?? "").trim();
+      const clientNameVal = String(t.client_name ?? "").trim();
+      const cpfCnpjVal = String(t.cpf_cnpj ?? "").trim();
+      const phoneVal = String(t.phone ?? "").trim();
+      const movementTypeVal = String(t.movement_type ?? "").trim();
+      const pageVal = String(pageIdx);
+      
+      let originLinesVal = "";
+      if (Array.isArray(t.origin_lines)) {
+        originLinesVal = JSON.stringify(t.origin_lines);
+      } else if (t.origin_lines) {
+        originLinesVal = JSON.stringify([String(t.origin_lines)]);
+      } else {
+        originLinesVal = JSON.stringify([`${pageIdx}:1`]);
+      }
+
+      const csvLine = [
+        escapeCsvCell(dateVal),
+        escapeCsvCell(descVal),
+        escapeCsvCell(amountVal),
+        escapeCsvCell(debitVal),
+        escapeCsvCell(creditVal),
+        escapeCsvCell(balanceVal),
+        escapeCsvCell(docVal),
+        escapeCsvCell(clientNameVal),
+        escapeCsvCell(cpfCnpjVal),
+        escapeCsvCell(phoneVal),
+        escapeCsvCell(movementTypeVal),
+        pageVal,
+        escapeCsvCell(originLinesVal)
+      ].join(";");
+      csvRows.push(csvLine);
+    }
+    
+    pageCsv = csvRows.join("\n");
+  } catch (err: any) {
+    console.error(`[SIE V3] Erro ao parsear JSON de OCR para página ${pageIdx}:`, err.message, rawContent);
+    throw new Error(`Falha técnica na conversão da página ${pageIdx} para JSON: ${err.message}`);
+  }
 
   // 4. Save to Cache database using composite hash
   if (pageCsv) {

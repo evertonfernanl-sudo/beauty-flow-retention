@@ -92,4 +92,11 @@ describe("csvValidator Test Suite", () => {
     expect(res.valid).toBeFalse();
     expect(res.errors[0].column).toBe("origin_lines");
   });
+
+  test("Cenário 9: Sucesso com valor monetário positivo com sinal '+'", () => {
+    const csv = `${validHeader}\n2026-07-14;Pix recebido;+170,00;;;1000,00;123;Maria;123.456.789-00;11999999999;PIX;1;["1:12"]`;
+    const res = validateCanonicalCsv(csv);
+    expect(res.valid).toBeTrue();
+    expect(res.errors.length).toBe(0);
+  });
 });
