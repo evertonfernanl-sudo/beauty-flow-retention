@@ -41,6 +41,8 @@ import {
   Trash2,
   Receipt,
   Share2,
+  MoreVertical,
+  MessageCircle,
 } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -48,6 +50,13 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { formatBRL } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import { whatsappLink } from "@/lib/phone";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -143,6 +152,7 @@ function AgendaPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [search, setSearch] = useState("");
   const [newApptOpen, setNewApptOpen] = useState(false);
+  const [feedbackAppt, setFeedbackAppt] = useState<any>(null);
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const [incomeDialogOpen, setIncomeDialogOpen] = useState(false);
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
@@ -618,6 +628,7 @@ function AgendaPage() {
             professionals={professionals.data ?? []}
             shouldRestrictAgenda={shouldRestrictAgenda}
             myProfessional={myProfessional}
+            onSendFeedback={setFeedbackAppt}
           />
         )}
       </Card>
@@ -862,6 +873,12 @@ function AgendaPage() {
         companyId={companyId ?? null}
       />
 
+      <SendFeedbackDialog
+        appt={feedbackAppt}
+        open={!!feedbackAppt}
+        onOpenChange={(open) => !open && setFeedbackAppt(null)}
+      />
+
       {/* Botão de Fechar o Mês no final da página */}
       <div className="flex justify-center pt-4">
         <Button
@@ -1070,11 +1087,11 @@ function TransactionList({
 
           let personName = "";
           if (t.type === "INCOME") {
-            personName = clientName || t.description || t.category || "Cliente";
+            personName = clientName || t.client_name || t.description || t.category || "Cliente";
           } else {
             // Se for despesa, prioriza o nome do cliente se houver vínculo com atendimento,
             // senão usa o nome do fornecedor, caindo por fim na descrição/categoria.
-            personName = clientName || providerName || t.description || t.category || "Fornecedor";
+            personName = clientName || t.client_name || providerName || t.description || t.category || "Fornecedor";
           }
 
           return (
@@ -1626,6 +1643,7 @@ function GroupedList({
   professionals,
   shouldRestrictAgenda,
   myProfessional,
+  onSendFeedback,
 }: {
   items: any[];
   mode: PeriodMode;
@@ -1636,6 +1654,7 @@ function GroupedList({
   professionals: any[];
   shouldRestrictAgenda: boolean;
   myProfessional: any;
+  onSendFeedback?: (appt: any) => void;
 }) {
   if (mode === "today") {
     return (
@@ -1651,6 +1670,7 @@ function GroupedList({
             professionals={professionals}
             shouldRestrictAgenda={shouldRestrictAgenda}
             myProfessional={myProfessional}
+            onSendFeedback={onSendFeedback}
           />
         ))}
       </ul>
@@ -1685,6 +1705,7 @@ function GroupedList({
                 professionals={professionals}
                 shouldRestrictAgenda={shouldRestrictAgenda}
                 myProfessional={myProfessional}
+                onSendFeedback={onSendFeedback}
               />
             ))}
           </ul>
@@ -1703,6 +1724,7 @@ function AppointmentRow({
   professionals,
   shouldRestrictAgenda,
   myProfessional,
+  onSendFeedback,
 }: {
   a: any;
   onComplete: (id: string) => void;
@@ -1712,6 +1734,7 @@ function AppointmentRow({
   professionals: any[];
   shouldRestrictAgenda: boolean;
   myProfessional: any;
+  onSendFeedback?: (appt: any) => void;
 }) {
   const { data: profile } = useCurrentProfile();
   const isAdm = profile?.role === "owner" || profile?.role === "admin";
@@ -1812,6 +1835,21 @@ function AppointmentRow({
         <span className={`text-[11px] rounded-full px-2 py-0.5 ${statusStyle(a.status)}`}>
           {statusLabel(a.status)}
         </span>
+        {a.status === "COMPLETED" && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-muted" aria-label="Ações agendamento concluído">
+                <MoreVertical className="h-4 w-4 text-muted-foreground" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => onSendFeedback?.(a)}>
+                <MessageCircle className="h-4 w-4 mr-2 text-emerald-600" />
+                Enviar Mensagem
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
         {a.status !== "COMPLETED" && a.status !== "CANCELLED" && (
           <div className="flex items-center gap-1.5">
             {a.status === "SCHEDULED" && (
@@ -2823,6 +2861,94 @@ export function CloseMonthDialog({
             </div>
           )}
         </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SendFeedbackDialog({
+  appt,
+  open,
+  onOpenChange,
+}: {
+  appt: any;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [text, setText] = useState("");
+
+  useEffect(() => {
+    if (!appt) return;
+
+    // Time-based greeting
+    const now = new Date();
+    const hour = now.getHours();
+    let greeting = "Bom dia";
+    if (hour >= 12 && hour < 18) {
+      greeting = "Boa tarde";
+    } else if (hour >= 18 || hour < 6) {
+      greeting = "Boa noite";
+    }
+
+    const clientFirstName = appt.clients?.name
+      ? appt.clients.name.split(" ")[0]
+      : "cliente";
+
+    const serviceName = appt.services?.name ?? "Serviço";
+    const priceStr = formatBRL(Number(appt.price ?? appt.services?.price ?? 0));
+
+    const defaultMsg = `${greeting}, ${clientFirstName}!\n\nNo seu atendimento de hoje fizemos os seguintes procedimentos:\n- ${serviceName}: ${priceStr}\n\nValor total: ${priceStr}\n\nFicamos muito felizes em atender você! 💕`;
+    setText(defaultMsg);
+  }, [appt]);
+
+  if (!appt) return null;
+
+  const phone = appt.clients?.phone;
+
+  const handleSend = () => {
+    if (!phone) {
+      toast.error("Esta cliente não possui telefone cadastrado.");
+      return;
+    }
+    const link = whatsappLink(phone, text);
+    if (link) {
+      window.open(link, "_blank", "noopener,noreferrer");
+      toast.success("Mensagem aberta no WhatsApp!");
+      onOpenChange(false);
+    } else {
+      toast.error("Número de WhatsApp inválido.");
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Enviar mensagem rápida</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label>Cliente</Label>
+            <p className="text-sm font-semibold">{appt.clients?.name || "Sem Nome"}</p>
+          </div>
+          <div className="space-y-2">
+            <Label>Mensagem</Label>
+            <Textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              rows={6}
+              className="text-sm"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
+          <Button onClick={handleSend} className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white">
+            <MessageCircle className="h-4 w-4" /> Enviar WhatsApp
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
