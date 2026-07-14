@@ -8,14 +8,6 @@ export function classifyPage(items: Array<{ str: string }>): PageType {
   if (!items || items.length === 0) {
     return "IMAGE";
   }
-
-  // Count characters in all text items, ignoring whitespace
-  const charCount = items.reduce((sum, item) => sum + (item.str || "").replace(/\s+/g, "").length, 0);
-
-  // If there is any extractable text (threshold of 5 non-whitespace characters), we treat it as native
-  if (charCount >= 5) {
-    return "NATIVE";
-  }
-
-  return "IMAGE";
+  const hasText = items.some(item => item && typeof item.str === "string" && item.str.trim().length > 0);
+  return hasText ? "NATIVE" : "IMAGE";
 }

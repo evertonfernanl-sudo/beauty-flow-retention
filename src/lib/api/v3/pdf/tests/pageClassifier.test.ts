@@ -34,11 +34,11 @@ describe("pageClassifier Test Suite", () => {
     expect(classifyPage([{ str: "   " }, { str: "\n\t" }])).toBe("IMAGE");
   });
 
-  test("Cenário 3: Página com menos de 5 caracteres úteis -> IMAGE", () => {
-    expect(classifyPage([{ str: "abc" }])).toBe("IMAGE");
+  test("Cenário 3: Página com apenas 1 caractere útil -> NATIVE", () => {
+    expect(classifyPage([{ str: "a" }])).toBe("NATIVE");
   });
 
-  test("Cenário 4: Página com 5 ou mais caracteres úteis -> NATIVE", () => {
+  test("Cenário 4: Página com múltiplos caracteres úteis -> NATIVE", () => {
     expect(classifyPage([{ str: "abcde" }])).toBe("NATIVE");
     expect(classifyPage([{ str: "12" }, { str: "345" }])).toBe("NATIVE");
   });

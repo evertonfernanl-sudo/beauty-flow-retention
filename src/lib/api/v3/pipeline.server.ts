@@ -330,6 +330,10 @@ function finalizeTable(
     let ambiguous_rows_forwarded_or_reviewed = 0;
     let transaction_candidate_rows_forwarded = 0;
 
+    const pageColIdx = headers.findIndex((h) => h === "page");
+    const originLinesColIdx = headers.findIndex((h) => h === "origin_lines");
+    const filteredMetadata: any[] = [];
+
     if (collector) {
       collector.recordPageLayout({
         pageNumber: 1,
@@ -341,13 +345,29 @@ function finalizeTable(
 
     for (const row of bodyMatrix) {
       const rowSig = row.map((c) => String(getCellText(c) ?? "").trim().toLowerCase()).filter(Boolean).join("|");
+      
+      row_idx++;
+      let pageNumber = 1;
+      let physicalLine = row_idx;
+      if (pageColIdx >= 0 && row[pageColIdx]) {
+        pageNumber = parseInt(String(getCellText(row[pageColIdx])), 10) || 1;
+      }
+      if (originLinesColIdx >= 0 && row[originLinesColIdx]) {
+        try {
+          const originArr = JSON.parse(String(getCellText(row[originLinesColIdx])));
+          if (Array.isArray(originArr) && originArr[0]) {
+            physicalLine = parseInt(originArr[0].split(":")[1], 10) || physicalLine;
+          }
+        } catch {}
+      }
+
       if (headerSignature && rowSig === headerSignature) {
         repeated_headers_discarded++;
         rows_removed_by_phase3++;
         if (collector) {
           collector.recordPhase3Row({
-            pageNumber: 1,
-            physicalLine: row_idx + 1,
+            pageNumber,
+            physicalLine,
             category: "REPEATED_HEADER",
             action: "DISCARD_BEFORE_BLOCKS",
             reasonCode: "REPEATED_HEADER_LINE",
@@ -359,7 +379,6 @@ function finalizeTable(
         continue;
       }
 
-      row_idx++;
       const cellTexts = row.map((c) => getCellText(c));
       const context: RowClassificationContext = {
         source: meta?.source as string || "csv",
@@ -369,8 +388,8 @@ function finalizeTable(
 
       if (collector) {
         collector.recordPhase3Row({
-          pageNumber: 1,
-          physicalLine: row_idx,
+          pageNumber,
+          physicalLine,
           category: classification.category,
           action: classification.action,
           reasonCode: classification.reasonCode,
@@ -382,8 +401,8 @@ function finalizeTable(
 
       if (classification.preserveForAudit) {
         filtered_rows.push({
-          pageNumber: 1,
-          physicalLine: row_idx,
+          pageNumber,
+          physicalLine,
           category: classification.category,
           action: classification.action,
           reasonCode: classification.reasonCode,
@@ -416,6 +435,11 @@ function finalizeTable(
         case "FORWARD_TO_BLOCK_ASSEMBLER":
         case "KEEP_FOR_REVIEW":
           filteredBodyMatrix.push(cellTexts);
+          filteredMetadata.push({
+            pageNumber,
+            physicalLine,
+            pageLayoutResolved: meta?.source !== "UNRESOLVED"
+          });
           rows_after_phase3++;
           break;
       }
@@ -449,16 +473,19 @@ function finalizeTable(
       valueIdxs,
       descIdx,
       parseDate,
+      lineMetadata: filteredMetadata,
     });
 
     if (collector) {
       let blockCounter = 1;
       for (const block of assembled.blocks || []) {
-        const blockId = `1-${block.originLines[0]?.physicalLine ?? blockCounter}-${blockCounter}`;
+        const pageStart = block.pageStart ?? 1;
+        const pageEnd = block.pageEnd ?? 1;
+        const blockId = `${pageStart}-${block.originLines[0]?.physicalLine ?? blockCounter}-${blockCounter}`;
         collector.recordBlock({
           blockId,
-          pageStart: 1,
-          pageEnd: 1,
+          pageStart,
+          pageEnd,
           originLines: (block.originLines || []).map((ol: any) => ({
             pageNumber: ol.pageNumber ?? 1,
             physicalLine: ol.physicalLine ?? 1,
@@ -467,7 +494,7 @@ function finalizeTable(
           closedBy: "NEXT_BLOCK_OR_EOF",
           appendedBy: [],
           descriptionLineCount: block.originLines.length,
-          crossedPageBoundary: false,
+          crossedPageBoundary: pageStart !== pageEnd,
           ambiguous: block.isAmbiguous || false,
           ambiguityReasons: block.ambiguityReasons || [],
           valueConflict: false,
