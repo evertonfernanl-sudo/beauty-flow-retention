@@ -167,31 +167,69 @@ export async function extractOcrPageToCsv(
 
   // 3. Extract Images from Page using unpdf
   const { extractImages } = await import("unpdf");
-  const pageImages = await extractImages(args.pdfProxy, pageIdx);
-
-  if (!pageImages || pageImages.length === 0) {
-    throw new Error(`Nenhuma imagem extraída para OCR na página ${pageIdx}.`);
+  let pageImages: any[] = [];
+  try {
+    pageImages = await extractImages(args.pdfProxy, pageIdx);
+  } catch (err: any) {
+    console.warn(`[SIE V3] Erro ao extrair imagens da página ${pageIdx}:`, err.message || err);
   }
 
   const apiKey = process.env.LOVABLE_API_KEY;
   if (!apiKey) {
-    throw new Error("IA indisponível para OCR: LOVABLE_API_KEY ausente.");
+    throw new Error("IA indisponível for OCR: LOVABLE_API_KEY ausente.");
   }
 
-  console.log(`[SIE V3] Iniciando OCR Gemini Vision para página ${pageIdx}...`);
-
+  const isTextFallback = !pageImages || pageImages.length === 0;
+  let pageText = "";
   let pageCsv = "";
 
-  // Gemini Vision works best with the first main image extracted per page
-  const img = pageImages[0];
-  const rgbaImg = convertToRGBA(img);
-  const resizedImg = resizeImageRGBA(rgbaImg.data, rgbaImg.width, rgbaImg.height, 1500);
-  const bmpBuffer = convertToBMP32(resizedImg.data, resizedImg.width, resizedImg.height);
-  
-  const base64Bmp = bmpBuffer.toString("base64");
-  const dataUrl = `data:image/bmp;base64,${base64Bmp}`;
+  if (isTextFallback) {
+    console.log(`[SIE V3] Nenhuma imagem encontrada. Iniciando extração de texto nativo para a página ${pageIdx}...`);
+    try {
+      const page = await args.pdfProxy.getPage(pageIdx);
+      const content = await page.getTextContent();
+      const items = (content.items ?? []).map((it: any) => ({
+        str: String(it.str),
+        x: Array.isArray(it.transform) ? Math.round(Number(it.transform[4])) : 0,
+        y: Array.isArray(it.transform) ? Math.round(Number(it.transform[5])) : 0,
+      }));
+      // Ordenar de cima para baixo, esquerda para a direita
+      items.sort((a: any, b: any) => b.y - a.y || a.x - b.x);
+      
+      let lines: string[] = [];
+      let currentY: number | null = null;
+      let currentLine: string[] = [];
+      
+      for (const item of items) {
+        if (currentY === null || Math.abs(currentY - item.y) <= 3.0) {
+          currentLine.push(`${item.str} (x:${item.x})`);
+          currentY = currentY === null ? item.y : (currentY + item.y) / 2;
+        } else {
+          lines.push(currentLine.join(" "));
+          currentLine = [`${item.str} (x:${item.x})`];
+          currentY = item.y;
+        }
+      }
+      if (currentLine.length) lines.push(currentLine.join(" "));
+      pageText = lines.join("\n");
+    } catch (textErr: any) {
+      throw new Error(`Falha ao obter texto da página ${pageIdx} para fallback de OCR: ${textErr.message}`);
+    }
+  }
 
-  const promptText = `Você é um analisador de documentos especialista em reconstruir tabelas de extrato bancário. Sua tarefa é transcrever todo o conteúdo visível nesta imagem diretamente no formato CSV canônico.
+  console.log(`[SIE V3] Iniciando processamento LLM (${isTextFallback ? "Texto" : "Imagem/Vision"}) para página ${pageIdx}...`);
+
+  let dataUrl = "";
+  if (!isTextFallback) {
+    const img = pageImages[0];
+    const rgbaImg = convertToRGBA(img);
+    const resizedImg = resizeImageRGBA(rgbaImg.data, rgbaImg.width, rgbaImg.height, 1500);
+    const bmpBuffer = convertToBMP32(resizedImg.data, resizedImg.width, resizedImg.height);
+    const base64Bmp = bmpBuffer.toString("base64");
+    dataUrl = `data:image/bmp;base64,${base64Bmp}`;
+  }
+
+  const promptText = `Você é um analisador de documentos especialista em reconstruir tabelas de extrato bancário. Sua tarefa é transcrever todo o conteúdo visível nesta ${isTextFallback ? "página de texto" : "imagem"} diretamente no formato CSV canônico.
 As colunas do CSV devem ser EXATAMENTE:
 date;description;amount;debit;credit;balance;doc;client_name;cpf_cnpj;phone;movement_type;page;origin_lines
 
@@ -205,19 +243,17 @@ ATENÇÃO REGRAS OBRIGATÓRIAS:
 7. Transcreva cada linha física da tabela individualmente. Não faça resumos, não faça consolidações nem pulos de linha.
 8. Retorne APENAS o código do CSV válido, sem blocos de código markdown (como \`\`\`csv), sem explicações e sem comentários.`;
 
-  const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: MODEL_VERSION,
-      temperature: 0.0,
-      messages: [
-        {
-          role: "user",
-          content: [
+  const messages = [
+    {
+      role: "user",
+      content: isTextFallback
+        ? [
+            {
+              type: "text",
+              text: `${promptText}\n\nTexto extraído do documento (com coordenadas X de auxílio):\n${pageText}`
+            }
+          ]
+        : [
             {
               type: "text",
               text: promptText
@@ -229,8 +265,19 @@ ATENÇÃO REGRAS OBRIGATÓRIAS:
               }
             }
           ]
-        }
-      ]
+    }
+  ];
+
+  const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: MODEL_VERSION,
+      temperature: 0.0,
+      messages
     })
   });
 

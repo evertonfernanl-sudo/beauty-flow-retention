@@ -1741,43 +1741,49 @@ export async function runPipeline(
 
       // Extrator Nativo (Sem IA)
       if (nativePages.length > 0) {
-        const nativeRes = await extractNativePdfToCsv(pdf, {
-          fileHash: file_hash!,
-          nativePages
-        });
+        try {
+          const nativeRes = await extractNativePdfToCsv(pdf, {
+            fileHash: file_hash!,
+            nativePages
+          });
 
-        if (collector && nativeRes.detectedPageLayouts) {
-          for (const [pNum, layout] of nativeRes.detectedPageLayouts.entries()) {
-            collector.recordPageLayout({
-              pageNumber: pNum,
-              layoutSource: layout.source as any,
-              layoutConfidence: layout.confidence,
-              equivalentToPage: layout.equivalentToPage,
-              detectedColumnCount: layout.headers?.length ?? 0,
-              reasons: layout.reasons || [],
-            });
+          if (collector && nativeRes.detectedPageLayouts) {
+            for (const [pNum, layout] of nativeRes.detectedPageLayouts.entries()) {
+              collector.recordPageLayout({
+                pageNumber: pNum,
+                layoutSource: layout.source as any,
+                layoutConfidence: layout.confidence,
+                equivalentToPage: layout.equivalentToPage,
+                detectedColumnCount: layout.headers?.length ?? 0,
+                reasons: layout.reasons || [],
+              });
+            }
           }
-        }
 
-        if (collector && nativeRes.doubtfulRows) {
-          for (const row of nativeRes.doubtfulRows) {
-            collector.recordPhase3Row({
-              pageNumber: row.pageNumber,
-              physicalLine: row.physicalLine,
-              category: "DOUBTFUL_TRANSACTION",
-              action: "MARKED_FOR_REVISION",
-              reasonCode: "RECONSTRUCTION_DOUBT",
-              confidence: "LOW",
-              matchedSignals: [row.doubtReason],
-              textPreview: row.textPreview
-            });
+          if (collector && nativeRes.doubtfulRows) {
+            for (const row of nativeRes.doubtfulRows) {
+              collector.recordPhase3Row({
+                pageNumber: row.pageNumber,
+                physicalLine: row.physicalLine,
+                category: "DOUBTFUL_TRANSACTION",
+                action: "MARKED_FOR_REVISION",
+                reasonCode: "RECONSTRUCTION_DOUBT",
+                confidence: "LOW",
+                matchedSignals: [row.doubtReason],
+                textPreview: row.textPreview
+              });
+            }
           }
-        }
 
-        const parsedNative = Papa.parse<string[]>(nativeRes.csvText, { delimiter: ";", skipEmptyLines: true });
-        if (parsedNative.data.length > 1) {
-          combinedRows.push(...parsedNative.data.slice(1));
-          nativeLinesCount += parsedNative.data.length - 1;
+          const parsedNative = Papa.parse<string[]>(nativeRes.csvText, { delimiter: ";", skipEmptyLines: true });
+          if (parsedNative.data.length > 1) {
+            combinedRows.push(...parsedNative.data.slice(1));
+            nativeLinesCount += parsedNative.data.length - 1;
+          }
+        } catch (nativeErr: any) {
+          console.warn("[SIE V3] Extrator Nativo falhou, movendo todas as páginas para o extrator OCR:", nativeErr.message);
+          imagePages.push(...nativePages);
+          nativePages = [];
         }
       }
 
@@ -2225,7 +2231,7 @@ export async function runPipeline(
 
       // 1. Update Essencial
       const essentialPayload: any = {
-        status: finalState === "FAILED" ? "failed" : finalState === "REVIEW" ? "review" : "done",
+        status: finalState === "FAILED" ? "failed" : finalState === "REVIEW" ? "review" : "applied",
         final_state: finalState,
         file_hash: file_hash ?? null,
         charset: charset ?? null,
