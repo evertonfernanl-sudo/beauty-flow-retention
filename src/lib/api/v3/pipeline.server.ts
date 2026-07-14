@@ -32,6 +32,7 @@ import { classifyPage } from "./pdf/pageClassifier";
 import { extractNativePdfToCsv } from "./pdf/nativeExtractor";
 import { extractOcrPageToCsv } from "./pdf/ocrExtractor";
 import { validateCanonicalCsv } from "./parsing/csvValidator";
+import { reconstructLayoutWithoutHeader } from "./pdf/layoutReconstructor";
 
 type SB = SupabaseClient<Database>;
 
@@ -626,6 +627,29 @@ function finalizeTable(
     }
   }
 
+  // Gather first native page text for bank inference
+  let firstPageText = "";
+  if (pageNumbers.length > 0) {
+    const firstPLines = pagesMap.get(pageNumbers[0]);
+    if (firstPLines) {
+      firstPageText = firstPLines.map(line => line.cells.map(c => c.text).join(" ")).join("\n");
+    }
+  }
+  const bankInferred = inferIssuerBank("", firstPageText);
+
+  // If no primary header layout was detected at all, attempt to reconstruct layout
+  if (!primaryLayout) {
+    for (const pNum of pageNumbers) {
+      const pLines = pagesMap.get(pNum)!;
+      const reconstructed = reconstructLayoutWithoutHeader(pLines, pNum, pLines[0].pageWidth, bankInferred);
+      if (reconstructed) {
+        detectedPageLayouts.set(pNum, reconstructed);
+        primaryLayout = reconstructed;
+        break;
+      }
+    }
+  }
+
   if (!primaryLayout) {
     return { headers: [], rows: [], meta, charset, headerFailed: true };
   }
@@ -674,29 +698,44 @@ function finalizeTable(
 
       if (prevLayout) {
         const resolved = validatePageDataAgainstLayout(pLines, prevLayout, pNum, pLines[0].pageWidth);
-        detectedPageLayouts.set(pNum, resolved);
-        pageLayout = resolved;
-
-        if (resolved.source === "REUSED_PREVIOUS") {
+        if (resolved.source !== "UNRESOLVED") {
+          detectedPageLayouts.set(pNum, resolved);
+          pageLayout = resolved;
           pages_reusing_previous_layout++;
           if (resolved.appliedOffset !== 0) {
             pages_with_adjusted_layout++;
           }
         } else {
-          pages_with_unresolved_layout++;
+          const reconstructed = reconstructLayoutWithoutHeader(pLines, pNum, pLines[0].pageWidth, bankInferred);
+          if (reconstructed) {
+            detectedPageLayouts.set(pNum, reconstructed);
+            pageLayout = reconstructed;
+            pages_reusing_previous_layout++;
+          } else {
+            detectedPageLayouts.set(pNum, resolved);
+            pageLayout = resolved;
+            pages_with_unresolved_layout++;
+          }
         }
       } else {
-        const unresolved: PageColumnLayout = {
-          pageNumber: pNum,
-          source: "UNRESOLVED",
-          pageWidth: pLines[0].pageWidth,
-          headers: primaryLayout.headers as any,
-          confidence: "LOW",
-          reasons: ["Sem layout anterior para reutilizar."]
-        };
-        detectedPageLayouts.set(pNum, unresolved);
-        pageLayout = unresolved;
-        pages_with_unresolved_layout++;
+        const reconstructed = reconstructLayoutWithoutHeader(pLines, pNum, pLines[0].pageWidth, bankInferred);
+        if (reconstructed) {
+          detectedPageLayouts.set(pNum, reconstructed);
+          pageLayout = reconstructed;
+          pages_reusing_previous_layout++;
+        } else {
+          const unresolved: PageColumnLayout = {
+            pageNumber: pNum,
+            source: "UNRESOLVED",
+            pageWidth: pLines[0].pageWidth,
+            headers: primaryLayout.headers as any,
+            confidence: "LOW",
+            reasons: ["Sem layout anterior para reutilizar."]
+          };
+          detectedPageLayouts.set(pNum, unresolved);
+          pageLayout = unresolved;
+          pages_with_unresolved_layout++;
+        }
       }
     }
   }
@@ -1706,6 +1745,35 @@ export async function runPipeline(
           fileHash: file_hash!,
           nativePages
         });
+
+        if (collector && nativeRes.detectedPageLayouts) {
+          for (const [pNum, layout] of nativeRes.detectedPageLayouts.entries()) {
+            collector.recordPageLayout({
+              pageNumber: pNum,
+              layoutSource: layout.source as any,
+              layoutConfidence: layout.confidence,
+              equivalentToPage: layout.equivalentToPage,
+              detectedColumnCount: layout.headers?.length ?? 0,
+              reasons: layout.reasons || [],
+            });
+          }
+        }
+
+        if (collector && nativeRes.doubtfulRows) {
+          for (const row of nativeRes.doubtfulRows) {
+            collector.recordPhase3Row({
+              pageNumber: row.pageNumber,
+              physicalLine: row.physicalLine,
+              category: "DOUBTFUL_TRANSACTION",
+              action: "MARKED_FOR_REVISION",
+              reasonCode: "RECONSTRUCTION_DOUBT",
+              confidence: "LOW",
+              matchedSignals: [row.doubtReason],
+              textPreview: row.textPreview
+            });
+          }
+        }
+
         const parsedNative = Papa.parse<string[]>(nativeRes.csvText, { delimiter: ";", skipEmptyLines: true });
         if (parsedNative.data.length > 1) {
           combinedRows.push(...parsedNative.data.slice(1));

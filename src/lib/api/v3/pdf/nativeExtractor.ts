@@ -3,6 +3,8 @@ import { detectHeader, mapHeaders, matchCell } from "../headers";
 import { extractDate } from "../enrichment/dateExtractor";
 import { parseBrazilianMoney } from "../parsing/moneyParser";
 import { classifyNonTransactionalRow, RowClassificationContext } from "../rows/nonTransactionalClassifier";
+import { reconstructLayoutWithoutHeader } from "./layoutReconstructor";
+import { inferIssuerBank } from "../banks/issuerBank";
 
 export type NativeExtractorResult = {
   csvText: string;
@@ -10,6 +12,13 @@ export type NativeExtractorResult = {
   totalPages: number;
   extractedLinesCount: number;
   discardedLinesCount: number;
+  detectedPageLayouts: Map<number, PageColumnLayout>;
+  doubtfulRows: Array<{
+    pageNumber: number;
+    physicalLine: number;
+    textPreview: string;
+    doubtReason: string;
+  }>;
 };
 
 function mostCommon(arr: number[]): number {
@@ -189,9 +198,30 @@ export async function extractNativePdfToCsv(
     }
   }
 
-  // If no primary header layout was detected at all, abort nativa
+  // Gather first native page text for bank inference
+  let firstPageText = "";
+  const firstPageLines = pagesMap.get(args.nativePages[0]);
+  if (firstPageLines) {
+    firstPageText = firstPageLines.map(line => line.cells.map(c => c.text).join(" ")).join("\n");
+  }
+  const bankInferred = inferIssuerBank("", firstPageText);
+
+  // If no primary header layout was detected at all, attempt to reconstruct layout
   if (!primaryLayout) {
-    throw new Error("Erro na extração nativa: Cabeçalho estrutural não identificado em nenhuma página nativa.");
+    for (const pNum of args.nativePages) {
+      const pLines = pagesMap.get(pNum)!;
+      const reconstructed = reconstructLayoutWithoutHeader(pLines, pNum, pLines[0].pageWidth, bankInferred);
+      if (reconstructed) {
+        detectedPageLayouts.set(pNum, reconstructed);
+        primaryLayout = reconstructed;
+        break;
+      }
+    }
+  }
+
+  // If we still don't have a primary layout, abort
+  if (!primaryLayout) {
+    throw new Error("Falha na reconstrução estrutural do PDF nativo: não foi possível mapear as colunas com segurança.");
   }
 
   const rawHeaders = primaryLayout.headers.map((h: any) => h.originalName);
@@ -219,17 +249,31 @@ export async function extractNativePdfToCsv(
 
       if (prevLayout) {
         const resolved = validatePageDataAgainstLayout(pLines, prevLayout, pNum, pLines[0].pageWidth);
-        detectedPageLayouts.set(pNum, resolved);
+        if (resolved.source !== "UNRESOLVED") {
+          detectedPageLayouts.set(pNum, resolved);
+        } else {
+          const reconstructed = reconstructLayoutWithoutHeader(pLines, pNum, pLines[0].pageWidth, bankInferred);
+          if (reconstructed) {
+            detectedPageLayouts.set(pNum, reconstructed);
+          } else {
+            detectedPageLayouts.set(pNum, resolved);
+          }
+        }
       } else {
-        const unresolved: PageColumnLayout = {
-          pageNumber: pNum,
-          source: "UNRESOLVED",
-          pageWidth: pLines[0].pageWidth,
-          headers: primaryLayout.headers as any,
-          confidence: "LOW",
-          reasons: ["Sem layout anterior para reutilizar."]
-        };
-        detectedPageLayouts.set(pNum, unresolved);
+        const reconstructed = reconstructLayoutWithoutHeader(pLines, pNum, pLines[0].pageWidth, bankInferred);
+        if (reconstructed) {
+          detectedPageLayouts.set(pNum, reconstructed);
+        } else {
+          const unresolved: PageColumnLayout = {
+            pageNumber: pNum,
+            source: "UNRESOLVED",
+            pageWidth: pLines[0].pageWidth,
+            headers: primaryLayout.headers as any,
+            confidence: "LOW",
+            reasons: ["Sem layout anterior para reutilizar."]
+          };
+          detectedPageLayouts.set(pNum, unresolved);
+        }
       }
     }
   }
@@ -242,6 +286,7 @@ export async function extractNativePdfToCsv(
   };
 
   const csvRows: string[] = [];
+  const doubtfulRows: Array<{ pageNumber: number; physicalLine: number; textPreview: string; doubtReason: string }> = [];
   // Write header row
   csvRows.push("date;description;amount;debit;credit;balance;doc;client_name;cpf_cnpj;phone;movement_type;page;origin_lines");
 
@@ -318,6 +363,29 @@ export async function extractNativePdfToCsv(
       const creditParsed = parseBrazilianMoney(creditRaw).value;
       const balanceParsed = parseBrazilianMoney(balanceRaw).value;
 
+      // Check if the line has a doubt under reconstructed layout
+      if (pageLayout.source === "RECONSTRUCTED_WITHOUT_HEADER") {
+        let doubtReason = "";
+        const hasMoneyVal = amountRaw || debitRaw || creditRaw;
+        
+        if (!dateNormalized) {
+          doubtReason = "Data inválida ou ausente na linha transacional.";
+        } else if (hasMoneyVal && amountParsed === null && debitParsed === null && creditParsed === null) {
+          doubtReason = "Coluna de valor preenchida mas impossível de parsear monetariamente.";
+        }
+        
+        if (doubtReason) {
+          doubtfulRows.push({
+            pageNumber: pNum,
+            physicalLine: line.physicalLine,
+            textPreview: line.cells.map(c => c.text).join(" | "),
+            doubtReason
+          });
+          discardedLinesCount++;
+          continue;
+        }
+      }
+
       const dateCsv = dateNormalized;
       const descCsv = description;
       const amountCsv = formatBrNumber(amountParsed);
@@ -360,6 +428,8 @@ export async function extractNativePdfToCsv(
     pagesClassified,
     totalPages,
     extractedLinesCount,
-    discardedLinesCount
+    discardedLinesCount,
+    detectedPageLayouts,
+    doubtfulRows
   };
 }

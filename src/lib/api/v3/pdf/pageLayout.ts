@@ -19,7 +19,7 @@ export type PdfPhysicalLine = {
 
 export type PageColumnLayout = {
   pageNumber: number;
-  source: "DETECTED_HEADER" | "REUSED_PREVIOUS" | "INFERRED_GEOMETRY" | "UNRESOLVED";
+  source: "DETECTED_HEADER" | "REUSED_PREVIOUS" | "INFERRED_GEOMETRY" | "UNRESOLVED" | "RECONSTRUCTED_WITHOUT_HEADER";
   pageWidth: number;
   headers: Array<{
     originalName?: string;

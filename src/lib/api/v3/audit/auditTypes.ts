@@ -56,7 +56,8 @@ export type PageLayoutAudit = {
     | "DETECTED_HEADER"
     | "REUSED_PREVIOUS"
     | "INFERRED_GEOMETRY"
-    | "UNRESOLVED";
+    | "UNRESOLVED"
+    | "RECONSTRUCTED_WITHOUT_HEADER";
   layoutConfidence: "HIGH" | "MEDIUM" | "LOW";
   equivalentToPage?: number | null;
   detectedColumnCount?: number;
@@ -80,7 +81,8 @@ export type Phase3RowAudit = {
     | "TOTAL"
     | "EMPTY"
     | "AMBIGUOUS"
-    | "TRANSACTION_CANDIDATE";
+    | "TRANSACTION_CANDIDATE"
+    | "DOUBTFUL_TRANSACTION";
   action: string;
   reasonCode: string;
   confidence: string;

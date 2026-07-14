@@ -75,6 +75,7 @@ export class ImportAuditCollector {
     if (page.layoutSource === "REUSED_PREVIOUS") this.increment("pages_reusing_previous_layout");
     if (page.layoutSource === "INFERRED_GEOMETRY") this.increment("pages_with_adjusted_layout");
     if (page.layoutSource === "UNRESOLVED") this.increment("pages_with_unresolved_layout");
+    if (page.layoutSource === "RECONSTRUCTED_WITHOUT_HEADER") this.increment("pages_reconstructed_without_header");
   }
 
   recordPhase3Row(row: Phase3RowAudit) {
