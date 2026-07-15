@@ -35,19 +35,36 @@ export function cleanClientCandidate(candidate: string): string {
   // 1. Remove qualquer data (ex: 06/07, 06/07/2026, 06-07)
   clean = clean.split(/\b\d{1,2}[/\-.]\d{1,2}(?:[/\-.]\d{2,4})?\b/)[0];
   
-  // 2. Remove marcadores bancários/sistêmicos e tudo que vem depois
-  const stopKeywords = [
+  // 2. Marcadores bancários/sistêmicos que devem terminar o nome do cliente quando
+  //    aparecem NO MEIO/FINAL da string (não no início, pois no início são prefixos
+  //    verbais tratados por stripPrefixes).
+  const tailStopKeywords = [
     "pix enviado", "pix recebido", "ted enviada", "ted recebido", "doc enviado", "doc recebido",
     "banco", "agencia", "agência", "conta", "cpf", "cnpj", "chave", "comprovante",
-    "valor", "tarifa", "pagamento", "transferencia", "transferência"
+    "valor", "tarifa"
   ];
-  
-  for (const kw of stopKeywords) {
-    const regex = new RegExp(`\\b${kw}\\b.*`, "i");
-    clean = clean.replace(regex, "");
+  for (const kw of tailStopKeywords) {
+    // Só corta se a keyword NÃO estiver no início da string (isto é, tem texto antes).
+    const regex = new RegExp(`(.+?)\\s+\\b${kw}\\b.*`, "i");
+    const m = clean.match(regex);
+    if (m && m[1]) {
+      clean = m[1];
+    }
   }
   
-  // 3. Limpa caracteres residuais não alfabéticos do final
+  // 3. Keywords verbais/frasais só removem cauda se houver ao menos 2 palavras antes
+  //    (evita apagar tudo em strings como "PAGAMENTO RD SAUDE" que já deveriam ter
+  //    tido o prefixo removido, mas caem aqui por segurança).
+  const verbTailKeywords = ["pagamento", "transferencia", "transferência"];
+  for (const kw of verbTailKeywords) {
+    const regex = new RegExp(`^(.+?\\s+\\S+)\\s+\\b${kw}\\b.*`, "i");
+    const m = clean.match(regex);
+    if (m && m[1]) {
+      clean = m[1];
+    }
+  }
+  
+  // 4. Limpa caracteres residuais não alfabéticos do final
   clean = clean.replace(/[^A-Za-zÀ-ÿ\s'\.\-]+.*$/, "").trim();
   
   return clean;
