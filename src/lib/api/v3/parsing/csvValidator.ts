@@ -114,26 +114,6 @@ export function validateCanonicalCsv(csvText: string): CsvValidationResult {
     const pageVal = String(row[11] || "").trim();
     const originLinesVal = String(row[12] || "").trim();
 
-    // Rejeitar linhas com dados parciais insuficientes (ex: descrição e valor sem data, ou data e valor sem descrição)
-    const hasDate = dateVal.length > 0;
-    const hasDesc = descVal.length > 0;
-    const hasAmount = amountVal.length > 0 || debitVal.length > 0 || creditVal.length > 0;
-
-    if (hasDate && hasAmount && !hasDesc) {
-      errors.push({
-        line: lineNum,
-        column: "description",
-        error: "Linha transacional incompleta: possui data e valor, mas a descrição está ausente."
-      });
-    }
-    if (hasDesc && hasAmount && !hasDate) {
-      errors.push({
-        line: lineNum,
-        column: "date",
-        error: "Linha transacional incompleta: possui descrição e valor, mas a data está ausente."
-      });
-    }
-
     // Validar formato de data (AAAA-MM-DD ou vazio)
     if (dateVal) {
       const isDateValid = /^\d{4}-\d{2}-\d{2}$/.test(dateVal);
