@@ -28,9 +28,16 @@ export function matchCell(cell: string): HeaderMatch | null {
   
   if (!lower) return null;
 
-  // 1. EXACT Match
+  // 1. EXACT Match (including canonical fields directly)
   for (const [field, config] of Object.entries(ALIASES)) {
-    if (config.aliases.some(alias => alias.toLowerCase() === lower)) {
+    const isExactCanonical = 
+      field.toLowerCase() === lower || 
+      field.replace(/_/g, "").toLowerCase() === lower ||
+      field.replace(/_amount$/, "").toLowerCase() === lower ||
+      field.replace(/_number$/, "").toLowerCase() === lower ||
+      field.replace(/_date$/, "").toLowerCase() === lower;
+      
+    if (isExactCanonical || config.aliases.some(alias => alias.toLowerCase() === lower)) {
       return {
         field: field as CanonicalHeader,
         level: "EXACT",

@@ -201,4 +201,27 @@ describe("SIE V3 Header Detector & Scorer Test Suite", () => {
     expect(result.headerFailed).toBe(true);
     expect(result.headerIndex).toBe(-1);
   });
+
+  test("Cenário CT-10: Mapeamento de cabeçalhos canônicos diretamente", () => {
+    const matrix = [
+      ["date", "description", "amount", "debit", "credit", "balance", "doc", "client_name", "cpf_cnpj", "phone", "movement_type", "page", "origin_lines"],
+      ["2026-06-02", "Compra no cartão", "-15,00", "", "-15,00", "100,00", "", "", "", "", "D", "1", "[\"1:1\"]"]
+    ];
+
+    const result = detectHeader(matrix, "pdf_ocr");
+    expect(result.headerFailed).toBeUndefined();
+    expect(result.headerIndex).toBe(0);
+
+    const mapping = mapHeaders(result.headers);
+    expect(mapping.map.transaction_date).toBe("date");
+    expect(mapping.map.description).toBe("description");
+    expect(mapping.map.amount).toBe("amount");
+    expect(mapping.map.debit_amount).toBe("debit");
+    expect(mapping.map.credit_amount).toBe("credit");
+    expect(mapping.map.balance).toBe("balance");
+    expect(mapping.map.client_name).toBe("client_name");
+    expect(mapping.map.cpf_cnpj).toBe("cpf_cnpj");
+    expect(mapping.map.phone).toBe("phone");
+    expect(mapping.map.movement_type).toBe("movement_type");
+  });
 });
