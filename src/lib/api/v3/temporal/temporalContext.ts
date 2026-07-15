@@ -121,39 +121,55 @@ export function applyTemporalContextToBlocks(input: ApplyTemporalContextInput): 
     context.currentPageNumber = pageNum;
 
     const dateCell = dateIdx >= 0 ? String(row[dateIdx] ?? "").trim() : "";
-    const parsed = parseDate(dateCell);
+    let parsed = parseDate(dateCell);
     const descCell = descIdx >= 0 ? String(row[descIdx] ?? "").trim() : "";
     const hasValue = valueIdxs.some((idx) => String(row[idx] ?? "").trim().length > 0);
+
+    // Coleta datas presentes na descrição (utilizadas em fallback e conflito).
+    let descDatesUnique: string[] = [];
+    if (descIdx >= 0 && descCell) {
+      const datesInDesc = descCell.match(/\b\d{2}[\/\-.]\d{2}([\/\-.]\d{2,4})?\b/g);
+      if (datesInDesc && datesInDesc.length > 0) {
+        const parsedDescDates = datesInDesc.map(parseDate).filter(Boolean) as string[];
+        descDatesUnique = Array.from(new Set(parsedDescDates));
+      }
+    }
+
+    // Fallback: se a coluna de data está vazia e a descrição contém exatamente UMA
+    // data válida, promove-a a data explícita da linha (comum em extratos onde
+    // "07/07 pix ..." fica todo na coluna de descrição).
+    let promotedFromDescription = false;
+    if (!parsed && hasValue && descDatesUnique.length === 1) {
+      parsed = descDatesUnique[0];
+      promotedFromDescription = true;
+    }
 
     // Validação de múltiplas datas explícitas no mesmo bloco (ex: na descrição)
     // Regra: só é conflito se a coluna de data estiver preenchida (parsed != null) e divergir
     // da data presente na descrição, OU se houver múltiplas datas divergentes dentro da própria descrição.
     let multipleDates = false;
-    if (descIdx >= 0 && descCell) {
-      const datesInDesc = descCell.match(/\b\d{2}[\/\-.]\d{2}([\/\-.]\d{2,4})?\b/g);
-      if (datesInDesc && datesInDesc.length > 0) {
-        const parsedDescDates = datesInDesc.map(parseDate).filter(Boolean) as string[];
-        if (parsed) {
-          // Coluna de data preenchida: conflito se qualquer data da descrição divergir
-          if (parsedDescDates.some((d) => d !== parsed)) {
-            multipleDates = true;
-          }
-        } else {
-          // Coluna vazia: só é conflito se houver múltiplas datas divergentes na descrição
-          const uniq = new Set(parsedDescDates);
-          if (uniq.size > 1) {
-            multipleDates = true;
-          }
+    if (descDatesUnique.length > 0 && !promotedFromDescription) {
+      const originalParsed = parseDate(dateCell);
+      if (originalParsed) {
+        // Coluna de data preenchida: conflito se qualquer data da descrição divergir
+        if (descDatesUnique.some((d) => d !== originalParsed)) {
+          multipleDates = true;
+        }
+      } else {
+        // Coluna vazia: só é conflito se houver múltiplas datas divergentes na descrição
+        if (descDatesUnique.length > 1) {
+          multipleDates = true;
         }
       }
     }
 
     // Detecção de marcadores de data agrupadora
     let isDateGroupMarker = false;
-    if (parsed && !hasValue && (!descCell || descCell.length <= 10)) {
+    if (parsed && !hasValue && (!descCell || descCell.length <= 10) && !promotedFromDescription) {
       // Se não tem valor, descrição vazia ou muito curta (apenas o próprio dia/mês), e tem data
       isDateGroupMarker = true;
     }
+
 
     let assignment: TemporalAssignmentKind = "MISSING";
     let resolvedDate: string | null = null;
@@ -166,7 +182,7 @@ export function applyTemporalContextToBlocks(input: ApplyTemporalContextInput): 
       reasonCode = "MULTIPLE_EXPLICIT_DATES";
       blocks_with_temporal_conflict++;
       invalidateContext("TEMPORAL_CONFLICT");
-    } else if (parsed && block.hasExplicitDate) {
+    } else if (parsed && (block.hasExplicitDate || promotedFromDescription)) {
       // Bloco possui data explícita
       if (!isValidDateString(parsed)) {
         assignment = "CONFLICT";
