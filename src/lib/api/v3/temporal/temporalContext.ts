@@ -126,14 +126,24 @@ export function applyTemporalContextToBlocks(input: ApplyTemporalContextInput): 
     const hasValue = valueIdxs.some((idx) => String(row[idx] ?? "").trim().length > 0);
 
     // Validação de múltiplas datas explícitas no mesmo bloco (ex: na descrição)
+    // Regra: só é conflito se a coluna de data estiver preenchida (parsed != null) e divergir
+    // da data presente na descrição, OU se houver múltiplas datas divergentes dentro da própria descrição.
     let multipleDates = false;
     if (descIdx >= 0 && descCell) {
       const datesInDesc = descCell.match(/\b\d{2}[\/\-.]\d{2}([\/\-.]\d{2,4})?\b/g);
       if (datesInDesc && datesInDesc.length > 0) {
-        // Se houver data na descrição diferente da data da coluna
-        const parsedDescDates = datesInDesc.map(parseDate).filter(Boolean);
-        if (parsedDescDates.some((d) => d !== parsed)) {
-          multipleDates = true;
+        const parsedDescDates = datesInDesc.map(parseDate).filter(Boolean) as string[];
+        if (parsed) {
+          // Coluna de data preenchida: conflito se qualquer data da descrição divergir
+          if (parsedDescDates.some((d) => d !== parsed)) {
+            multipleDates = true;
+          }
+        } else {
+          // Coluna vazia: só é conflito se houver múltiplas datas divergentes na descrição
+          const uniq = new Set(parsedDescDates);
+          if (uniq.size > 1) {
+            multipleDates = true;
+          }
         }
       }
     }
