@@ -120,9 +120,56 @@ export function inferIssuerBank(
       if (cleanBody.includes("banco cooperativo sicredi s.a.") || cleanBody.includes("banco cooperativo sicredi sa")) return "banco sicredi";
       if (cleanBody.includes("banco cooperativo sicoob s.a.") || cleanBody.includes("banco cooperativo sicoob sa")) return "banco sicoob";
     }
+
+    // --- PRIORIDADE 5: Códigos COMPE de banco em expressões como "BCO:237" ---
+    const bankFromCode = inferBankFromCompeCode(cleanBody);
+    if (bankFromCode) return bankFromCode;
   }
 
   return null;
+}
+
+// Mapa de códigos COMPE para IssuerBank
+const COMPE_CODE_TO_BANK: Record<string, IssuerBank> = {
+  "237": "banco bradesco",
+  "260": "banco nubank",
+  "077": "banco inter",
+  "341": "banco itaú",
+  "104": "banco caixa",
+  "001": "banco do brasil",
+  "033": "banco santander",
+  "748": "banco sicredi",
+  "756": "banco sicoob",
+};
+
+function inferBankFromCompeCode(text: string): IssuerBank | null {
+  // Procura padrões como "bco:237", "bco 237", "banco 237" seguidos do código de 3 dígitos
+  const re = /\bbco\s*[:\s]\s*(\d{3})\b|\bbanco\s*[:\s]\s*(\d{3})\b/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const code = m[1] || m[2];
+    if (code && COMPE_CODE_TO_BANK[code]) return COMPE_CODE_TO_BANK[code];
+  }
+  return null;
+}
+
+/**
+ * Traduz o identificador interno IssuerBank (ex: "banco bradesco") para a razão social legível (ex: "Banco Bradesco S.A.").
+ */
+export function getHumanBankName(bank: IssuerBank | string | null | undefined): string {
+  if (!bank) return "";
+  switch (bank) {
+    case "banco nubank": return "Nu Pagamentos S.A.";
+    case "banco inter": return "Banco Inter S.A.";
+    case "banco bradesco": return "Banco Bradesco S.A.";
+    case "banco itaú": return "Itaú Unibanco S.A.";
+    case "banco caixa": return "Caixa Econômica Federal";
+    case "banco do brasil": return "Banco do Brasil S.A.";
+    case "banco santander": return "Banco Santander S.A.";
+    case "banco sicredi": return "Banco Cooperativo Sicredi S.A.";
+    case "banco sicoob": return "Banco Cooperativo Sicoob S.A.";
+    default: return String(bank);
+  }
 }
 
 export function inferBankNameV3(
