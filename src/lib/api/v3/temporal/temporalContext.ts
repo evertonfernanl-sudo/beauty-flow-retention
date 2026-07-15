@@ -182,7 +182,7 @@ export function applyTemporalContextToBlocks(input: ApplyTemporalContextInput): 
       reasonCode = "MULTIPLE_EXPLICIT_DATES";
       blocks_with_temporal_conflict++;
       invalidateContext("TEMPORAL_CONFLICT");
-    } else if (parsed && block.hasExplicitDate) {
+    } else if (parsed && (block.hasExplicitDate || promotedFromDescription)) {
       // Bloco possui data explícita
       if (!isValidDateString(parsed)) {
         assignment = "CONFLICT";
