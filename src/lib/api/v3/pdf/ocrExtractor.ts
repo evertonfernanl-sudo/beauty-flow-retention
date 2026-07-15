@@ -324,6 +324,7 @@ ATENÇÃO REGRAS OBRIGATÓRIAS:
     const csvRows: string[] = [];
     csvRows.push("date;description;amount;debit;credit;balance;doc;client_name;cpf_cnpj;phone;movement_type;page;origin_lines");
 
+    let txIdx = 1;
     for (const t of transactions) {
       const dateVal = String(t.date ?? "").trim();
       const descVal = String(t.description ?? "").trim();
@@ -338,30 +339,8 @@ ATENÇÃO REGRAS OBRIGATÓRIAS:
       const movementTypeVal = String(t.movement_type ?? "").trim();
       const pageVal = String(pageIdx);
       
-      let sanitizedOriginLines: string[] = [];
-      const rawOriginList = Array.isArray(t.origin_lines)
-        ? t.origin_lines.map(String)
-        : t.origin_lines
-          ? [String(t.origin_lines)]
-          : [];
-
-      for (const item of rawOriginList) {
-        const cleanItem = String(item).trim();
-        const match = cleanItem.match(/^(\d+)\s*:\s*(\d+)/);
-        if (match) {
-          sanitizedOriginLines.push(`${match[1]}:${match[2]}`);
-        } else {
-          const numberMatch = cleanItem.match(/\d+/);
-          const lineNum = numberMatch ? numberMatch[0] : "1";
-          sanitizedOriginLines.push(`${pageIdx}:${lineNum}`);
-        }
-      }
-
-      if (sanitizedOriginLines.length === 0) {
-        sanitizedOriginLines.push(`${pageIdx}:1`);
-      }
-
-      const originLinesVal = JSON.stringify(sanitizedOriginLines);
+      const originLinesVal = JSON.stringify([`${pageIdx}:${txIdx}`]);
+      txIdx++;
 
       const csvLine = [
         escapeCsvCell(dateVal),
