@@ -19,7 +19,7 @@ import {
 } from "./ntieb/rules";
 import { assembleBlocks } from "./blocks/blockAssembler";
 import { captureExtractSummary, validateBalance, type ExtractSummary } from "./validation/balanceValidator";
-import { IssuerBank, inferIssuerBank } from "./banks/issuerBank";
+import { IssuerBank, inferIssuerBank, getHumanBankName } from "./banks/issuerBank";
 import { PageColumnLayout, PdfPhysicalLine, PdfPhysicalCell, compareDetectedLayouts, validatePageDataAgainstLayout, alignPhysicalCells } from "./pdf/pageLayout";
 import { classifyNonTransactionalRow, RowClassificationContext } from "./rows/nonTransactionalClassifier";
 import { applyTemporalContextToBlocks } from "./temporal/temporalContext";
