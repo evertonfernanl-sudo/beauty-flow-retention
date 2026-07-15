@@ -338,14 +338,30 @@ ATENÇÃO REGRAS OBRIGATÓRIAS:
       const movementTypeVal = String(t.movement_type ?? "").trim();
       const pageVal = String(pageIdx);
       
-      let originLinesVal = "";
-      if (Array.isArray(t.origin_lines)) {
-        originLinesVal = JSON.stringify(t.origin_lines);
-      } else if (t.origin_lines) {
-        originLinesVal = JSON.stringify([String(t.origin_lines)]);
-      } else {
-        originLinesVal = JSON.stringify([`${pageIdx}:1`]);
+      let sanitizedOriginLines: string[] = [];
+      const rawOriginList = Array.isArray(t.origin_lines)
+        ? t.origin_lines.map(String)
+        : t.origin_lines
+          ? [String(t.origin_lines)]
+          : [];
+
+      for (const item of rawOriginList) {
+        const cleanItem = String(item).trim();
+        const match = cleanItem.match(/^(\d+)\s*:\s*(\d+)/);
+        if (match) {
+          sanitizedOriginLines.push(`${match[1]}:${match[2]}`);
+        } else {
+          const numberMatch = cleanItem.match(/\d+/);
+          const lineNum = numberMatch ? numberMatch[0] : "1";
+          sanitizedOriginLines.push(`${pageIdx}:${lineNum}`);
+        }
       }
+
+      if (sanitizedOriginLines.length === 0) {
+        sanitizedOriginLines.push(`${pageIdx}:1`);
+      }
+
+      const originLinesVal = JSON.stringify(sanitizedOriginLines);
 
       const csvLine = [
         escapeCsvCell(dateVal),
