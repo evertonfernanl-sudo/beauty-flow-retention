@@ -1381,11 +1381,30 @@ export async function resolveRow(
     }
   }
 
-  // Se ainda assim não foi identificado nenhum cliente na linha nem na descrição, associa ao Banco do Extrato
-  if (!clientName && issuerBank) {
-    clientName = issuerBank;
-    canonical.client_name = issuerBank;
-    reasons.push(`cliente atribuído ao banco emissor: ${issuerBank}`);
+  // Fallback do nome do cliente quando não foi identificado na linha nem na descrição
+  if (!clientName) {
+    const desc = canonical.description ?? "";
+    const normDesc = desc.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const bankOpKeywords = /\b(tarifa|encargo|iof|juros|saldo|aplicacao|resgate|bco|age|cta)\b/;
+    const isBankOperation = bankOpKeywords.test(normDesc);
+
+    if (isBankOperation && issuerBank) {
+      const humanBank = getHumanBankName(issuerBank);
+      clientName = humanBank;
+      canonical.client_name = humanBank;
+      reasons.push(`cliente atribuído à razão social do banco emissor: ${humanBank}`);
+    } else if (desc.trim()) {
+      // Usa a descrição higienizada como nome de cliente
+      const cleaned = desc.replace(/\s+/g, " ").trim();
+      clientName = cleaned;
+      canonical.client_name = cleaned;
+      reasons.push(`cliente atribuído a partir da descrição higienizada`);
+    } else if (issuerBank) {
+      const humanBank = getHumanBankName(issuerBank);
+      clientName = humanBank;
+      canonical.client_name = humanBank;
+      reasons.push(`cliente atribuído ao banco emissor: ${humanBank}`);
+    }
   }
 
   // Resolução: CPF → telefone → documento → nome
