@@ -224,4 +224,21 @@ describe("SIE V3 Header Detector & Scorer Test Suite", () => {
     expect(mapping.map.phone).toBe("phone");
     expect(mapping.map.movement_type).toBe("movement_type");
   });
+
+  test("Cenário CT-11: Ignorar colunas estruturais page e origin_lines", () => {
+    const matrix = [
+      ["date", "description", "amount", "page", "origin_lines"],
+      ["2026-06-02", "Compra no cartão", "-15,00", "1", "[\"1:1\"]"]
+    ];
+
+    const result = detectHeader(matrix, "pdf_ocr");
+    expect(result.headerFailed).toBeUndefined();
+    expect(result.headerIndex).toBe(0);
+
+    const mapping = mapHeaders(result.headers);
+    expect(mapping.map.debit_amount).toBeUndefined();
+    expect(mapping.map.credit_amount).toBeUndefined();
+    expect((mapping.map as any).page).toBeUndefined();
+    expect((mapping.map as any).origin_lines).toBeUndefined();
+  });
 });

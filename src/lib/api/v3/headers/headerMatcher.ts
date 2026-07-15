@@ -28,6 +28,11 @@ export function matchCell(cell: string): HeaderMatch | null {
   
   if (!lower) return null;
 
+  // Ignorar colunas estruturais e de controle de metadados
+  if (lower === "page" || lower === "origin_lines" || lower === "originlines") {
+    return null;
+  }
+
   // 1. EXACT Match (including canonical fields directly)
   for (const [field, config] of Object.entries(ALIASES)) {
     const isExactCanonical = 
