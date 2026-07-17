@@ -358,6 +358,7 @@ function AgendaPage() {
         .gte("transaction_date", toISODate(expensesRange.from))
         .lt("transaction_date", toISODate(expensesRange.to))
         .order("transaction_date", { ascending: false })
+        .order("created_at", { ascending: true })
         .limit(500);
       if (error) throw error;
       return data ?? [];
@@ -389,6 +390,7 @@ function AgendaPage() {
         .gte("transaction_date", toISODate(incomeRange.from))
         .lt("transaction_date", toISODate(incomeRange.to))
         .order("transaction_date", { ascending: false })
+        .order("created_at", { ascending: true })
         .limit(500);
       if (error) throw error;
       return data ?? [];

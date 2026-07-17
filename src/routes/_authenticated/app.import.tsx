@@ -154,8 +154,13 @@ function ImportV3Page() {
 
   const batchApplyMut = useMutation({
     mutationFn: async (rowIds: string[]) => {
+      const sortedRowIds = [...rowIds].sort((a, b) => {
+        const rowA = rowsQ.data?.find((r) => r.id === a);
+        const rowB = rowsQ.data?.find((r) => r.id === b);
+        return (rowA?.row_index ?? 0) - (rowB?.row_index ?? 0);
+      });
       let applied = 0;
-      for (const rowId of rowIds) {
+      for (const rowId of sortedRowIds) {
         await applyRowV3({ data: { rowId } });
         applied++;
       }
