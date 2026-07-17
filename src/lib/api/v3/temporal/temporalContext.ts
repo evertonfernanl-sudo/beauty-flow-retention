@@ -98,17 +98,18 @@ export function applyTemporalContextToBlocks(input: ApplyTemporalContextInput): 
       const category = item.row.category;
       const text = String(item.row.originalText ?? "").toLowerCase();
 
-      // Critérios de invalidação por saldos, resumos e totais
-      if (category === "BALANCE") {
+      // Critérios de invalidação por saldos, resumos e totais.
+      // IMPORTANTE: NÃO invalidamos por INSTITUTIONAL (agência/conta/CNPJ/titular)
+      // nem por METADATA "período", pois em extratos multipágina esses cabeçalhos
+      // se repetem em cada página e quebrariam a herança cronológica de datas
+      // entre as páginas. Só o encerramento efetivo (saldo final, resumo, total)
+      // invalida o contexto.
+      if (category === "BALANCE" && /\b(saldo\s+final|saldo\s+anterior|saldo\s+em\s+\d{2}\/\d{2}|saldo\s+do\s+dia)\b/i.test(text)) {
         invalidateContext("FINAL_BALANCE");
       } else if (category === "SUMMARY") {
         invalidateContext("SUMMARY_BOUNDARY");
       } else if (category === "TOTAL") {
         invalidateContext("SUMMARY_BOUNDARY");
-      } else if (category === "METADATA" && /\b(periodo|de \d{2}\/\d{2} a \d{2}\/\d{2})\b/i.test(text)) {
-        invalidateContext("PERIOD_CHANGE");
-      } else if (category === "INSTITUTIONAL" && /\b(agencia|conta|cnpj|titular)\b/i.test(text)) {
-        invalidateContext("SECTION_CHANGE");
       }
       continue;
     }
