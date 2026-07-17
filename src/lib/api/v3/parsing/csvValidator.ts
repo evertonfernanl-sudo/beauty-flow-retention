@@ -126,10 +126,10 @@ export function validateCanonicalCsv(csvText: string): CsvValidationResult {
       }
     }
 
-    // Validar formato numérico monetário (deve ser em formato brasileiro com vírgula ou vazio)
+    // Validar formato numérico monetário (deve ser em formato brasileiro com vírgula/ponto ou vazio)
     const validateNumberFormat = (val: string, colName: string) => {
       if (!val) return;
-      // Aceita números como -1250,55, +170,00 ou 1.250,00. Aceita também R$, parênteses, espaços e marcadores de D/C.
+      // Aceita números como -1250,55, +170,00 ou 1.250,00. Aceita também R$, parênteses, espaços, marcadores de D/C e notação com ponto decimal.
       const cleaned = val
         .replace(/R\$/gi, "")
         .replace(/\s+/g, "")
@@ -137,12 +137,16 @@ export function validateCanonicalCsv(csvText: string): CsvValidationResult {
         .replace(/^[+-]/, "")
         .replace(/[+-]$/, "")
         .replace(/[DC]$/i, "");
-      const isNumeric = /^\d+(?:\.\d{3})*(?:\,\d{2})?$/.test(cleaned) || /^\d+(?:\,\d{2})?$/.test(cleaned);
+      const isNumeric = 
+        /^\d+(?:\.\d{3})*(?:\,\d{2})?$/.test(cleaned) || 
+        /^\d+(?:\,\d{2})?$/.test(cleaned) ||
+        /^\d+(?:,\d{3})*(?:\.\d{2})?$/.test(cleaned) || 
+        /^\d+(?:\.\d{2})?$/.test(cleaned);
       if (!isNumeric) {
         errors.push({
           line: lineNum,
           column: colName,
-          error: `Valor monetário "${val}" inválido. Deve usar pontuação decimal brasileira (vírgula).`
+          error: `Valor monetário "${val}" inválido. Deve usar pontuação decimal brasileira (vírgula) ou padrão internacional (ponto).`
         });
       }
     };

@@ -72,12 +72,11 @@ describe("csvValidator Test Suite", () => {
     expect(res.errors[0].error.includes("Data com formato inválido")).toBeTrue();
   });
 
-  test("Cenário 6: Erro se valor monetário não usar vírgula decimal", () => {
+  test("Cenário 6: Sucesso se valor monetário usar ponto decimal", () => {
     const csv = `${validHeader}\n2026-07-14;Pix recebido;150.00;;;1000,00;123;Maria;123.456.789-00;11999999999;PIX;1;["1:12"]`;
     const res = validateCanonicalCsv(csv);
-    expect(res.valid).toBeFalse();
-    expect(res.errors[0].column).toBe("amount");
-    expect(res.errors[0].error.includes("brasileira")).toBeTrue();
+    expect(res.valid).toBeTrue();
+    expect(res.errors.length).toBe(0);
   });
 
   test("Cenário 7: Suporte a aspas e delimitadores escapados (RFC 4180)", () => {
