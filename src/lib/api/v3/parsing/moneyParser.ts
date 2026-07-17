@@ -46,15 +46,20 @@ export function parseBrazilianMoney(value: unknown): ParsedMoney {
   if (commas === 1 && dots >= 1) {
     // BR: "1.234,56"
     normalized = cleaned.replace(/\./g, "").replace(",", ".");
-  } else if (dots >= 2 && commas === 0) {
-    // BR sem centavos: "1.234.567"
-    normalized = cleaned.replace(/\./g, "");
+  } else if (commas === 0 && dots >= 1) {
+    if (/\.\d{2}$/.test(cleaned)) {
+      // O último ponto é decimal, os outros são de milhar (Inconsistência comum do OCR, ex: "1.196.26" -> "1196.26")
+      const lastDotIdx = cleaned.lastIndexOf(".");
+      const integerPart = cleaned.slice(0, lastDotIdx).replace(/\./g, "");
+      const decimalPart = cleaned.slice(lastDotIdx + 1);
+      normalized = `${integerPart}.${decimalPart}`;
+    } else {
+      // Caso contrário, todos os pontos são de milhar (ex: "1.234.567" -> "1234567" ou "1.234" -> "1234")
+      normalized = cleaned.replace(/\./g, "");
+    }
   } else if (commas === 1 && dots === 0) {
     // BR simplificado: "123,45"
     normalized = cleaned.replace(",", ".");
-  } else if (dots === 1 && commas === 0) {
-    // US padrão: "1234.56"
-    normalized = cleaned;
   } else if (commas === 0 && dots === 0) {
     normalized = cleaned;
   } else {

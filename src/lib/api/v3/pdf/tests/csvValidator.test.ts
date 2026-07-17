@@ -105,4 +105,11 @@ describe("csvValidator Test Suite", () => {
     expect(res.valid).toBeTrue();
     expect(res.errors.length).toBe(0);
   });
+
+  test("Cenário 11: Sucesso com valores contendo pontos como separador de milhar e centavos (ex: 1.196.26 C)", () => {
+    const csv = `${validHeader}\n2026-07-14;Compra;1.196.26 C;1.237.01 C;;;123;Maria;123.456.789-00;11999999999;PIX;1;["1:12"]`;
+    const res = validateCanonicalCsv(csv);
+    expect(res.valid).toBeTrue();
+    expect(res.errors.length).toBe(0);
+  });
 });

@@ -141,7 +141,8 @@ export function validateCanonicalCsv(csvText: string): CsvValidationResult {
         /^\d+(?:\.\d{3})*(?:\,\d{2})?$/.test(cleaned) || 
         /^\d+(?:\,\d{2})?$/.test(cleaned) ||
         /^\d+(?:,\d{3})*(?:\.\d{2})?$/.test(cleaned) || 
-        /^\d+(?:\.\d{2})?$/.test(cleaned);
+        /^\d+(?:\.\d{2})?$/.test(cleaned) ||
+        /^\d+(?:\.\d{3})*(?:\.\d{2})?$/.test(cleaned);
       if (!isNumeric) {
         errors.push({
           line: lineNum,
