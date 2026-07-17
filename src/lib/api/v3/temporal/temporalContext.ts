@@ -104,7 +104,7 @@ export function applyTemporalContextToBlocks(input: ApplyTemporalContextInput): 
       // se repetem em cada página e quebrariam a herança cronológica de datas
       // entre as páginas. Só o encerramento efetivo (saldo final, resumo, total)
       // invalida o contexto.
-      if (category === "BALANCE" && /\b(saldo\s+final|saldo\s+anterior|saldo\s+em\s+\d{2}\/\d{2}|saldo\s+do\s+dia)\b/i.test(text)) {
+      if (category === "BALANCE" && /\b(saldo\s+final|saldo\s+em\s+\d{2}\/\d{2}\/\d{2,4}\s*$)\b/i.test(text)) {
         invalidateContext("FINAL_BALANCE");
       } else if (category === "SUMMARY") {
         invalidateContext("SUMMARY_BOUNDARY");
