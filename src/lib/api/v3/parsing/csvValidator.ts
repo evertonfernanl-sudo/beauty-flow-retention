@@ -129,8 +129,14 @@ export function validateCanonicalCsv(csvText: string): CsvValidationResult {
     // Validar formato numérico monetário (deve ser em formato brasileiro com vírgula ou vazio)
     const validateNumberFormat = (val: string, colName: string) => {
       if (!val) return;
-      // Aceita números como -1250,55, +170,00 ou 1.250,00. Não aceita formato misto inconsistente.
-      const cleaned = val.replace(/\s+/g, "").replace(/^[+-]/, "");
+      // Aceita números como -1250,55, +170,00 ou 1.250,00. Aceita também R$, parênteses, espaços e marcadores de D/C.
+      const cleaned = val
+        .replace(/R\$/gi, "")
+        .replace(/\s+/g, "")
+        .replace(/[\(\)]/g, "")
+        .replace(/^[+-]/, "")
+        .replace(/[+-]$/, "")
+        .replace(/[DC]$/i, "");
       const isNumeric = /^\d+(?:\.\d{3})*(?:\,\d{2})?$/.test(cleaned) || /^\d+(?:\,\d{2})?$/.test(cleaned);
       if (!isNumeric) {
         errors.push({

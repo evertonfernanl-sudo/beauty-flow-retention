@@ -48,6 +48,8 @@ describe("SIE V3 Money Parser & Sign Detector Test Suite", () => {
 
     expect(parseBrazilianMoney("1.234,56").value).toBe(1234.56);
     expect(parseBrazilianMoney("1234.56").value).toBe(1234.56);
+    expect(parseBrazilianMoney("300,00 C").value).toBe(300);
+    expect(parseBrazilianMoney("500,00 c").value).toBe(500);
   });
 
   test("Cenários inválidos e de borda", () => {

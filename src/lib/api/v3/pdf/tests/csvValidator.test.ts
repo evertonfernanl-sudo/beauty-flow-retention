@@ -99,4 +99,11 @@ describe("csvValidator Test Suite", () => {
     expect(res.valid).toBeTrue();
     expect(res.errors.length).toBe(0);
   });
+
+  test("Cenário 10: Sucesso com valores monetários contendo R$, sufixos D/C e espaços", () => {
+    const csv = `${validHeader}\n2026-07-14;Compra;-R$ 295,39;300,00 C;150,00 D;R$ 1.000,00;123;Maria;123.456.789-00;11999999999;PIX;1;["1:12"]`;
+    const res = validateCanonicalCsv(csv);
+    expect(res.valid).toBeTrue();
+    expect(res.errors.length).toBe(0);
+  });
 });

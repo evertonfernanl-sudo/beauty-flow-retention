@@ -33,7 +33,7 @@ export function parseBrazilianMoney(value: unknown): ParsedMoney {
     .replace(/[\(\)]/g, "")
     .replace(/^-/, "")
     .replace(/-$/, "")
-    .replace(/[Dd]$/i, "");
+    .replace(/[DdCc]$/i, "");
 
   if (!cleaned) {
     return { value: null, sign: "UNKNOWN", raw: rawStr, reasonCode: "NO_DIGITS" };
