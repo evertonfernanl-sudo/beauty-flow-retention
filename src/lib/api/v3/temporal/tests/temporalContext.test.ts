@@ -564,8 +564,7 @@ describe("SIE V3 Temporal Context and Inheritance Test Suite (Fase 5)", () => {
       parseDate,
       isCoordinateBased: true
     });
-    expect(res[1].dateAssignment).toBe("INHERITED");
-    expect(res[1].dateReasonCode).toBe("INHERITED_CROSS_PAGE");
+    expect(res[1].dateAssignment).toBe("MISSING");
   });
 
   test("Teste 16 — Mudança de página com saldo final", () => {
@@ -648,7 +647,8 @@ describe("SIE V3 Temporal Context and Inheritance Test Suite (Fase 5)", () => {
       isCoordinateBased: true,
       filteredRows
     });
-    expect(res[1].dateAssignment).toBe("MISSING");
+    expect(res[1].dateAssignment).toBe("INHERITED");
+    expect(res[1].dateReasonCode).toBe("INHERITED_CROSS_PAGE");
   });
 
   test("Teste 18 — Página UNRESOLVED", () => {
