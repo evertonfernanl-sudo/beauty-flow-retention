@@ -719,7 +719,7 @@ describe("SIE V3 Temporal Context and Inheritance Test Suite (Fase 5)", () => {
     expect(res[1].dateAssignment).toBe("MISSING");
   });
 
-  test("Teste 20 — Duas datas no mesmo bloco", () => {
+  test("Teste 20 — Duas datas no mesmo bloco (coluna de data tem prioridade e é mantida)", () => {
     const blocks: AssembledBlock[] = [{
       row: ["10/07/2026", "PIX ENVIADO EM 11/07/2026", "10,00"],
       pageStart: 1,
@@ -738,8 +738,8 @@ describe("SIE V3 Temporal Context and Inheritance Test Suite (Fase 5)", () => {
       parseDate,
       isCoordinateBased: true
     });
-    expect(res[0].dateAssignment).toBe("CONFLICT");
-    expect(res[0].dateReasonCode).toBe("MULTIPLE_EXPLICIT_DATES");
+    expect(res[0].dateAssignment).toBe("EXPLICIT");
+    expect(res[0].dateNormalized).toBe("2026-07-10");
   });
 
   test("Teste 21 — Data explícita após contexto antigo", () => {
@@ -1067,5 +1067,37 @@ describe("SIE V3 Temporal Context and Inheritance Test Suite (Fase 5)", () => {
 
     expect(res[0].dateAssignment).toBe("EXPLICIT");
     expect(res[0].dateNormalized).toBe("2026-06-08");
+  });
+
+  test("Teste 32 — Data completa na descrição (como 4/5/12) não conflita com data explícita da coluna", () => {
+    const blocks: AssembledBlock[] = [{
+      row: ["25/06/2026", "RENDIMENTOS POUP FACIL-DEPOS A PARTIR 4/5/12", "10,00"],
+      pageStart: 1,
+      pageEnd: 1,
+      originLines: [{ pageNumber: 1, physicalLine: 1 }],
+      hasExplicitDate: true,
+      hasExplicitValue: true,
+      isAmbiguous: false,
+      ambiguityReasons: []
+    }];
+
+    const customParse = (s: string): string | null => {
+      const clean = s.trim();
+      if (clean === "25/06/2026") return "2026-06-25";
+      if (clean === "4/5/12") return "2012-05-04";
+      return null;
+    };
+
+    const res = applyTemporalContextToBlocks({
+      blocks,
+      dateIdx: 0,
+      valueIdxs: [2],
+      descIdx: 1,
+      parseDate: customParse,
+      isCoordinateBased: true
+    });
+
+    expect(res[0].dateAssignment).toBe("EXPLICIT");
+    expect(res[0].dateNormalized).toBe("2026-06-25");
   });
 });

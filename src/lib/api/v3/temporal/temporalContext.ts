@@ -171,12 +171,8 @@ export function applyTemporalContextToBlocks(input: ApplyTemporalContextInput): 
     if (descDatesUnique.length > 0 && !promotedFromDescription) {
       const originalParsed = parseDate(dateCell);
       if (originalParsed) {
-        // Coluna de data preenchida: só há conflito quando a descrição traz outra
-        // data COMPLETA (com ano) divergente. Datas curtas DD/MM são mantidas como
-        // evidência semântica da descrição e não substituem a data de lançamento.
-        if (descDatesWithExplicitYear.some((d) => d !== originalParsed)) {
-          multipleDates = true;
-        }
+        // Nova regra: se a coluna data possui uma data válida, essa informação é mantida e soberana.
+        // Não permitimos que datas extraídas da descrição invalidem ou impeçam a data explícita da coluna.
       } else {
         // Coluna vazia: só é conflito se houver múltiplas datas divergentes na descrição
         if (descDatesUnique.length > 1) {
