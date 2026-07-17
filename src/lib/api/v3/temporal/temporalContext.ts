@@ -127,12 +127,31 @@ export function applyTemporalContextToBlocks(input: ApplyTemporalContextInput): 
     const hasValue = valueIdxs.some((idx) => String(row[idx] ?? "").trim().length > 0);
 
     // Coleta datas presentes na descrição (utilizadas em fallback e conflito).
+    // Datas curtas (DD/MM) em descrições bancárias normalmente representam a data
+    // operacional exibida no histórico, enquanto a coluna de data representa a data
+    // contábil/lançamento. Elas não devem apagar uma data explícita já extraída.
+    const descDateCandidates: Array<{ raw: string; parsed: string; hasExplicitYear: boolean }> = [];
     let descDatesUnique: string[] = [];
+    let descDatesWithExplicitYear: string[] = [];
     if (descIdx >= 0 && descCell) {
-      const datesInDesc = descCell.match(/\b\d{2}[\/\-.]\d{2}([\/\-.]\d{2,4})?\b/g);
+      const datesInDesc = descCell.match(/\b\d{1,2}[\/\-.]\d{1,2}([\/\-.]\d{2,4})?\b/g);
       if (datesInDesc && datesInDesc.length > 0) {
-        const parsedDescDates = datesInDesc.map(parseDate).filter(Boolean) as string[];
+        for (const rawDate of datesInDesc) {
+          const parsedDescDate = parseDate(rawDate);
+          if (!parsedDescDate) continue;
+          descDateCandidates.push({
+            raw: rawDate,
+            parsed: parsedDescDate,
+            hasExplicitYear: /^\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}$/.test(rawDate.trim()),
+          });
+        }
+        const parsedDescDates = descDateCandidates.map((candidate) => candidate.parsed);
         descDatesUnique = Array.from(new Set(parsedDescDates));
+        descDatesWithExplicitYear = Array.from(new Set(
+          descDateCandidates
+            .filter((candidate) => candidate.hasExplicitYear)
+            .map((candidate) => candidate.parsed)
+        ));
       }
     }
 
@@ -152,8 +171,10 @@ export function applyTemporalContextToBlocks(input: ApplyTemporalContextInput): 
     if (descDatesUnique.length > 0 && !promotedFromDescription) {
       const originalParsed = parseDate(dateCell);
       if (originalParsed) {
-        // Coluna de data preenchida: conflito se qualquer data da descrição divergir
-        if (descDatesUnique.some((d) => d !== originalParsed)) {
+        // Coluna de data preenchida: só há conflito quando a descrição traz outra
+        // data COMPLETA (com ano) divergente. Datas curtas DD/MM são mantidas como
+        // evidência semântica da descrição e não substituem a data de lançamento.
+        if (descDatesWithExplicitYear.some((d) => d !== originalParsed)) {
           multipleDates = true;
         }
       } else {

@@ -647,7 +647,8 @@ describe("SIE V3 Temporal Context and Inheritance Test Suite (Fase 5)", () => {
       isCoordinateBased: true,
       filteredRows
     });
-    expect(res[1].dateAssignment).toBe("MISSING");
+    expect(res[1].dateAssignment).toBe("INHERITED");
+    expect(res[1].dateReasonCode).toBe("INHERITED_CROSS_PAGE");
   });
 
   test("Teste 18 — Página UNRESOLVED", () => {
@@ -1041,5 +1042,30 @@ describe("SIE V3 Temporal Context and Inheritance Test Suite (Fase 5)", () => {
       meta
     });
     expect(meta.temporal_context_invalidations).toBeGreaterThan(0); // END_OF_FILE no fim do arquivo invalidou
+  });
+
+  test("Teste 31 — Data curta na descrição não conflita com data explícita da coluna", () => {
+    const blocks: AssembledBlock[] = [{
+      row: ["08/06/2026", "DES: RD SAUDE 07/06", "86,00"],
+      pageStart: 2,
+      pageEnd: 2,
+      originLines: [{ pageNumber: 2, physicalLine: 7 }],
+      hasExplicitDate: true,
+      hasExplicitValue: true,
+      isAmbiguous: false,
+      ambiguityReasons: []
+    }];
+
+    const res = applyTemporalContextToBlocks({
+      blocks,
+      dateIdx: 0,
+      valueIdxs: [2],
+      descIdx: 1,
+      parseDate,
+      isCoordinateBased: true
+    });
+
+    expect(res[0].dateAssignment).toBe("EXPLICIT");
+    expect(res[0].dateNormalized).toBe("2026-06-08");
   });
 });
