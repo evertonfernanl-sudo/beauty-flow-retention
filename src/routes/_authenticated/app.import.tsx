@@ -2,13 +2,21 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Sparkles, Upload, Trash2, ShieldCheck, FileText, CheckCircle2, AlertCircle, XCircle, Undo2 } from "lucide-react";
+import { Sparkles, Upload, Trash2, ShieldCheck, FileText, CheckCircle2, AlertCircle, XCircle, Undo2, Download, ChevronDown, FileSpreadsheet, Image } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentProfile } from "@/lib/hooks/use-current-profile";
+import * as XLSX from "xlsx";
+import { jsPDF } from "jspdf";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   registerImportV3,
   applyRowV3,
@@ -37,6 +45,323 @@ const formatDateBr = (dateStr: string | null | undefined) => {
     return `${parts[2]}/${parts[1]}/${parts[0]}`;
   }
   return dateStr;
+};
+
+// Export helpers
+const handleExportXlsx = (imp: any, rows: any[]) => {
+  const data = rows.map((r, index) => {
+    const c = r.canonical ?? {};
+    const sugg = r.suggestions ?? {};
+    return {
+      "Linha": r.row_index ?? (index + 1),
+      "Cliente Extrato": c.client_name ?? "—",
+      "Cliente Base": sugg.client?.name ?? "—",
+      "Data": formatDateBr(c.transaction_date),
+      "Descrição": c.description ?? "—",
+      "Valor": c.amount != null ? Number(c.amount) : 0,
+      "Tipo": sugg.subtype ?? sugg.type ?? "—",
+      "Confiança": r.confidence ?? 0,
+      "Status": r.status === "applied" ? "Aplicado" : r.status === "skipped" ? "Ignorado" : r.status === "LINE_FAILED" ? "Falha" : "Pendente"
+    };
+  });
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  const maxLens = Object.keys(data[0] || {}).map(key => 
+    Math.max(key.length, ...data.map(r => String((r as any)[key] ?? "").length))
+  );
+  ws["!cols"] = maxLens.map(len => ({ wch: len + 3 }));
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Lançamentos");
+  
+  const safeFilename = imp.filename.replace(/\.[a-zA-Z0-9]+$/i, "");
+  XLSX.writeFile(wb, `${safeFilename}_relatorio.xlsx`);
+  toast.success("Excel exportado com sucesso");
+};
+
+const handleExportPdf = (imp: any, rows: any[]) => {
+  const doc = new jsPDF();
+  
+  const primaryColor = [15, 23, 42]; 
+  const secondaryColor = [71, 85, 105]; 
+  const borderLight = [226, 232, 240]; 
+
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  let y = 15;
+
+  const drawHeader = () => {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.text("Relatório de Importação (SIE V3)", 14, y);
+    y += 8;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+    doc.text(`Arquivo: ${imp.filename}`, 14, y);
+    doc.text(`Data do Relatório: ${new Date().toLocaleString("pt-BR")}`, 14, y + 5);
+    y += 15;
+  };
+
+  const checkPageBreak = (neededHeight: number) => {
+    if (y + neededHeight > pageHeight - 15) {
+      doc.addPage();
+      y = 15;
+      drawHeader();
+    }
+  };
+
+  drawHeader();
+
+  doc.setDrawColor(borderLight[0], borderLight[1], borderLight[2]);
+  doc.setFillColor(248, 250, 252); 
+  doc.rect(14, y, pageWidth - 28, 22, "FD");
+  
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.text("RESUMO DA IMPORTAÇÃO", 18, y + 6);
+  
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+  doc.text(`Total Linhas: ${imp.total_rows ?? rows.length}`, 18, y + 13);
+  doc.text(`Falhas: ${imp.failed_rows ?? 0}`, 60, y + 13);
+  doc.text(`Revisão: ${imp.review_rows ?? 0}`, 100, y + 13);
+  doc.text(`Status Final: ${imp.final_state ?? "applied"}`, 140, y + 13);
+  y += 30;
+
+  const headers = ["#", "Cliente Extrato", "Cliente Base", "Data", "Descrição", "Valor", "Status"];
+  const colWidths = [10, 35, 35, 20, 40, 22, 20];
+  const startX = 14;
+
+  const drawTableHeader = () => {
+    doc.setFillColor(241, 245, 249); 
+    doc.rect(startX, y, pageWidth - 28, 8, "F");
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    
+    let currentX = startX;
+    headers.forEach((h, i) => {
+      doc.text(h, currentX + 2, y + 5.5);
+      currentX += colWidths[i];
+    });
+    
+    doc.setDrawColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+    doc.line(startX, y + 8, pageWidth - 14, y + 8);
+    y += 8;
+  };
+
+  drawTableHeader();
+
+  rows.forEach((r, idx) => {
+    checkPageBreak(8);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(51, 65, 85); 
+
+    const c = r.canonical ?? {};
+    const sugg = r.suggestions ?? {};
+    
+    const rowValues = [
+      String(r.row_index ?? (idx + 1)),
+      String(c.client_name ?? "—"),
+      String(sugg.client?.name ?? "—"),
+      formatDateBr(c.transaction_date),
+      String(c.description ?? "—"),
+      c.amount != null ? Number(c.amount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—",
+      r.status === "applied" ? "Aplicado" : r.status === "skipped" ? "Ignorado" : r.status === "LINE_FAILED" ? "Falha" : "Pendente"
+    ];
+
+    let currentX = startX;
+    rowValues.forEach((val, i) => {
+      let truncatedVal = val;
+      const colW = colWidths[i];
+      if (doc.getTextWidth(truncatedVal) > colW - 3) {
+        while (doc.getTextWidth(truncatedVal + "...") > colW - 3 && truncatedVal.length > 0) {
+          truncatedVal = truncatedVal.substring(0, truncatedVal.length - 1);
+        }
+        truncatedVal += "...";
+      }
+
+      doc.text(truncatedVal, currentX + 2, y + 5.5);
+      currentX += colWidths[i];
+    });
+
+    doc.setDrawColor(borderLight[0], borderLight[1], borderLight[2]);
+    doc.line(startX, y + 8, pageWidth - 14, y + 8);
+    y += 8;
+  });
+
+  const safeFilename = imp.filename.replace(/\.[a-zA-Z0-9]+$/i, "");
+  doc.save(`${safeFilename}_relatorio.pdf`);
+  toast.success("PDF exportado com sucesso");
+};
+
+const handleExportImage = (imp: any, rows: any[]) => {
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    toast.error("Erro ao gerar imagem");
+    return;
+  }
+
+  const padding = 30;
+  const headerHeight = 160;
+  const rowHeight = 35;
+  const tableHeaderHeight = 40;
+  const summaryBoxHeight = 80;
+  const tableWidth = 1000;
+  
+  const totalHeight = padding * 2 + headerHeight + summaryBoxHeight + tableHeaderHeight + (rows.length * rowHeight);
+
+  canvas.width = tableWidth + padding * 2;
+  canvas.height = totalHeight;
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = "#0f172a"; 
+  ctx.font = "bold 26px sans-serif";
+  ctx.fillText("Relatório de Importação (SIE V3)", padding, padding + 35);
+
+  ctx.fillStyle = "#475569"; 
+  ctx.font = "16px sans-serif";
+  ctx.fillText(`Arquivo: ${imp.filename}`, padding, padding + 70);
+  ctx.fillText(`Data de Emissão: ${new Date().toLocaleString("pt-BR")}`, padding, padding + 95);
+
+  let y = padding + headerHeight;
+  ctx.fillStyle = "#f8fafc"; 
+  ctx.strokeStyle = "#e2e8f0"; 
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  if (typeof (ctx as any).roundRect === "function") {
+    (ctx as any).roundRect(padding, y, tableWidth, summaryBoxHeight, 8);
+  } else {
+    ctx.rect(padding, y, tableWidth, summaryBoxHeight);
+  }
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "#0f172a";
+  ctx.font = "bold 16px sans-serif";
+  ctx.fillText("RESUMO DA IMPORTAÇÃO", padding + 20, y + 30);
+
+  ctx.fillStyle = "#475569";
+  ctx.font = "14px sans-serif";
+  ctx.fillText(`Total Linhas: ${imp.total_rows ?? rows.length}`, padding + 20, y + 55);
+  ctx.fillText(`Falhas: ${imp.failed_rows ?? 0}`, padding + 220, y + 55);
+  ctx.fillText(`Revisão: ${imp.review_rows ?? 0}`, padding + 420, y + 55);
+  ctx.fillText(`Status Final: ${imp.final_state ?? "applied"}`, padding + 620, y + 55);
+
+  y += summaryBoxHeight + 30;
+  ctx.fillStyle = "#f1f5f9"; 
+  ctx.fillRect(padding, y, tableWidth, tableHeaderHeight);
+
+  ctx.fillStyle = "#0f172a";
+  ctx.font = "bold 14px sans-serif";
+  
+  const cols = [
+    { label: "#", w: 50 },
+    { label: "Cliente Extrato", w: 180 },
+    { label: "Cliente Base", w: 180 },
+    { label: "Data", w: 110 },
+    { label: "Descrição", w: 220 },
+    { label: "Valor", w: 130, align: "right" },
+    { label: "Status", w: 130, align: "center" }
+  ];
+
+  let currentX = padding;
+  cols.forEach(col => {
+    if (col.align === "right") {
+      ctx.textAlign = "right";
+      ctx.fillText(col.label, currentX + col.w - 10, y + 25);
+    } else if (col.align === "center") {
+      ctx.textAlign = "center";
+      ctx.fillText(col.label, currentX + col.w / 2, y + 25);
+    } else {
+      ctx.textAlign = "left";
+      ctx.fillText(col.label, currentX + 10, y + 25);
+    }
+    currentX += col.w;
+  });
+
+  y += tableHeaderHeight;
+  ctx.font = "13px sans-serif";
+
+  rows.forEach((r, idx) => {
+    ctx.fillStyle = idx % 2 === 0 ? "#ffffff" : "#f8fafc";
+    ctx.fillRect(padding, y, tableWidth, rowHeight);
+
+    ctx.strokeStyle = "#e2e8f0";
+    ctx.beginPath();
+    ctx.moveTo(padding, y + rowHeight);
+    ctx.lineTo(padding + tableWidth, y + rowHeight);
+    ctx.stroke();
+
+    const c = r.canonical ?? {};
+    const sugg = r.suggestions ?? {};
+    const statusText = r.status === "applied" ? "Aplicado" : r.status === "skipped" ? "Ignorado" : r.status === "LINE_FAILED" ? "Falha" : "Pendente";
+    const amountVal = c.amount != null ? Number(c.amount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—";
+
+    const vals = [
+      String(r.row_index ?? (idx + 1)),
+      String(c.client_name ?? "—"),
+      String(sugg.client?.name ?? "—"),
+      formatDateBr(c.transaction_date),
+      String(c.description ?? "—"),
+      amountVal,
+      statusText
+    ];
+
+    currentX = padding;
+    vals.forEach((val, colIdx) => {
+      const col = cols[colIdx];
+      
+      ctx.fillStyle = "#334155"; 
+      if (colIdx === 6) {
+        ctx.fillStyle = r.status === "applied" ? "#10b981" : r.status === "skipped" ? "#64748b" : r.status === "LINE_FAILED" ? "#ef4444" : "#f59e0b";
+      }
+
+      let truncated = val;
+      if (colIdx !== 0 && colIdx !== 3 && colIdx !== 5 && colIdx !== 6) {
+        const maxTextW = col.w - 20;
+        if (ctx.measureText(truncated).width > maxTextW) {
+          while (ctx.measureText(truncated + "...").width > maxTextW && truncated.length > 0) {
+            truncated = truncated.slice(0, -1);
+          }
+          truncated += "...";
+        }
+      }
+
+      if (col.align === "right") {
+        ctx.textAlign = "right";
+        ctx.fillText(truncated, currentX + col.w - 10, y + 22);
+      } else if (col.align === "center") {
+        ctx.textAlign = "center";
+        ctx.fillText(truncated, currentX + col.w / 2, y + 22);
+      } else {
+        ctx.textAlign = "left";
+        ctx.fillText(truncated, currentX + 10, y + 22);
+      }
+      currentX += col.w;
+    });
+
+    y += rowHeight;
+  });
+
+  const image = canvas.toDataURL("image/png");
+  const link = document.createElement("a");
+  const safeFilename = imp.filename.replace(/\.[a-zA-Z0-9]+$/i, "");
+  link.download = `${safeFilename}_relatorio.png`;
+  link.href = image;
+  link.click();
+  toast.success("Imagem exportada com sucesso");
 };
 
 function ImportV3Page() {
@@ -341,31 +666,58 @@ function ImportV3Page() {
                   
                   {rowsQ.data && rowsQ.data.length > 0 && (
                     <div className="space-y-3">
-                      {/* Painel de Ações em Lote */}
-                      {selectedRowIds.length > 0 && (
-                        <div className="flex items-center justify-between bg-muted/40 p-2 rounded border mb-2">
-                          <span className="text-xs font-medium">
-                            {selectedRowIds.length} linha{selectedRowIds.length > 1 ? "s" : ""} selecionada{selectedRowIds.length > 1 ? "s" : ""}
-                          </span>
-                          <div className="flex gap-2">
-                            <Button 
-                              size="sm" 
-                              onClick={() => batchApplyMut.mutate(selectedRowIds)}
-                              disabled={batchApplyMut.isPending || batchSkipMut.isPending}
-                            >
-                              Aprovar em Lote
-                            </Button>
-                            <Button 
-                              size="sm" 
-                              variant="destructive"
-                              onClick={() => batchSkipMut.mutate(selectedRowIds)}
-                              disabled={batchApplyMut.isPending || batchSkipMut.isPending}
-                            >
-                              Recusar em Lote
-                            </Button>
+                      {/* Painel de Ações / Relatório */}
+                      <div className="flex items-center justify-between bg-muted/20 p-2 rounded border mb-2 flex-wrap gap-2">
+                        {selectedRowIds.length > 0 ? (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-medium">
+                              {selectedRowIds.length} linha{selectedRowIds.length > 1 ? "s" : ""} selecionada{selectedRowIds.length > 1 ? "s" : ""}
+                            </span>
+                            <div className="flex gap-2">
+                              <Button 
+                                size="sm" 
+                                className="h-8 text-[11px]"
+                                onClick={() => batchApplyMut.mutate(selectedRowIds)}
+                                disabled={batchApplyMut.isPending || batchSkipMut.isPending}
+                              >
+                                Aprovar em Lote
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="destructive"
+                                className="h-8 text-[11px]"
+                                onClick={() => batchSkipMut.mutate(selectedRowIds)}
+                                disabled={batchApplyMut.isPending || batchSkipMut.isPending}
+                              >
+                                Recusar em Lote
+                              </Button>
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        ) : (
+                          <span className="text-xs text-muted-foreground font-medium">
+                            {rowsQ.data.length} lançamento{rowsQ.data.length > 1 ? "s" : ""} carregado{rowsQ.data.length > 1 ? "s" : ""}
+                          </span>
+                        )}
+
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm" className="h-8 gap-1 text-[11px]">
+                              <Download className="h-3.5 w-3.5" /> Exportar Relatório <ChevronDown className="h-3.5 w-3.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem className="cursor-pointer gap-2 text-xs" onClick={() => handleExportXlsx(imp, rowsQ.data)}>
+                              <FileSpreadsheet className="h-4 w-4 text-emerald-600" /> Exportar Excel (.xlsx)
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="cursor-pointer gap-2 text-xs" onClick={() => handleExportPdf(imp, rowsQ.data)}>
+                              <FileText className="h-4 w-4 text-red-600" /> Exportar PDF (.pdf)
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="cursor-pointer gap-2 text-xs" onClick={() => handleExportImage(imp, rowsQ.data)}>
+                              <Image className="h-4 w-4 text-blue-600" /> Exportar Imagem (.png)
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
 
                       {/* Tabela com scroll horizontal independente e scroll vertical interno limitado */}
                       <div className="w-full overflow-x-auto max-h-[500px] overflow-y-auto border rounded-md">
