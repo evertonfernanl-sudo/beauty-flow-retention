@@ -66,5 +66,12 @@ export function mapHeaders(headers: string[]): {
     }
   }
 
+  // Fallback: Se "transaction_date" não foi mapeado, mas temos "description" mapeado,
+  // associa "transaction_date" ao mesmo cabeçalho de "description" para permitir extração inline.
+  if (!map.transaction_date && map.description) {
+    map.transaction_date = map.description;
+    reasons.push(`transaction_date=${map.description} (Fallback: mapeado para a coluna de descrição pois não havia coluna de data dedicada)`);
+  }
+
   return { map, reasons, extraConcat };
 }

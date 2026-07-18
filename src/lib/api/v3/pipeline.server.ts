@@ -1067,6 +1067,18 @@ export function buildCanonical(
     else description = nullableTrim(va || vb);
   }
 
+  // Limpa prefixos de data redundantes no início da descrição (ex: "02/07 PIX RECEBIDO" -> "PIX RECEBIDO")
+  if (description) {
+    const cleaned = description
+      .replace(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\s*/, "")
+      .replace(/^(\d{1,2})[\/\-.](\d{1,2})\b\s*/, "")
+      .replace(/^(\d{4})[\-.](\d{1,2})[\-.](\d{1,2})\s*/, "")
+      .trim();
+    if (cleaned.length > 0) {
+      description = cleaned;
+    }
+  }
+
   const amountRaw = get("amount");
   const debitRaw = get("debit_amount");
   const creditRaw = get("credit_amount");
@@ -1160,8 +1172,8 @@ function parseDate(s: string): string | null {
     if (a <= 31 && b <= 12) return `${yy}-${String(b).padStart(2, "0")}-${String(a).padStart(2, "0")}`;
   }
   
-  // DD/MM ou DD-MM ou DD.MM (sem ano)
-  const brShort = t.match(/^(\d{1,2})[\/\-.](\d{1,2})$/);
+  // DD/MM ou DD-MM ou DD.MM (sem ano) - permite texto subsequente usando limite de palavra (\b)
+  const brShort = t.match(/^(\d{1,2})[\/\-.](\d{1,2})\b/);
   if (brShort) {
     const a = parseInt(brShort[1], 10);
     const b = parseInt(brShort[2], 10);

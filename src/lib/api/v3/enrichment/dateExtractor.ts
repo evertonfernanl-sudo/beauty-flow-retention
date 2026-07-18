@@ -37,8 +37,8 @@ export function extractDate(s: string | null | undefined): string | null {
     if (a <= 31 && b <= 12) return `${yy}-${String(b).padStart(2, "0")}-${String(a).padStart(2, "0")}`;
   }
 
-  // DD/MM ou DD-MM ou DD.MM (sem ano)
-  const brShort = t.match(/^(\d{1,2})[\/\-.](\d{1,2})$/);
+  // DD/MM ou DD-MM ou DD.MM (sem ano) - permite texto subsequente usando limite de palavra (\b)
+  const brShort = t.match(/^(\d{1,2})[\/\-.](\d{1,2})\b/);
   if (brShort) {
     const a = parseInt(brShort[1], 10);
     const b = parseInt(brShort[2], 10);
