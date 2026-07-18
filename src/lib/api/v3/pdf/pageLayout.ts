@@ -200,6 +200,12 @@ export function alignPhysicalCells(
   const alignedRow = new Array(layout.headers.length).fill("");
   if (layout.headers.length === 0) return alignedRow;
 
+  // Se o número de células na linha for exatamente igual ao número de colunas no layout,
+  // alinha 1-para-1 diretamente pelo índice físico para evitar problemas de drift de colunas.
+  if (line.cells.length === layout.headers.length) {
+    return line.cells.map(c => c.text);
+  }
+
   // 1. Calcula os limites (boundaries) entre as colunas do layout
   const boundaries: number[] = [];
   for (let i = 0; i < layout.headers.length - 1; i++) {

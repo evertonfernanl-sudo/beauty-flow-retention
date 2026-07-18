@@ -65,7 +65,7 @@ export async function extractNativePdfToCsv(
     const viewport = page.getViewport({ scale: 1 });
     const pageWidth = viewport.width;
 
-    const items: Array<{ str: string; x: number; y: number; w: number }> = (content.items ?? [])
+    const rawItems: Array<{ str: string; x: number; y: number; w: number }> = (content.items ?? [])
       .filter((it: any) => it && typeof it.str === "string" && it.str.trim().length > 0)
       .map((it: any) => ({
         str: String(it.str),
@@ -74,20 +74,48 @@ export async function extractNativePdfToCsv(
         w: typeof it.width === "number" ? it.width : 0,
       }));
 
+    const items: Array<{ str: string; x: number; y: number; w: number; noMerge?: boolean }> = [];
+    for (const it of rawItems) {
+      if (it.str.includes("|")) {
+        const parts = it.str.split("|");
+        const charWidth = it.str.length > 0 ? (it.w || it.str.length * 6) / it.str.length : 6;
+        let currentOffset = 0;
+        for (let j = 0; j < parts.length; j++) {
+          const partText = parts[j];
+          const partLen = partText.length;
+          const trimmed = partText.trim();
+          if (trimmed.length > 0) {
+            const partX = it.x + currentOffset * charWidth;
+            const partW = partLen * charWidth;
+            items.push({
+              str: trimmed,
+              x: partX,
+              y: it.y,
+              w: partW,
+              noMerge: true
+            });
+          }
+          currentOffset += partLen + 1; // +1 para o caractere '|'
+        }
+      } else {
+        items.push(it);
+      }
+    }
+
     // Group items by Y coordinate (median font height tolerance = 3.0)
     const yTol = 3.0;
     const sorted = [...items].sort((a, b) => b.y - a.y || a.x - b.x);
-    const lines: Array<Array<{ str: string; x: number; y: number; w: number }>> = [];
+    const lines: Array<Array<{ str: string; x: number; y: number; w: number; noMerge?: boolean }>> = [];
     let currentY: number | null = null;
-    let current: Array<{ str: string; x: number; y: number; w: number }> = [];
+    let current: Array<{ str: string; x: number; y: number; w: number; noMerge?: boolean }> = [];
 
     for (const it of sorted) {
       if (currentY == null || Math.abs(currentY - it.y) <= yTol) {
-        current.push({ str: it.str, x: it.x, y: it.y, w: it.w });
+        current.push({ str: it.str, x: it.x, y: it.y, w: it.w, noMerge: it.noMerge });
         currentY = currentY == null ? it.y : (currentY + it.y) / 2;
       } else {
         lines.push(current);
-        current = [{ str: it.str, x: it.x, y: it.y, w: it.w }];
+        current = [{ str: it.str, x: it.x, y: it.y, w: it.w, noMerge: it.noMerge }];
         currentY = it.y;
       }
     }
@@ -106,7 +134,8 @@ export async function extractNativePdfToCsv(
       let startY = -1;
       let lastX = -Infinity;
 
-      for (const t of line) {
+      for (let cellIdx = 0; cellIdx < line.length; cellIdx++) {
+        const t = line[cellIdx];
         if (buf === "") {
           buf = t.str;
           startX = t.x;
@@ -114,7 +143,11 @@ export async function extractNativePdfToCsv(
           lastX = t.x + (t.w || t.str.length * 6);
           continue;
         }
-        if (t.x - lastX > xGap) {
+        
+        const prev = line[cellIdx - 1];
+        const shouldForceNewCell = t.noMerge || prev?.noMerge;
+
+        if (shouldForceNewCell || t.x - lastX > xGap) {
           cells.push({
             text: buf.trim(),
             x: startX,
